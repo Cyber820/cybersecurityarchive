@@ -8,6 +8,14 @@ import fastifyCors from '@fastify/cors';
 import { config } from './config.js';
 import { viewerRoutes } from './routes/viewer.js';
 import { adminRoutes } from './routes/admin.js';
+import fs from 'node:fs';
+
+app.get('/api/_debug/static', async () => ({
+  cwd: process.cwd(),
+  webDist,
+  webDistExists: fs.existsSync(webDist),
+  files: fs.existsSync(webDist) ? fs.readdirSync(webDist).slice(0, 50) : []
+}));
 
 const app = Fastify({ logger: true });
 
