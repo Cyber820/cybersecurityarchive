@@ -1,0 +1,12 @@
+{
+  "name": "industry-archive-demo",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "build": "npm -w apps/web run build",
+    "start": "npm -w apps/api start"
+  }
+}

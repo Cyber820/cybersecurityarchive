@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Industry Archive - Viewer</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:24px;line-height:1.45}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    input{padding:8px 10px;font-size:14px;min-width:280px}
+    button{padding:8px 12px;font-size:14px;cursor:pointer}
+    pre{background:#111;color:#eee;padding:12px;border-radius:10px;overflow:auto}
+    .card{border:1px solid #ddd;border-radius:12px;padding:12px;margin-top:12px}
+    a{color:#0b57d0;text-decoration:none}
+    a:hover{text-decoration:underline}
+  </style>
+</head>
+<body>
+  <h1>Industry Archive Viewer</h1>
+  <div class="card">
+    <div class="row">
+      <input id="q" placeholder="搜索公司/产品/领域 (q)" />
+      <button id="btnSearch">搜索</button>
+      <a href="/admin.html">去录入（Admin）</a>
+    </div>
+    <p style="margin:8px 0 0 0;color:#555">所有数据来自同域 API：<code>/api/*</code></p>
+  </div>
+
+  <div class="card">
+    <h3>结果</h3>
+    <div id="result"></div>
+  </div>
+
+  <script type="module" src="/src/viewer.js"></script>
+</body>
+</html>

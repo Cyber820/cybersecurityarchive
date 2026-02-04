@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Industry Archive - Admin</title>
+  <style>
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:24px;line-height:1.45}
+    .grid{display:grid;grid-template-columns:1fr;gap:10px;max-width:860px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    input,textarea,select{padding:8px 10px;font-size:14px;min-width:260px}
+    textarea{min-width:520px;min-height:90px}
+    button{padding:8px 12px;font-size:14px;cursor:pointer}
+    pre{background:#111;color:#eee;padding:12px;border-radius:10px;overflow:auto}
+    .card{border:1px solid #ddd;border-radius:12px;padding:12px;margin-top:12px}
+    .muted{color:#666}
+    label{font-size:13px;color:#333}
+  </style>
+</head>
+<body>
+  <h1>Industry Archive Admin</h1>
+  <p class="muted">Demo 写入保护：请求头 <code>X-Admin-Token</code> 必须等于服务端环境变量 <code>ADMIN_TOKEN</code>。</p>
+  <p><a href="/viewer.html">← 返回 Viewer</a></p>
+
+  <div class="card">
+    <div class="grid">
+      <div class="row">
+        <label>Admin Token</label>
+        <input id="token" placeholder="ADMIN_TOKEN" />
+      </div>
+
+      <hr />
+
+      <h3>创建 Organization</h3>
+      <div class="row">
+        <input id="org_short" placeholder="company_short_name" />
+        <input id="org_full" placeholder="company_full_name" />
+        <input id="org_year" placeholder="establish_year (int)" />
+        <input id="org_slug" placeholder="organization_slug" />
+        <button id="btnCreateOrg">提交</button>
+      </div>
+
+      <h3>创建 Product</h3>
+      <div class="row">
+        <input id="prod_name" placeholder="security_product_name" />
+        <input id="prod_slug" placeholder="security_product_slug" />
+        <button id="btnCreateProd">提交</button>
+      </div>
+
+      <h3>创建 Domain</h3>
+      <div class="row">
+        <input id="dom_name" placeholder="security_domain_name" />
+        <input id="dom_slug" placeholder="cybersecurity_domain_slug" />
+        <button id="btnCreateDom">提交</button>
+      </div>
+
+      <hr />
+
+      <h3>建立关系：organization_product</h3>
+      <div class="row">
+        <input id="op_org_id" placeholder="organization_id (int)" />
+        <input id="op_prod_id" placeholder="security_product_id (int)" />
+        <input id="op_start" placeholder="product_release_year (int)" />
+        <input id="op_end" placeholder="product_end_year (int, optional)" />
+        <button id="btnCreateOP">提交</button>
+      </div>
+
+      <h3>建立关系：cybersecurity_product_domain</h3>
+      <div class="row">
+        <input id="pd_prod_id" placeholder="security_product_id (int)" />
+        <input id="pd_dom_id" placeholder="security_domain_id (int)" />
+        <button id="btnCreatePD">提交</button>
+      </div>
+
+      <hr />
+
+      <h3>响应</h3>
+      <pre id="out">{}</pre>
+    </div>
+  </div>
+
+  <script type="module" src="/src/admin.js"></script>
+</body>
+</html>
