@@ -17,7 +17,8 @@ await app.register(fastifyCors, { origin: true });
 
 // ===== Static hosting (Vite build output) =====
 // Railway/monorepo 下最稳：从 cwd 指向 apps/web/dist
-const webDist = path.resolve(process.cwd(), 'apps/web/dist');
+const webDist = path.resolve(process.cwd(), '../../apps/web/dist');
+
 const hasStatic = fs.existsSync(webDist);
 
 // 让你能在日志里看到到底有没有 dist
