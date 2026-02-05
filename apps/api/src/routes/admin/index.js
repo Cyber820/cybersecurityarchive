@@ -2,12 +2,11 @@
 import { registerOrganizationAdmin } from './organization.js';
 import { registerProductAdmin } from './product.js';
 import { registerDomainAdmin } from './domain.js';
-import { registerOrganizationProductAdmin } from './organizationProduct.js';
-import { registerProductDomainAdmin } from './productDomain.js';
+import { registerDropdownAdmin } from './dropdowns.js'
 
 export async function adminRoutes(app) {
   registerOrganizationAdmin(app);
   registerProductAdmin(app);
   registerDomainAdmin(app);
-
+registerDropdownAdmin(app);
 }
