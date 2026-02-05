@@ -8,7 +8,8 @@ import fastifyCors from '@fastify/cors';
 
 import { config } from './config.js';
 import { viewerRoutes } from './routes/viewer.js';
-import { adminRoutes } from './routes/admin.js';
+import { adminRoutes } from './routes/admin/index.js';
+
 
 const app = Fastify({ logger: true });
 
