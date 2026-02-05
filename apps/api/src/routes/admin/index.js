@@ -9,6 +9,5 @@ export async function adminRoutes(app) {
   registerOrganizationAdmin(app);
   registerProductAdmin(app);
   registerDomainAdmin(app);
-  registerOrganizationProductAdmin(app);
-  registerProductDomainAdmin(app);
+
 }
