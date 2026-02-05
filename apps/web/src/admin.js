@@ -1,3 +1,4 @@
+// apps/web/src/admin.js
 const $ = (id) => document.getElementById(id);
 
 const STORAGE_KEY = 'industry_admin_token_v1';
@@ -70,23 +71,36 @@ function requireTokenOrPrompt() {
   return false;
 }
 
-/** Busy modal */
-function busy(on, title = '录入中…') {
-  if (on) {
-    $('busyTitle').textContent = title;
-    $('btnBusyClose').disabled = true;
-    openModal('busyModal');
-  } else {
-    $('btnBusyClose').disabled = false;
-  }
+/** ===== Busy Modal (3-state) ===== */
+function busyStart(title = '录入中…') {
+  $('busyTitle').textContent = title;
+  $('btnBusyClose').textContent = '请稍候';
+  $('btnBusyClose').disabled = true;
+  openModal('busyModal');
 }
-$('btnBusyClose').addEventListener('click', () => closeModal('busyModal'));
 
-/** Token modal */
+function busySuccess(title = '录入成功') {
+  $('busyTitle').textContent = title;
+  $('btnBusyClose').textContent = '确定';
+  $('btnBusyClose').disabled = false;
+}
+
+function busyFail(title = '录入失败') {
+  $('busyTitle').textContent = title;
+  $('btnBusyClose').textContent = '确定';
+  $('btnBusyClose').disabled = false;
+}
+
+$('btnBusyClose').addEventListener('click', () => {
+  closeModal('busyModal');
+});
+
+/** ===== Token Modal ===== */
 function openTokenModal() {
   $('tokenInput').value = getToken();
   openModal('tokenModal');
 }
+
 $('btnSetToken').addEventListener('click', openTokenModal);
 $('btnTokenCancel').addEventListener('click', () => closeModal('tokenModal'));
 $('btnTokenSave').addEventListener('click', () => {
@@ -101,7 +115,7 @@ document.addEventListener('click', (e) => {
   closeModal(btn.getAttribute('data-close'));
 });
 
-/** Entry buttons */
+/** ===== Entry buttons ===== */
 $('btnDomain').addEventListener('click', () => {
   if (!requireTokenOrPrompt()) return;
   clearMsg('domainMsg');
@@ -116,26 +130,35 @@ $('btnProduct').addEventListener('click', async () => {
   $('prod_name').value = '';
   $('prod_slug').value = '';
   openModal('productModal');
-  await loadDomainsDropdown(); // ensure dropdown populated when modal opens
+  await loadDomainsDropdown(); // ensure dropdown populated
 });
 
-/** Domain submit */
+/** ===== Domain submit ===== */
 $('btnDomainSubmit').addEventListener('click', async () => {
   if (!requireTokenOrPrompt()) return;
 
   clearMsg('domainMsg');
+
   const body = {
     security_domain_name: $('dom_name').value.trim(),
     cybersecurity_domain_slug: $('dom_slug').value.trim()
   };
 
-  busy(true, '录入中：安全领域…');
+  busyStart('录入中：安全领域…');
   try {
     const data = await apiPost('/api/admin/domain', body);
+
+    // 在弹窗内显示结果
     showMsg('domainMsg', { ok: true, message: '录入成功', data });
 
-    // 可选：成功后自动刷新产品弹窗里的领域下拉
-    //（如果用户正好要继续录入产品）
+    // Busy 弹窗转为成功态（等待用户点确定）
+    busySuccess('安全领域录入成功');
+
+    // 方便连续录入：不关闭 domainModal，只清空输入
+    $('dom_name').value = '';
+    $('dom_slug').value = '';
+
+    // 可选：成功后刷新产品弹窗的领域下拉
     await loadDomainsDropdown(true);
   } catch (e) {
     showMsg('domainMsg', {
@@ -144,12 +167,11 @@ $('btnDomainSubmit').addEventListener('click', async () => {
       status: e.status,
       detail: e.data
     });
-  } finally {
-    busy(false);
+    busyFail('安全领域录入失败');
   }
 });
 
-/** Product submit */
+/** ===== Product submit ===== */
 $('btnProductSubmit').addEventListener('click', async () => {
   if (!requireTokenOrPrompt()) return;
 
@@ -161,14 +183,15 @@ $('btnProductSubmit').addEventListener('click', async () => {
   const body = {
     security_product_name: $('prod_name').value.trim(),
     security_product_slug: $('prod_slug').value.trim(),
-    // 你后端支持 domains:number[] 或 string[]；这里传 id 数组
     ...(domainId ? { domains: [domainId] } : {})
   };
 
-  busy(true, '录入中：安全产品…');
+  busyStart('录入中：安全产品…');
   try {
     const data = await apiPost('/api/admin/product', body);
+
     showMsg('productMsg', { ok: true, message: '录入成功', data });
+    busySuccess('安全产品录入成功');
 
     // 成功后保留弹窗，清空输入，方便连续录入
     $('prod_name').value = '';
@@ -181,16 +204,16 @@ $('btnProductSubmit').addEventListener('click', async () => {
       status: e.status,
       detail: e.data
     });
-  } finally {
-    busy(false);
+    busyFail('安全产品录入失败');
   }
 });
 
-/** Domains dropdown */
+/** ===== Domains dropdown ===== */
 let domainsCache = null;
 
 async function loadDomainsDropdown(force = false) {
-  // 只要 token 变更了或 force=true，就重新拉取
+  if (!requireTokenOrPrompt()) return;
+
   if (!force && domainsCache) {
     renderDomains(domainsCache);
     return;
@@ -205,7 +228,6 @@ async function loadDomainsDropdown(force = false) {
     renderDomains(data);
   } catch (e) {
     sel.innerHTML = `<option value="">加载失败（检查 token / 接口）</option>`;
-    // 同时在产品弹窗显示错误
     showMsg('productMsg', {
       ok: false,
       error: '加载领域下拉失败：' + e.message,
@@ -234,17 +256,13 @@ function escapeHtml(s) {
   }[c]));
 }
 
-/** init */
+/** ===== init ===== */
 refreshTokenStatus();
 
-// 点击遮罩关闭（可选：只对 token/modal/busy 关闭做限制；这里保持简单）
+// 点击遮罩关闭（busyModal 不允许）
 ['tokenModal','domainModal','productModal'].forEach((mid) => {
   const overlay = $(mid);
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) closeModal(mid);
   });
-});
-// busyModal 不允许点遮罩关闭
-$('busyModal').addEventListener('click', (e) => {
-  e.stopPropagation();
 });
