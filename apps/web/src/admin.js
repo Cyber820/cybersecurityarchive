@@ -1,6 +1,7 @@
 // apps/web/src/admin.js
-const $ = (id) => document.getElementById(id);
+import { createCheckboxMultiSelect } from './ui/checkbox-multiselect.js';
 
+const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = 'industry_admin_token_v1';
 
 /** =========================
@@ -16,12 +17,10 @@ function setToken(token) {
 function refreshTokenStatus() {
   $('tokenStatus').textContent = getToken() ? '已设置' : '未设置';
 }
-
 function tokenHeader() {
   const t = getToken();
   return t ? { 'X-Admin-Token': t } : {};
 }
-
 function requireTokenOrPrompt() {
   if (getToken()) return true;
   openTokenModal();
@@ -36,8 +35,15 @@ function openModal(id) {
   el.style.display = 'flex';
   el.setAttribute('aria-hidden', 'false');
 }
+
 function closeModal(id) {
   const el = $(id);
+
+  // ✅ Fix a11y warning: don't aria-hide a focused descendant
+  if (el.contains(document.activeElement)) {
+    document.activeElement.blur();
+  }
+
   el.style.display = 'none';
   el.setAttribute('aria-hidden', 'true');
 }
@@ -116,129 +122,7 @@ document.addEventListener('click', (e) => {
 });
 
 /** =========================
- * Reusable checkbox multi-select component
- * =========================
- * - 3-column grid rendered by CSS
- * - search filter
- * - getSelectedIds(), clearSelection()
- */
-function createCheckboxMultiSelect({
-  searchEl,
-  metaEl,
-  gridEl,
-  emptyEl,
-  // required: fetchOptions() -> {items:[{id,name,slug}]}
-  fetchOptions,
-  // how to render label text from item
-  formatLabel = (item) => `${item.name} (${item.slug})`,
-  // unique checkbox id prefix
-  idPrefix = 'ms'
-}) {
-  let allItems = [];   // normalized items
-  let filtered = [];
-
-  function setMeta(text) {
-    metaEl.textContent = text;
-  }
-
-  function normalize(items) {
-    return (items || [])
-      .map((x) => ({
-        id: Number(x.id),
-        name: String(x.name || ''),
-        slug: String(x.slug || '')
-      }))
-      .filter((x) => Number.isFinite(x.id));
-  }
-
-  function render(list) {
-    filtered = list;
-    gridEl.innerHTML = '';
-
-    for (const item of list) {
-      const cbId = `${idPrefix}_${item.id}`;
-
-      const label = document.createElement('label');
-      label.className = 'ms-item';
-      label.setAttribute('for', cbId);
-
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.id = cbId;
-      cb.value = String(item.id);
-
-      const text = document.createElement('span');
-      text.className = 'ms-label';
-      text.textContent = formatLabel(item);
-
-      label.appendChild(cb);
-      label.appendChild(text);
-      gridEl.appendChild(label);
-    }
-
-    emptyEl.style.display = list.length ? 'none' : 'block';
-  }
-
-  function applyFilter(q) {
-    const qq = String(q || '').trim().toLowerCase();
-    if (!qq) {
-      render(allItems);
-      setMeta(`共 ${allItems.length} 项`);
-      return;
-    }
-    const next = allItems.filter((it) => {
-      const n = it.name.toLowerCase();
-      const s = it.slug.toLowerCase();
-      return n.includes(qq) || s.includes(qq);
-    });
-    render(next);
-    setMeta(`匹配 ${next.length} / ${allItems.length}`);
-  }
-
-  async function load(force = false) {
-    // 这里不做 token 检查，由外层保证（这样组件更通用）
-    if (!force && allItems.length) {
-      applyFilter(searchEl.value);
-      return;
-    }
-
-    setMeta('加载中…');
-    gridEl.innerHTML = '';
-    emptyEl.style.display = 'none';
-
-    const data = await fetchOptions();
-    allItems = normalize(data?.items);
-    applyFilter(searchEl.value);
-  }
-
-  function getSelectedIds() {
-    const ids = [];
-    gridEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
-      if (cb.checked) {
-        const n = Number(cb.value);
-        if (Number.isFinite(n)) ids.push(n);
-      }
-    });
-    return Array.from(new Set(ids));
-  }
-
-  function clearSelection() {
-    gridEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => (cb.checked = false));
-  }
-
-  // wire events
-  searchEl.addEventListener('input', () => applyFilter(searchEl.value));
-
-  return {
-    load,
-    applyFilter,
-    getSelectedIds,
-    clearSelection
-  };
-}
-
-/** =========================
- * Instantiate multi-selects
+ * Multi-select instances
  * ========================= */
 const domainMultiSelect = createCheckboxMultiSelect({
   searchEl: $('domainSearch'),
@@ -266,17 +150,24 @@ $('btnDomain').addEventListener('click', () => {
 
 $('btnProduct').addEventListener('click', async () => {
   if (!requireTokenOrPrompt()) return;
+
   clearMsg('productMsg');
   $('prod_name').value = '';
   $('prod_slug').value = '';
+
   openModal('productModal');
 
   try {
-    await domainMultiSelect.load(true);
     $('domainSearch').value = '';
+    await domainMultiSelect.load(true);
     domainMultiSelect.applyFilter('');
   } catch (e) {
-    showMsg('productMsg', { ok: false, error: '加载领域失败：' + e.message, status: e.status, detail: e.data });
+    showMsg('productMsg', {
+      ok: false,
+      error: '加载领域失败：' + e.message,
+      status: e.status,
+      detail: e.data
+    });
   }
 });
 
@@ -301,7 +192,7 @@ $('btnDomainSubmit').addEventListener('click', async () => {
     $('dom_name').value = '';
     $('dom_slug').value = '';
 
-    // 新增领域后刷新领域多选数据（便于马上录产品）
+    // refresh domains for product modal
     await domainMultiSelect.load(true);
     domainMultiSelect.applyFilter($('domainSearch').value || '');
   } catch (e) {
@@ -346,8 +237,8 @@ $('btnProductSubmit').addEventListener('click', async () => {
  * ========================= */
 refreshTokenStatus();
 
-// 点击遮罩关闭（busyModal 允许按按钮关闭；遮罩点击不关闭）
-['tokenModal','domainModal','productModal'].forEach((mid) => {
+// overlay click close (except busyModal)
+['tokenModal', 'domainModal', 'productModal'].forEach((mid) => {
   const overlay = $(mid);
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) closeModal(mid);
