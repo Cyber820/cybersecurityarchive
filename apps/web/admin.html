@@ -40,7 +40,7 @@
     .modal .msg{margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--bg);white-space:pre-wrap}
     .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:999px;padding:6px 10px}
 
-    /* Multi-select (checkbox grid) */
+    /* Multi-select base */
     .ms-wrap{border:1px solid var(--border);border-radius:12px;padding:10px;background:#fff}
     .ms-top{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
     .ms-search{min-width:260px}
@@ -57,20 +57,20 @@
     .ms-item{
       display:flex;
       align-items:flex-start;
-      gap:8px;            /* 文字紧贴勾选框右侧 */
+      gap:8px;
       white-space:nowrap;
-      min-width:0;        /* ✅ 允许内部文本正确计算 */
+      min-width:0;
     }
     .ms-item input[type="checkbox"]{
       margin-top:2px;
       flex:0 0 auto;
     }
     .ms-label{
-      flex:1 1 auto;      /* ✅ 让文字占用剩余空间 */
-      min-width:0;        /* ✅ 允许 ellipsis 生效且不被挤没 */
+      flex:1 1 auto;
+      min-width:0;
       overflow:hidden;
       text-overflow:ellipsis;
-      font-size: 8px; 
+      white-space:nowrap;
     }
     .ms-empty{
       margin-top:10px;
@@ -83,6 +83,56 @@
     }
     @media (max-width: 480px){
       .ms-grid{grid-template-columns: 1fr;}
+    }
+
+    /* =========================================================
+       HARD OVERRIDE: fix text visibility + left alignment
+       (Place at end so it wins the cascade)
+       ========================================================= */
+    .ms-grid{
+      justify-items: start;
+      align-items: start;
+      padding-left: 0 !important;
+      margin-left: 0 !important;
+    }
+
+    .ms-item{
+      width: 100%;
+      justify-content: flex-start;
+      align-items: center;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
+    .ms-item input[type="checkbox"]{
+      margin-left: 0 !important;
+      margin-top: 0 !important;
+    }
+
+    .ms-item .ms-label{
+      display: inline-block !important;
+      flex: 1 1 auto !important;
+      min-width: 0 !important;
+
+      color: #111 !important;
+      font-size: 14px !important;   /* ← 改字号改这里 */
+      line-height: 1.2 !important;
+
+      opacity: 1 !important;
+      visibility: visible !important;
+
+      /* 先确保可见；确认正常后你想要省略号可改回 hidden/ellipsis */
+      overflow: visible !important;
+      text-overflow: clip !important;
+      white-space: nowrap !important;
+
+      position: relative;
+      z-index: 1;
+    }
+
+    /* 整体内容贴边程度：你想更贴左就把 padding-left 调小 */
+    .ms-wrap{
+      padding-left: 8px;
     }
   </style>
 </head>
