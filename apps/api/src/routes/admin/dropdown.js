@@ -2,20 +2,6 @@
 import { supabase } from '../../supabase.js'
 import { requireAdmin } from './auth.js'
 
-/**
- * Dropdown endpoints (admin-only)
- *
- * GET /api/admin/dropdowns/products?q=&limit=
- * GET /api/admin/dropdowns/domains?q=&limit=
- *
- * 返回统一格式：
- * { items: [{ id, name, slug }], count, q }
- *
- * 说明：
- * - q 可选：模糊搜索 name/slug
- * - limit 可选：默认 200，最大 500
- * - 这些接口用于前端下拉（支持多选）
- */
 export function registerDropdownAdmin(app) {
   app.get('/dropdowns/products', async (req, reply) => {
     if (!requireAdmin(req, reply)) return
@@ -30,7 +16,6 @@ export function registerDropdownAdmin(app) {
       .limit(limit)
 
     if (q) {
-      // name/slug 模糊匹配
       query = query.or(
         `security_product_name.ilike.%${escapeLike(q)}%,security_product_slug.ilike.%${escapeLike(q)}%`
       )
@@ -85,7 +70,6 @@ function clampInt(v, dflt, min, max) {
   return Math.max(min, Math.min(max, Math.trunc(n)))
 }
 
-// 避免 %/_ 造成意外匹配扩大（不是安全问题，只是更可控）
 function escapeLike(s) {
   return String(s).replace(/[%_]/g, '\\$&')
 }
