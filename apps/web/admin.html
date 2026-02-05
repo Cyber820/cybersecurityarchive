@@ -1,264 +1,338 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Industry Archive - Admin</title>
-  <style>
-    :root { --border:#ddd; --muted:#666; --bg:#fafafa; }
-    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:24px;line-height:1.45}
-    h1{margin:0 0 10px 0}
-    a{color:#0b57d0;text-decoration:none}
-    a:hover{text-decoration:underline}
-    .muted{color:var(--muted)}
-    .bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
-    .card{border:1px solid var(--border);border-radius:12px;padding:12px;margin-top:12px}
-    .grid{display:grid;gap:10px}
-    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-    button{padding:10px 12px;font-size:14px;cursor:pointer;border:1px solid #ccc;border-radius:10px;background:#fff}
-    button.primary{border-color:#0b57d0}
-    button:disabled{opacity:.6;cursor:not-allowed}
-    input{padding:10px 12px;font-size:14px;border:1px solid #ccc;border-radius:10px;min-width:280px}
-    label{font-size:13px;color:#333}
-    code{background:#f5f5f5;padding:2px 6px;border-radius:6px}
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Industry Archive - Admin</title>
 
-    /* Modal */
-    .modal-overlay{
-      position:fixed; inset:0; background:rgba(0,0,0,.35);
-      display:none; align-items:center; justify-content:center;
-      z-index:99999; padding:16px;
-    }
-    .modal{
-      width:min(760px, 100%);
-      background:#fff; border:1px solid rgba(0,0,0,.2);
-      border-radius:14px; padding:14px;
-      box-shadow:0 10px 35px rgba(0,0,0,.25);
-    }
-    .modal h2{margin:0 0 10px 0; font-size:16px}
-    .modal .footer{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:12px}
-    .modal .hint{font-size:12px;color:var(--muted);margin-top:6px}
-    .modal .msg{margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--bg);white-space:pre-wrap}
-    .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:999px;padding:6px 10px}
+<style>
+/* ================= Base ================= */
 
-    /* Multi-select base */
-    .ms-wrap{border:1px solid var(--border);border-radius:12px;padding:10px;background:#fff}
-    .ms-top{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    .ms-search{min-width:260px}
-    .ms-meta{font-size:12px;color:var(--muted)}
-    .ms-grid{
-      margin-top:10px;
-      display:grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap:8px 14px;
-      max-height:260px;
-      overflow:auto;
-      padding-right:6px;
-    }
-    .ms-item{
-      display:flex;
-      align-items:flex-start;
-      gap:8px;
-      white-space:nowrap;
-      min-width:0;
-    }
-    .ms-item input[type="checkbox"]{
-      margin-top:2px;
-      flex:0 0 auto;
-    }
-    .ms-label{
-      flex:1 1 auto;
-      min-width:0;
-      overflow:hidden;
-      text-overflow:ellipsis;
-      white-space:nowrap;
-    }
-    .ms-empty{
-      margin-top:10px;
-      font-size:13px;
-      color:var(--muted);
-    }
+:root {
+  --border:#ddd;
+  --muted:#666;
+  --bg:#fafafa;
+}
 
-    @media (max-width: 720px){
-      .ms-grid{grid-template-columns: repeat(2, minmax(0, 1fr));}
-    }
-    @media (max-width: 480px){
-      .ms-grid{grid-template-columns: 1fr;}
-    }
+body{
+  font-family: system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  margin:24px;
+  line-height:1.45;
+}
 
-    /* =========================================================
-       HARD OVERRIDE: fix text visibility + left alignment
-       (Place at end so it wins the cascade)
-       ========================================================= */
-    .ms-grid{
-      justify-items: start;
-      align-items: start;
-      padding-left: 0 !important;
-      margin-left: 0 !important;
-    }
+h1{ margin:0 0 10px 0; }
 
-    .ms-item{
-      width: 100%;
-      justify-content: flex-start;
-      align-items: center;
-      margin: 0 !important;
-      padding: 0 !important;
-    }
+a{ color:#0b57d0; text-decoration:none }
+a:hover{ text-decoration:underline }
 
-    .ms-item input[type="checkbox"]{
-      margin-left: 0 !important;
-      margin-top: 0 !important;
-    }
+.muted{ color:var(--muted) }
 
-    .ms-item .ms-label{
-      display: inline-block !important;
-      flex: 1 1 auto !important;
-      min-width: 0 !important;
+.bar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  flex-wrap:wrap;
+}
 
-      color: #111 !important;
-      font-size: 14px !important;   /* ← 改字号改这里 */
-      line-height: 1.2 !important;
+.card{
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:12px;
+  margin-top:12px;
+}
 
-      opacity: 1 !important;
-      visibility: visible !important;
+.row{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:center;
+}
 
-      /* 先确保可见；确认正常后你想要省略号可改回 hidden/ellipsis */
-      overflow: visible !important;
-      text-overflow: clip !important;
-      white-space: nowrap !important;
+.grid{ display:grid; gap:10px }
 
-      position: relative;
-      z-index: 1;
-    }
+button{
+  padding:10px 12px;
+  font-size:14px;
+  border:1px solid #ccc;
+  border-radius:10px;
+  background:#fff;
+  cursor:pointer;
+}
 
-    /* 整体内容贴边程度：你想更贴左就把 padding-left 调小 */
-    .ms-wrap{
-      padding-left: 8px;
-    }
-  </style>
+button.primary{ border-color:#0b57d0 }
+
+button:disabled{ opacity:.6; cursor:not-allowed }
+
+input{
+  padding:10px 12px;
+  font-size:14px;
+  border:1px solid #ccc;
+  border-radius:10px;
+  min-width:280px;
+}
+
+label{
+  font-size:13px;
+  color:#333;
+}
+
+code{
+  background:#f5f5f5;
+  padding:2px 6px;
+  border-radius:6px;
+}
+
+.pill{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  border:1px solid var(--border);
+  border-radius:999px;
+  padding:6px 10px;
+}
+
+/* ================= Modal ================= */
+
+.modal-overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.35);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:99999;
+  padding:16px;
+}
+
+.modal{
+  width:min(760px,100%);
+  background:#fff;
+  border:1px solid rgba(0,0,0,.2);
+  border-radius:14px;
+  padding:14px;
+  box-shadow:0 10px 35px rgba(0,0,0,.25);
+}
+
+.modal h2{
+  margin:0 0 10px 0;
+  font-size:16px;
+}
+
+.modal .footer{
+  display:flex;
+  gap:10px;
+  justify-content:flex-end;
+  flex-wrap:wrap;
+  margin-top:12px;
+}
+
+.modal .hint{
+  font-size:12px;
+  color:var(--muted);
+  margin-top:6px;
+}
+
+.modal .msg{
+  margin-top:10px;
+  padding:10px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:var(--bg);
+  white-space:pre-wrap;
+}
+
+/* ================= Multi-select ================= */
+
+.ms-wrap{
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:10px;
+  background:#fff;
+}
+
+.ms-top{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+.ms-search{ min-width:260px }
+
+.ms-meta{
+  font-size:12px;
+  color:var(--muted);
+}
+
+/* Grid */
+.ms-grid{
+  margin-top:10px;
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:8px 14px;
+  max-height:260px;
+  overflow:auto;
+
+  justify-items:start;
+  align-items:start;
+  padding:0;
+}
+
+/* Row item */
+.ms-item{
+  width:100%;
+  display:flex;
+  justify-content:flex-start;
+  align-items:center;
+  gap:8px;
+  padding:2px 0;
+  margin:0;
+  min-width:0;
+  cursor:pointer;
+}
+
+/* Checkbox */
+.ms-item input[type="checkbox"]{
+  margin:0;
+  flex:0 0 auto;
+}
+
+/* Label text */
+.ms-item .ms-label{
+  display:block;
+  flex:1 1 auto;
+  min-width:0;
+  max-width:100%;
+
+  color:#111;
+  font-size:14px;
+  line-height:1.2;
+
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.ms-empty{
+  margin-top:10px;
+  font-size:13px;
+  color:var(--muted);
+}
+
+/* Responsive */
+@media (max-width:720px){
+  .ms-grid{ grid-template-columns:repeat(2,1fr); }
+}
+
+@media (max-width:480px){
+  .ms-grid{ grid-template-columns:1fr; }
+}
+
+</style>
 </head>
+
 <body>
-  <div class="bar">
-    <div>
-      <h1>Industry Archive Admin</h1>
-      <div class="muted">录入接口：<code>/api/admin/*</code>（需要 <code>X-Admin-Token</code>）</div>
-      <div class="muted"><a href="/viewer.html">← 返回 Viewer</a></div>
-    </div>
 
-    <div class="pill">
-      <span class="muted">Token 状态：</span>
-      <strong id="tokenStatus">未设置</strong>
-      <button id="btnSetToken" class="primary">设置/修改 Token</button>
-    </div>
+<div class="bar">
+  <div>
+    <h1>Industry Archive Admin</h1>
+    <div class="muted">录入接口：<code>/api/admin/*</code></div>
   </div>
 
-  <div class="card">
-    <h3 style="margin:0 0 10px 0">录入入口</h3>
+  <div class="pill">
+    <span class="muted">Token：</span>
+    <strong id="tokenStatus">未设置</strong>
+    <button id="btnSetToken" class="primary">设置 Token</button>
+  </div>
+</div>
+
+<div class="card">
+  <div class="row">
+    <button id="btnDomain" class="primary">录入安全领域</button>
+    <button id="btnProduct" class="primary">录入安全产品</button>
+  </div>
+</div>
+
+<!-- ================= Token Modal ================= -->
+
+<div id="tokenModal" class="modal-overlay">
+  <div class="modal">
+    <h2>设置 Admin Token</h2>
+
+    <label>Admin Token</label><br>
+    <input id="tokenInput">
+
+    <div class="footer">
+      <button id="btnTokenCancel">取消</button>
+      <button id="btnTokenSave" class="primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= Domain Modal ================= -->
+
+<div id="domainModal" class="modal-overlay">
+  <div class="modal">
+    <h2>录入安全领域</h2>
+
     <div class="row">
-      <button id="btnOrg" disabled>录入企业/机构（稍后）</button>
-      <button id="btnDomain" class="primary">录入安全领域</button>
-      <button id="btnProduct" class="primary">录入安全产品</button>
-      <button id="btnOrgProduct" disabled>录入企业产品（稍后）</button>
+      <input id="dom_name" placeholder="安全领域名称">
+      <input id="dom_slug" placeholder="slug">
     </div>
-    <div class="hint muted" style="margin-top:8px">
-      说明：目前先实现“安全领域 / 安全产品”。其余两个按钮后续按需求补齐。
-    </div>
-  </div>
 
-  <!-- Token Modal -->
-  <div id="tokenModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal">
-      <h2>设置 Admin Token</h2>
-      <div class="grid">
-        <div>
-          <label>Admin Token</label><br/>
-          <input id="tokenInput" placeholder="输入 ADMIN_TOKEN（只需一次，会保存在本机浏览器）" />
-          <div class="hint">Token 会存入浏览器 localStorage，仅用于请求头 <code>X-Admin-Token</code>。</div>
-        </div>
-      </div>
-      <div class="footer">
-        <button id="btnTokenCancel">取消</button>
-        <button id="btnTokenSave" class="primary">保存</button>
-      </div>
+    <div id="domainMsg" class="msg" style="display:none"></div>
+
+    <div class="footer">
+      <button data-close="domainModal">关闭</button>
+      <button id="btnDomainSubmit" class="primary">录入</button>
     </div>
   </div>
+</div>
 
-  <!-- Domain Modal -->
-  <div id="domainModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal">
-      <h2>录入安全领域</h2>
-      <div class="grid">
-        <div class="row">
-          <div>
-            <label>安全领域名称</label><br/>
-            <input id="dom_name" placeholder="security_domain_name" />
-          </div>
-          <div>
-            <label>安全领域 slug</label><br/>
-            <input id="dom_slug" placeholder="cybersecurity_domain_slug" />
-          </div>
-        </div>
-        <div id="domainMsg" class="msg" style="display:none"></div>
+<!-- ================= Product Modal ================= -->
+
+<div id="productModal" class="modal-overlay">
+  <div class="modal">
+    <h2>录入安全产品</h2>
+
+    <div class="row">
+      <input id="prod_name" placeholder="安全产品名称">
+      <input id="prod_slug" placeholder="slug">
+    </div>
+
+    <label>对应安全领域（多选）</label>
+
+    <div class="ms-wrap">
+      <div class="ms-top">
+        <input id="domainSearch" class="ms-search" placeholder="搜索领域名称或 slug">
+        <div id="domainMeta" class="ms-meta"></div>
       </div>
-      <div class="footer">
-        <button data-close="domainModal">关闭</button>
-        <button id="btnDomainSubmit" class="primary">录入</button>
-      </div>
+
+      <div id="domainCheckboxGrid" class="ms-grid"></div>
+      <div id="domainEmpty" class="ms-empty" style="display:none">没有匹配项</div>
+    </div>
+
+    <div id="productMsg" class="msg" style="display:none"></div>
+
+    <div class="footer">
+      <button data-close="productModal">关闭</button>
+      <button id="btnProductSubmit" class="primary">录入</button>
     </div>
   </div>
+</div>
 
-  <!-- Product Modal -->
-  <div id="productModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal">
-      <h2>录入安全产品</h2>
-      <div class="grid">
-        <div class="row">
-          <div>
-            <label>安全产品名称</label><br/>
-            <input id="prod_name" placeholder="security_product_name" />
-          </div>
-          <div>
-            <label>安全产品 slug</label><br/>
-            <input id="prod_slug" placeholder="security_product_slug" />
-          </div>
-        </div>
+<!-- ================= Busy ================= -->
 
-        <div>
-          <label>对应安全领域（可多选，可搜索）</label>
-          <div class="ms-wrap">
-            <div class="ms-top">
-              <input id="domainSearch" class="ms-search" placeholder="搜索领域名称或 slug…" />
-              <div id="domainMeta" class="ms-meta">加载中…</div>
-            </div>
-
-            <div id="domainCheckboxGrid" class="ms-grid"></div>
-            <div id="domainEmpty" class="ms-empty" style="display:none">没有匹配的领域</div>
-
-            <div class="hint" style="margin-top:8px">
-              数据来源：<code>/api/admin/dropdowns/domains</code>。提交时会写入关联表。
-            </div>
-          </div>
-        </div>
-
-        <div id="productMsg" class="msg" style="display:none"></div>
-      </div>
-      <div class="footer">
-        <button data-close="productModal">关闭</button>
-        <button id="btnProductSubmit" class="primary">录入</button>
-      </div>
+<div id="busyModal" class="modal-overlay">
+  <div class="modal">
+    <h2 id="busyTitle">录入中…</h2>
+    <div class="footer">
+      <button id="btnBusyClose" disabled>请稍候</button>
     </div>
   </div>
+</div>
 
-  <!-- Busy Modal -->
-  <div id="busyModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal">
-      <h2 id="busyTitle">录入中…</h2>
-      <div class="muted">请稍候，不要关闭页面。</div>
-      <div class="footer">
-        <button id="btnBusyClose" disabled>请稍候</button>
-      </div>
-    </div>
-  </div>
-
-  <script type="module" src="/src/admin.js"></script>
+<script type="module" src="/src/admin.js"></script>
 </body>
 </html>
