@@ -11,8 +11,7 @@ function setToken(token) {
   refreshTokenStatus();
 }
 function refreshTokenStatus() {
-  const t = getToken();
-  $('tokenStatus').textContent = t ? '已设置' : '未设置';
+  $('tokenStatus').textContent = getToken() ? '已设置' : '未设置';
 }
 
 function openModal(id) {
@@ -20,7 +19,6 @@ function openModal(id) {
   el.style.display = 'flex';
   el.setAttribute('aria-hidden', 'false');
 }
-
 function closeModal(id) {
   const el = $(id);
   el.style.display = 'none';
@@ -32,7 +30,6 @@ function showMsg(containerId, msgObj) {
   el.style.display = 'block';
   el.textContent = typeof msgObj === 'string' ? msgObj : JSON.stringify(msgObj, null, 2);
 }
-
 function clearMsg(containerId) {
   const el = $(containerId);
   el.style.display = 'none';
@@ -54,10 +51,7 @@ async function apiGet(url) {
 async function apiPost(url, body) {
   const res = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...tokenHeader()
-    },
+    headers: { 'Content-Type': 'application/json', ...tokenHeader() },
     body: JSON.stringify(body)
   });
   const data = await res.json().catch(() => ({}));
@@ -78,29 +72,23 @@ function busyStart(title = '录入中…') {
   $('btnBusyClose').disabled = true;
   openModal('busyModal');
 }
-
 function busySuccess(title = '录入成功') {
   $('busyTitle').textContent = title;
   $('btnBusyClose').textContent = '确定';
   $('btnBusyClose').disabled = false;
 }
-
 function busyFail(title = '录入失败') {
   $('busyTitle').textContent = title;
   $('btnBusyClose').textContent = '确定';
   $('btnBusyClose').disabled = false;
 }
-
-$('btnBusyClose').addEventListener('click', () => {
-  closeModal('busyModal');
-});
+$('btnBusyClose').addEventListener('click', () => closeModal('busyModal'));
 
 /** ===== Token Modal ===== */
 function openTokenModal() {
   $('tokenInput').value = getToken();
   openModal('tokenModal');
 }
-
 $('btnSetToken').addEventListener('click', openTokenModal);
 $('btnTokenCancel').addEventListener('click', () => closeModal('tokenModal'));
 $('btnTokenSave').addEventListener('click', () => {
@@ -130,7 +118,11 @@ $('btnProduct').addEventListener('click', async () => {
   $('prod_name').value = '';
   $('prod_slug').value = '';
   openModal('productModal');
-  await loadDomainsDropdown(); // ensure dropdown populated
+
+  // refresh domains list each time product modal opens (you can cache later)
+  await loadDomainsForCheckboxes(true);
+  $('domainSearch').value = '';
+  filterDomains('');
 });
 
 /** ===== Domain submit ===== */
@@ -138,7 +130,6 @@ $('btnDomainSubmit').addEventListener('click', async () => {
   if (!requireTokenOrPrompt()) return;
 
   clearMsg('domainMsg');
-
   const body = {
     security_domain_name: $('dom_name').value.trim(),
     cybersecurity_domain_slug: $('dom_slug').value.trim()
@@ -147,26 +138,18 @@ $('btnDomainSubmit').addEventListener('click', async () => {
   busyStart('录入中：安全领域…');
   try {
     const data = await apiPost('/api/admin/domain', body);
-
-    // 在弹窗内显示结果
     showMsg('domainMsg', { ok: true, message: '录入成功', data });
-
-    // Busy 弹窗转为成功态（等待用户点确定）
     busySuccess('安全领域录入成功');
 
-    // 方便连续录入：不关闭 domainModal，只清空输入
+    // 连续录入友好：清空输入但不关闭弹窗
     $('dom_name').value = '';
     $('dom_slug').value = '';
 
-    // 可选：成功后刷新产品弹窗的领域下拉
-    await loadDomainsDropdown(true);
+    // 新增领域后，刷新产品弹窗领域列表（如果用户接着录产品）
+    await loadDomainsForCheckboxes(true);
+    filterDomains($('domainSearch').value || '');
   } catch (e) {
-    showMsg('domainMsg', {
-      ok: false,
-      error: e.message,
-      status: e.status,
-      detail: e.data
-    });
+    showMsg('domainMsg', { ok: false, error: e.message, status: e.status, detail: e.data });
     busyFail('安全领域录入失败');
   }
 });
@@ -177,57 +160,59 @@ $('btnProductSubmit').addEventListener('click', async () => {
 
   clearMsg('productMsg');
 
-  const domainIdStr = $('prod_domain_select').value;
-  const domainId = domainIdStr ? Number(domainIdStr) : null;
+  const domainIds = getSelectedDomainIds();
 
   const body = {
     security_product_name: $('prod_name').value.trim(),
     security_product_slug: $('prod_slug').value.trim(),
-    ...(domainId ? { domains: [domainId] } : {})
+    ...(domainIds.length ? { domains: domainIds } : {})
   };
 
   busyStart('录入中：安全产品…');
   try {
     const data = await apiPost('/api/admin/product', body);
-
     showMsg('productMsg', { ok: true, message: '录入成功', data });
     busySuccess('安全产品录入成功');
 
-    // 成功后保留弹窗，清空输入，方便连续录入
+    // 清空输入，保留弹窗便于连续录入
     $('prod_name').value = '';
     $('prod_slug').value = '';
-    $('prod_domain_select').value = '';
+    clearDomainSelection();
   } catch (e) {
-    showMsg('productMsg', {
-      ok: false,
-      error: e.message,
-      status: e.status,
-      detail: e.data
-    });
+    showMsg('productMsg', { ok: false, error: e.message, status: e.status, detail: e.data });
     busyFail('安全产品录入失败');
   }
 });
 
-/** ===== Domains dropdown ===== */
-let domainsCache = null;
+/** ===== Checkbox multi-select: Domains ===== */
+let domainsAll = [];      // [{id,name,slug}]
+let domainsFiltered = []; // current list after filter
 
-async function loadDomainsDropdown(force = false) {
+async function loadDomainsForCheckboxes(force = false) {
   if (!requireTokenOrPrompt()) return;
 
-  if (!force && domainsCache) {
-    renderDomains(domainsCache);
+  // 简单策略：force=true 就重拉；否则若已有就复用
+  if (!force && domainsAll.length) {
+    renderDomains(domainsAll);
     return;
   }
 
-  const sel = $('prod_domain_select');
-  sel.innerHTML = `<option value="">加载中…</option>`;
+  setDomainMeta('加载中…');
+  $('domainCheckboxGrid').innerHTML = '';
+  $('domainEmpty').style.display = 'none';
 
   try {
     const data = await apiGet('/api/admin/dropdowns/domains?limit=500');
-    domainsCache = data;
-    renderDomains(data);
+    domainsAll = (data?.items || []).map((x) => ({
+      id: Number(x.id),
+      name: String(x.name || ''),
+      slug: String(x.slug || '')
+    })).filter((x) => Number.isFinite(x.id));
+
+    renderDomains(domainsAll);
+    setDomainMeta(`共 ${domainsAll.length} 项`);
   } catch (e) {
-    sel.innerHTML = `<option value="">加载失败（检查 token / 接口）</option>`;
+    setDomainMeta('加载失败（检查 token / 接口）');
     showMsg('productMsg', {
       ok: false,
       error: '加载领域下拉失败：' + e.message,
@@ -237,29 +222,84 @@ async function loadDomainsDropdown(force = false) {
   }
 }
 
-function renderDomains(data) {
-  const sel = $('prod_domain_select');
-  const items = data?.items || [];
-
-  const options = [
-    `<option value="">（不选择领域）</option>`,
-    ...items.map((x) =>
-      `<option value="${x.id}">${escapeHtml(x.name)} (${escapeHtml(x.slug)})</option>`
-    )
-  ];
-  sel.innerHTML = options.join('');
+function setDomainMeta(text) {
+  $('domainMeta').textContent = text;
 }
 
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
+function renderDomains(list) {
+  domainsFiltered = list;
+
+  const grid = $('domainCheckboxGrid');
+  grid.innerHTML = '';
+
+  for (const d of list) {
+    const id = `domain_cb_${d.id}`;
+
+    const item = document.createElement('label');
+    item.className = 'ms-item';
+    item.setAttribute('for', id);
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.id = id;
+    cb.value = String(d.id);
+    cb.dataset.name = d.name.toLowerCase();
+    cb.dataset.slug = d.slug.toLowerCase();
+
+    const text = document.createElement('span');
+    text.className = 'ms-label';
+    text.textContent = `${d.name} (${d.slug})`;
+
+    item.appendChild(cb);
+    item.appendChild(text);
+    grid.appendChild(item);
+  }
+
+  $('domainEmpty').style.display = list.length ? 'none' : 'block';
 }
+
+function filterDomains(q) {
+  const qq = String(q || '').trim().toLowerCase();
+  if (!qq) {
+    renderDomains(domainsAll);
+    setDomainMeta(`共 ${domainsAll.length} 项`);
+    return;
+  }
+  const filtered = domainsAll.filter((d) => {
+    const name = (d.name || '').toLowerCase();
+    const slug = (d.slug || '').toLowerCase();
+    return name.includes(qq) || slug.includes(qq);
+  });
+  renderDomains(filtered);
+  setDomainMeta(`匹配 ${filtered.length} / ${domainsAll.length}`);
+}
+
+function getSelectedDomainIds() {
+  const checks = $('domainCheckboxGrid').querySelectorAll('input[type="checkbox"]');
+  const ids = [];
+  checks.forEach((cb) => {
+    if (cb.checked) {
+      const n = Number(cb.value);
+      if (Number.isFinite(n)) ids.push(n);
+    }
+  });
+  // 去重
+  return Array.from(new Set(ids));
+}
+
+function clearDomainSelection() {
+  const checks = $('domainCheckboxGrid').querySelectorAll('input[type="checkbox"]');
+  checks.forEach((cb) => (cb.checked = false));
+}
+
+$('domainSearch').addEventListener('input', (e) => {
+  filterDomains(e.target.value);
+});
 
 /** ===== init ===== */
 refreshTokenStatus();
 
-// 点击遮罩关闭（busyModal 不允许）
+// 点击遮罩关闭（busyModal 不允许点遮罩关闭）
 ['tokenModal','domainModal','productModal'].forEach((mid) => {
   const overlay = $(mid);
   overlay.addEventListener('click', (e) => {
