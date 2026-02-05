@@ -3,6 +3,9 @@ const $ = (id) => document.getElementById(id);
 
 const STORAGE_KEY = 'industry_admin_token_v1';
 
+/** =========================
+ * Token
+ * ========================= */
 function getToken() {
   return (localStorage.getItem(STORAGE_KEY) || '').trim();
 }
@@ -14,6 +17,20 @@ function refreshTokenStatus() {
   $('tokenStatus').textContent = getToken() ? '已设置' : '未设置';
 }
 
+function tokenHeader() {
+  const t = getToken();
+  return t ? { 'X-Admin-Token': t } : {};
+}
+
+function requireTokenOrPrompt() {
+  if (getToken()) return true;
+  openTokenModal();
+  return false;
+}
+
+/** =========================
+ * Modal helpers
+ * ========================= */
 function openModal(id) {
   const el = $(id);
   el.style.display = 'flex';
@@ -36,18 +53,15 @@ function clearMsg(containerId) {
   el.textContent = '';
 }
 
-function tokenHeader() {
-  const t = getToken();
-  return t ? { 'X-Admin-Token': t } : {};
-}
-
+/** =========================
+ * API
+ * ========================= */
 async function apiGet(url) {
   const res = await fetch(url, { headers: { ...tokenHeader() } });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw Object.assign(new Error(data?.error || 'Request failed'), { status: res.status, data });
   return data;
 }
-
 async function apiPost(url, body) {
   const res = await fetch(url, {
     method: 'POST',
@@ -59,13 +73,9 @@ async function apiPost(url, body) {
   return data;
 }
 
-function requireTokenOrPrompt() {
-  if (getToken()) return true;
-  openTokenModal();
-  return false;
-}
-
-/** ===== Busy Modal (3-state) ===== */
+/** =========================
+ * Busy Modal (3-state)
+ * ========================= */
 function busyStart(title = '录入中…') {
   $('busyTitle').textContent = title;
   $('btnBusyClose').textContent = '请稍候';
@@ -84,7 +94,9 @@ function busyFail(title = '录入失败') {
 }
 $('btnBusyClose').addEventListener('click', () => closeModal('busyModal'));
 
-/** ===== Token Modal ===== */
+/** =========================
+ * Token modal
+ * ========================= */
 function openTokenModal() {
   $('tokenInput').value = getToken();
   openModal('tokenModal');
@@ -103,7 +115,147 @@ document.addEventListener('click', (e) => {
   closeModal(btn.getAttribute('data-close'));
 });
 
-/** ===== Entry buttons ===== */
+/** =========================
+ * Reusable checkbox multi-select component
+ * =========================
+ * - 3-column grid rendered by CSS
+ * - search filter
+ * - getSelectedIds(), clearSelection()
+ */
+function createCheckboxMultiSelect({
+  searchEl,
+  metaEl,
+  gridEl,
+  emptyEl,
+  // required: fetchOptions() -> {items:[{id,name,slug}]}
+  fetchOptions,
+  // how to render label text from item
+  formatLabel = (item) => `${item.name} (${item.slug})`,
+  // unique checkbox id prefix
+  idPrefix = 'ms'
+}) {
+  let allItems = [];   // normalized items
+  let filtered = [];
+
+  function setMeta(text) {
+    metaEl.textContent = text;
+  }
+
+  function normalize(items) {
+    return (items || [])
+      .map((x) => ({
+        id: Number(x.id),
+        name: String(x.name || ''),
+        slug: String(x.slug || '')
+      }))
+      .filter((x) => Number.isFinite(x.id));
+  }
+
+  function render(list) {
+    filtered = list;
+    gridEl.innerHTML = '';
+
+    for (const item of list) {
+      const cbId = `${idPrefix}_${item.id}`;
+
+      const label = document.createElement('label');
+      label.className = 'ms-item';
+      label.setAttribute('for', cbId);
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.id = cbId;
+      cb.value = String(item.id);
+
+      const text = document.createElement('span');
+      text.className = 'ms-label';
+      text.textContent = formatLabel(item);
+
+      label.appendChild(cb);
+      label.appendChild(text);
+      gridEl.appendChild(label);
+    }
+
+    emptyEl.style.display = list.length ? 'none' : 'block';
+  }
+
+  function applyFilter(q) {
+    const qq = String(q || '').trim().toLowerCase();
+    if (!qq) {
+      render(allItems);
+      setMeta(`共 ${allItems.length} 项`);
+      return;
+    }
+    const next = allItems.filter((it) => {
+      const n = it.name.toLowerCase();
+      const s = it.slug.toLowerCase();
+      return n.includes(qq) || s.includes(qq);
+    });
+    render(next);
+    setMeta(`匹配 ${next.length} / ${allItems.length}`);
+  }
+
+  async function load(force = false) {
+    // 这里不做 token 检查，由外层保证（这样组件更通用）
+    if (!force && allItems.length) {
+      applyFilter(searchEl.value);
+      return;
+    }
+
+    setMeta('加载中…');
+    gridEl.innerHTML = '';
+    emptyEl.style.display = 'none';
+
+    const data = await fetchOptions();
+    allItems = normalize(data?.items);
+    applyFilter(searchEl.value);
+  }
+
+  function getSelectedIds() {
+    const ids = [];
+    gridEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+      if (cb.checked) {
+        const n = Number(cb.value);
+        if (Number.isFinite(n)) ids.push(n);
+      }
+    });
+    return Array.from(new Set(ids));
+  }
+
+  function clearSelection() {
+    gridEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => (cb.checked = false));
+  }
+
+  // wire events
+  searchEl.addEventListener('input', () => applyFilter(searchEl.value));
+
+  return {
+    load,
+    applyFilter,
+    getSelectedIds,
+    clearSelection
+  };
+}
+
+/** =========================
+ * Instantiate multi-selects
+ * ========================= */
+const domainMultiSelect = createCheckboxMultiSelect({
+  searchEl: $('domainSearch'),
+  metaEl: $('domainMeta'),
+  gridEl: $('domainCheckboxGrid'),
+  emptyEl: $('domainEmpty'),
+  idPrefix: 'domain_cb',
+  fetchOptions: async () => {
+    if (!requireTokenOrPrompt()) return { items: [] };
+    return apiGet('/api/admin/dropdowns/domains?limit=500');
+  },
+  formatLabel: (d) => `${d.name} (${d.slug})`
+});
+
+/** =========================
+ * Entry buttons
+ * ========================= */
 $('btnDomain').addEventListener('click', () => {
   if (!requireTokenOrPrompt()) return;
   clearMsg('domainMsg');
@@ -119,13 +271,18 @@ $('btnProduct').addEventListener('click', async () => {
   $('prod_slug').value = '';
   openModal('productModal');
 
-  // refresh domains list each time product modal opens (you can cache later)
-  await loadDomainsForCheckboxes(true);
-  $('domainSearch').value = '';
-  filterDomains('');
+  try {
+    await domainMultiSelect.load(true);
+    $('domainSearch').value = '';
+    domainMultiSelect.applyFilter('');
+  } catch (e) {
+    showMsg('productMsg', { ok: false, error: '加载领域失败：' + e.message, status: e.status, detail: e.data });
+  }
 });
 
-/** ===== Domain submit ===== */
+/** =========================
+ * Domain submit
+ * ========================= */
 $('btnDomainSubmit').addEventListener('click', async () => {
   if (!requireTokenOrPrompt()) return;
 
@@ -141,26 +298,27 @@ $('btnDomainSubmit').addEventListener('click', async () => {
     showMsg('domainMsg', { ok: true, message: '录入成功', data });
     busySuccess('安全领域录入成功');
 
-    // 连续录入友好：清空输入但不关闭弹窗
     $('dom_name').value = '';
     $('dom_slug').value = '';
 
-    // 新增领域后，刷新产品弹窗领域列表（如果用户接着录产品）
-    await loadDomainsForCheckboxes(true);
-    filterDomains($('domainSearch').value || '');
+    // 新增领域后刷新领域多选数据（便于马上录产品）
+    await domainMultiSelect.load(true);
+    domainMultiSelect.applyFilter($('domainSearch').value || '');
   } catch (e) {
     showMsg('domainMsg', { ok: false, error: e.message, status: e.status, detail: e.data });
     busyFail('安全领域录入失败');
   }
 });
 
-/** ===== Product submit ===== */
+/** =========================
+ * Product submit
+ * ========================= */
 $('btnProductSubmit').addEventListener('click', async () => {
   if (!requireTokenOrPrompt()) return;
 
   clearMsg('productMsg');
 
-  const domainIds = getSelectedDomainIds();
+  const domainIds = domainMultiSelect.getSelectedIds();
 
   const body = {
     security_product_name: $('prod_name').value.trim(),
@@ -174,132 +332,21 @@ $('btnProductSubmit').addEventListener('click', async () => {
     showMsg('productMsg', { ok: true, message: '录入成功', data });
     busySuccess('安全产品录入成功');
 
-    // 清空输入，保留弹窗便于连续录入
     $('prod_name').value = '';
     $('prod_slug').value = '';
-    clearDomainSelection();
+    domainMultiSelect.clearSelection();
   } catch (e) {
     showMsg('productMsg', { ok: false, error: e.message, status: e.status, detail: e.data });
     busyFail('安全产品录入失败');
   }
 });
 
-/** ===== Checkbox multi-select: Domains ===== */
-let domainsAll = [];      // [{id,name,slug}]
-let domainsFiltered = []; // current list after filter
-
-async function loadDomainsForCheckboxes(force = false) {
-  if (!requireTokenOrPrompt()) return;
-
-  // 简单策略：force=true 就重拉；否则若已有就复用
-  if (!force && domainsAll.length) {
-    renderDomains(domainsAll);
-    return;
-  }
-
-  setDomainMeta('加载中…');
-  $('domainCheckboxGrid').innerHTML = '';
-  $('domainEmpty').style.display = 'none';
-
-  try {
-    const data = await apiGet('/api/admin/dropdowns/domains?limit=500');
-    domainsAll = (data?.items || []).map((x) => ({
-      id: Number(x.id),
-      name: String(x.name || ''),
-      slug: String(x.slug || '')
-    })).filter((x) => Number.isFinite(x.id));
-
-    renderDomains(domainsAll);
-    setDomainMeta(`共 ${domainsAll.length} 项`);
-  } catch (e) {
-    setDomainMeta('加载失败（检查 token / 接口）');
-    showMsg('productMsg', {
-      ok: false,
-      error: '加载领域下拉失败：' + e.message,
-      status: e.status,
-      detail: e.data
-    });
-  }
-}
-
-function setDomainMeta(text) {
-  $('domainMeta').textContent = text;
-}
-
-function renderDomains(list) {
-  domainsFiltered = list;
-
-  const grid = $('domainCheckboxGrid');
-  grid.innerHTML = '';
-
-  for (const d of list) {
-    const id = `domain_cb_${d.id}`;
-
-    const item = document.createElement('label');
-    item.className = 'ms-item';
-    item.setAttribute('for', id);
-
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.id = id;
-    cb.value = String(d.id);
-    cb.dataset.name = d.name.toLowerCase();
-    cb.dataset.slug = d.slug.toLowerCase();
-
-    const text = document.createElement('span');
-    text.className = 'ms-label';
-    text.textContent = `${d.name} (${d.slug})`;
-
-    item.appendChild(cb);
-    item.appendChild(text);
-    grid.appendChild(item);
-  }
-
-  $('domainEmpty').style.display = list.length ? 'none' : 'block';
-}
-
-function filterDomains(q) {
-  const qq = String(q || '').trim().toLowerCase();
-  if (!qq) {
-    renderDomains(domainsAll);
-    setDomainMeta(`共 ${domainsAll.length} 项`);
-    return;
-  }
-  const filtered = domainsAll.filter((d) => {
-    const name = (d.name || '').toLowerCase();
-    const slug = (d.slug || '').toLowerCase();
-    return name.includes(qq) || slug.includes(qq);
-  });
-  renderDomains(filtered);
-  setDomainMeta(`匹配 ${filtered.length} / ${domainsAll.length}`);
-}
-
-function getSelectedDomainIds() {
-  const checks = $('domainCheckboxGrid').querySelectorAll('input[type="checkbox"]');
-  const ids = [];
-  checks.forEach((cb) => {
-    if (cb.checked) {
-      const n = Number(cb.value);
-      if (Number.isFinite(n)) ids.push(n);
-    }
-  });
-  // 去重
-  return Array.from(new Set(ids));
-}
-
-function clearDomainSelection() {
-  const checks = $('domainCheckboxGrid').querySelectorAll('input[type="checkbox"]');
-  checks.forEach((cb) => (cb.checked = false));
-}
-
-$('domainSearch').addEventListener('input', (e) => {
-  filterDomains(e.target.value);
-});
-
-/** ===== init ===== */
+/** =========================
+ * init
+ * ========================= */
 refreshTokenStatus();
 
-// 点击遮罩关闭（busyModal 不允许点遮罩关闭）
+// 点击遮罩关闭（busyModal 允许按按钮关闭；遮罩点击不关闭）
 ['tokenModal','domainModal','productModal'].forEach((mid) => {
   const overlay = $(mid);
   overlay.addEventListener('click', (e) => {
