@@ -8,11 +8,7 @@
   <style>
     :root { --border:#ddd; --muted:#666; --bg:#fafafa; }
 
-    body{
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-      margin:24px;
-      line-height:1.45
-    }
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:24px;line-height:1.45}
     h1{margin:0 0 10px 0}
     .muted{color:var(--muted)}
     .bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
@@ -20,24 +16,11 @@
     .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
     .grid{display:grid;gap:10px}
 
-    button{
-      padding:10px 12px;
-      font-size:14px;
-      cursor:pointer;
-      border:1px solid #ccc;
-      border-radius:10px;
-      background:#fff
-    }
+    button{padding:10px 12px;font-size:14px;cursor:pointer;border:1px solid #ccc;border-radius:10px;background:#fff}
     button.primary{border-color:#0b57d0}
     button:disabled{opacity:.6;cursor:not-allowed}
 
-    input{
-      padding:10px 12px;
-      font-size:14px;
-      border:1px solid #ccc;
-      border-radius:10px;
-      min-width:280px
-    }
+    input{padding:10px 12px;font-size:14px;border:1px solid #ccc;border-radius:10px;min-width:280px}
     label{font-size:13px;color:#333}
     code{background:#f5f5f5;padding:2px 6px;border-radius:6px}
     .pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:999px;padding:6px 10px}
@@ -58,164 +41,6 @@
     .modal .footer{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:12px}
     .modal .hint{font-size:12px;color:var(--muted);margin-top:6px}
     .modal .msg{margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--bg);white-space:pre-wrap}
-
-    /* ================================
-       Dropdown Multi-select
-       ================================ */
-
-    .dd-wrap{
-      border:1px solid var(--border);
-      border-radius:12px;
-      padding:10px;
-      background:#fff;
-    }
-
-    .dd-trigger-row{
-      display:flex;
-      gap:10px;
-      align-items:center;
-      flex-wrap:wrap;
-    }
-
-    .dd-trigger{
-      display:inline-flex;
-      align-items:center;
-      gap:10px;
-      padding:10px 12px;
-      border:1px solid #ccc;
-      border-radius:10px;
-      background:#fff;
-      cursor:pointer;
-      min-width: 320px;
-      justify-content: space-between;
-    }
-
-    .dd-trigger-left{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      min-width: 0;
-    }
-
-    .dd-summary{
-      color:#111;
-      font-size:14px;
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-      max-width: 520px;
-    }
-
-    .dd-caret{
-      width:0;height:0;
-      border-left:6px solid transparent;
-      border-right:6px solid transparent;
-      border-top:8px solid #333;
-      flex:0 0 auto;
-    }
-
-    .dd-actions{
-      display:flex;
-      gap:10px;
-      align-items:center;
-      flex-wrap:wrap;
-    }
-
-    .dd-small{
-      padding:8px 10px;
-      font-size:13px;
-      border-radius:10px;
-    }
-
-    .dd-panel{
-      margin-top:10px;
-      border:1px solid var(--border);
-      border-radius:12px;
-      padding:10px;
-      background:#fff;
-      display:none; /* 默认不展开 */
-    }
-
-    .dd-top{
-      display:flex;
-      gap:10px;
-      align-items:center;
-      flex-wrap:wrap;
-    }
-
-    .dd-meta{
-      font-size:12px;
-      color:var(--muted);
-    }
-
-    .dd-grid{
-      margin-top:10px;
-      display:grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap:8px 14px;
-
-      max-height:260px;
-      overflow:auto;
-
-      padding:0;
-      justify-items:start;
-      align-items:start;
-    }
-
-    .dd-item{
-      width:100%;
-      display:flex;
-      justify-content:flex-start;
-      align-items:center;
-      gap:8px;
-
-      margin:0;
-      padding:2px 0;
-
-      min-width:0;
-      cursor:pointer;
-    }
-    .dd-item input[type="checkbox"]{
-      margin:0;
-      flex:0 0 auto;
-    }
-    .dd-label{
-      display:block;
-      flex:1 1 auto;
-      min-width:0;
-      max-width:100%;
-
-      color:#111;
-      font-size:14px;
-      line-height:1.2;
-
-      overflow:hidden;
-      text-overflow:ellipsis;
-      white-space:nowrap;
-    }
-
-    .dd-empty{
-      margin-top:10px;
-      font-size:13px;
-      color:var(--muted);
-    }
-
-    .dd-footer{
-      display:flex;
-      gap:10px;
-      justify-content:flex-end;
-      flex-wrap:wrap;
-      margin-top:10px;
-    }
-
-    @media (max-width: 720px){
-      .dd-grid{grid-template-columns: repeat(2, minmax(0, 1fr));}
-      .dd-trigger{min-width: 280px;}
-    }
-    @media (max-width: 480px){
-      .dd-grid{grid-template-columns: 1fr;}
-      .dd-trigger{min-width: 240px;}
-    }
   </style>
 </head>
 
@@ -301,37 +126,8 @@
         </div>
 
         <div>
-          <label>对应安全领域（点击下拉箭头选择，多选后点确定生效）</label>
-
-          <div class="dd-wrap" id="domainDropdownRoot">
-            <div class="dd-trigger-row">
-              <button type="button" class="dd-trigger" id="domainDdBtn">
-                <span class="dd-trigger-left">
-                  <span class="dd-summary" id="domainDdSummary">未选择</span>
-                </span>
-                <span class="dd-caret" aria-hidden="true"></span>
-              </button>
-
-              <div class="dd-actions">
-                <button type="button" class="dd-small" id="domainDdClear">清空</button>
-              </div>
-            </div>
-
-            <div class="dd-panel" id="domainDdPanel">
-              <div class="dd-top">
-                <input id="domainSearch" class="ms-search" placeholder="搜索领域名称或 slug…" />
-                <div id="domainMeta" class="dd-meta">加载中…</div>
-              </div>
-
-              <div id="domainCheckboxGrid" class="dd-grid"></div>
-              <div id="domainEmpty" class="dd-empty" style="display:none">没有匹配的领域</div>
-
-              <div class="dd-footer">
-                <button type="button" class="dd-small" id="domainDdCancel">取消</button>
-                <button type="button" class="dd-small primary" id="domainDdConfirm">确定</button>
-              </div>
-            </div>
-          </div>
+          <label>对应安全领域（点击 ▾ 弹窗选择，多选后点“确定”）</label>
+          <div id="domainLookupMount"></div>
         </div>
 
         <div id="productMsg" class="msg" style="display:none"></div>
