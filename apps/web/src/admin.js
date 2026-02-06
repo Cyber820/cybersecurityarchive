@@ -1,48 +1,126 @@
 // apps/web/src/admin.js
+// Admin page controller (modals + write actions + multi-select)
+//
+// 依赖：apps/web/admin.html 中的 DOM 结构（id 全匹配）
+// 后端：
+// - POST /api/admin/domain
+// - POST /api/admin/product   body: {security_product_name, security_product_slug, domains:[domainId...]}
+// - POST /api/admin/organization
+// - GET  /api/admin/dropdowns/domains -> { items:[{id,name,slug}], ... }
 
-/**
- * 说明（关键点）：
- * - 不再使用“await openConfirm()”这种会卡死的写法。
- * - showConfirm() 只是展示；updateConfirm() 更新状态；用户点按钮才关闭。
- * - 领域/产品/企业：各自独立提交。
- * - 产品选择领域：三列 checkbox + 搜索 + “确认才生效” + 清空。
- */
+const LS_TOKEN_KEY = 'ia_admin_token'
 
-const TOKEN_KEY = 'ia_admin_token_v1'
+// =========================
+// Helpers: DOM / text
+// =========================
+function $(sel) {
+  return document.querySelector(sel)
+}
+function norm(v) {
+  return (v ?? '').toString().trim()
+}
+function isValidSlug(s) {
+  return /^[a-z0-9-]+$/.test(norm(s))
+}
+function escapeHtml(s) {
+  return String(s ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;')
+}
 
-// ========== API 路径（如果你后端不一样，只改这里） ==========
+// =========================
+// API endpoints
+// =========================
 const API = {
-  createOrganization: '/api/admin/organization',
   createDomain: '/api/admin/domain',
   createProduct: '/api/admin/product',
-  // dropdowns：用于产品弹窗拉取领域列表
-  listDomains: '/api/admin/dropdowns/domains',
+  createOrganization: '/api/admin/organization',
+  dropdownDomains: '/api/admin/dropdowns/domains',
 }
 
-// ========== 字段映射（如果你后端 req.body 期待的字段名不同，只改这里） ==========
-const FIELD = {
-  // domain
-  domainName: 'security_domain_name',
-  domainSlug: 'cybersecurity_domain_slug', // 你之前 ERD 里是 cybersecurity_domain_slug
+// 注意：你当前后端用的是 token header（requireAdmin）
+// 这里统一用 x-admin-token（如果你后端用别的 header，把这里改成一致即可）
+async function apiPostJson(url, body, token) {
+  const headers = { 'content-type': 'application/json' }
+  if (token) headers['x-admin-token'] = token
 
-  // product
-  productName: 'security_product_name',
-  productSlug: 'security_product_slug',
+  const res = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body ?? {}),
+  })
 
-  // 关联：产品-领域
-  // 我这里默认后端 product route 接收 { domain_ids: [1,2,3] }
-  // 如果你后端接收 { security_domain_ids: [...] } 或 { domains:[...] }，改这个键名即可
-  productDomainIds: 'domain_ids',
+  const text = await res.text()
+  let data = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch (_) {
+    data = { raw: text }
+  }
+
+  if (!res.ok) {
+    const msg = data?.error || data?.message || `${res.status} ${res.statusText}`
+    throw new Error(msg)
+  }
+  return data
 }
 
-// ========== DOM helpers ==========
-function $(sel) { return document.querySelector(sel) }
-function norm(v) { return (v ?? '').toString().trim() }
+async function apiGetJson(url, token) {
+  const headers = {}
+  if (token) headers['x-admin-token'] = token
 
-function setInvalid(inputEl, errEl, msg) {
+  const res = await fetch(url, { method: 'GET', headers })
+  const text = await res.text()
+  let data = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch (_) {
+    data = { raw: text }
+  }
+
+  if (!res.ok) {
+    const msg = data?.error || data?.message || `${res.status} ${res.statusText}`
+    throw new Error(msg)
+  }
+  return data
+}
+
+// =========================
+// Token cache
+// =========================
+function getToken() {
+  const input = $('#tokenInput')
+  const v = norm(input?.value)
+  return v || norm(localStorage.getItem(LS_TOKEN_KEY))
+}
+function setToken(v) {
+  const x = norm(v)
+  if (!x) {
+    localStorage.removeItem(LS_TOKEN_KEY)
+    return
+  }
+  localStorage.setItem(LS_TOKEN_KEY, x)
+}
+
+// init token input
+{
+  const tokenInput = $('#tokenInput')
+  if (tokenInput) {
+    tokenInput.value = norm(localStorage.getItem(LS_TOKEN_KEY))
+    tokenInput.addEventListener('input', () => setToken(tokenInput.value))
+  }
+}
+
+// =========================
+// Validate UI helpers
+// =========================
+function setInvalid(inputEl, errEl, message) {
   if (inputEl) inputEl.setAttribute('aria-invalid', 'true')
   if (errEl) {
-    errEl.textContent = msg
+    errEl.textContent = message || ''
     errEl.style.display = 'block'
   }
 }
@@ -53,126 +131,237 @@ function clearInvalid(inputEl, errEl) {
     errEl.style.display = 'none'
   }
 }
-
-// slug：a-z0-9-
-function isValidSlug(slug) {
-  return /^[a-z0-9-]+$/.test(slug)
-}
-
-// establish_year: 1990 ~ this year
 function validateEstablishYear(v) {
   const s = norm(v)
-  if (!s) return { value: null }
-  if (!/^\d{4}$/.test(s)) return { error: '成立时间必须是 4 位数字（YYYY）。' }
+  if (!s) return { value: null, error: null }
   const n = Number(s)
   const nowYear = new Date().getFullYear()
-  if (n < 1990 || n > nowYear) return { error: `成立时间范围：1990 ~ ${nowYear}` }
-  return { value: n }
+  if (!Number.isFinite(n) || !Number.isInteger(n)) {
+    return { value: null, error: '成立时间必须是整数年份（或留空）。' }
+  }
+  if (n < 1990 || n > nowYear) {
+    return { value: null, error: `成立时间范围：1990 ~ ${nowYear}（或留空）。` }
+  }
+  return { value: n, error: null }
 }
 
-// ========== modal open/close ==========
+// =========================
+// Modal open/close (avoid aria-hidden focus warning)
+// - open: display:flex + remove aria-hidden + focus first input
+// - close: display:none + set aria-hidden
+// =========================
 function openModal(modalEl) {
   if (!modalEl) return
   modalEl.style.display = 'flex'
   modalEl.setAttribute('aria-hidden', 'false')
+
+  // focus first input if exists
+  const first = modalEl.querySelector('input, textarea, button')
+  if (first) setTimeout(() => first.focus(), 0)
 }
+
 function closeModal(modalEl) {
   if (!modalEl) return
+
+  // 关闭前：先把焦点挪出 modal，避免 aria-hidden 的 console warning
+  const active = document.activeElement
+  if (modalEl.contains(active)) {
+    active.blur?.()
+  }
+
   modalEl.style.display = 'none'
   modalEl.setAttribute('aria-hidden', 'true')
 }
 
-// ========== token ==========
-const tokenInput = $('#tokenInput')
-if (tokenInput) {
-  tokenInput.value = localStorage.getItem(TOKEN_KEY) || ''
-  tokenInput.addEventListener('input', () => {
-    localStorage.setItem(TOKEN_KEY, tokenInput.value)
-  })
-}
-function getToken() {
-  return tokenInput ? norm(tokenInput.value) : ''
-}
-
-// ========== confirm ==========
+// =========================
+// Confirm overlay (loading/success/fail)
+// =========================
 const confirmOverlay = $('#confirmOverlay')
 const confirmTitle = $('#confirmTitle')
 const confirmBody = $('#confirmBody')
 const confirmOk = $('#confirmOk')
 
-function showConfirm({ title, body, okText = '确定', okEnabled = false } = {}) {
+let confirmState = { okEnabled: true, onOk: null }
+
+function showConfirm({ title, body, okText = '确定', okEnabled = true, onOk = null }) {
   if (!confirmOverlay) return
   confirmTitle.textContent = title || ''
   confirmBody.textContent = body || ''
   confirmOk.textContent = okText
   confirmOk.disabled = !okEnabled
-  openModal(confirmOverlay)
+  confirmState = { okEnabled, onOk }
+  confirmOverlay.style.display = 'flex'
+  confirmOverlay.setAttribute('aria-hidden', 'false')
 }
-function updateConfirm({ title, body, okText, okEnabled } = {}) {
+function updateConfirm({ title, body, okText = '确认返回', okEnabled = true, onOk = null }) {
   if (!confirmOverlay) return
   if (title != null) confirmTitle.textContent = title
   if (body != null) confirmBody.textContent = body
-  if (okText != null) confirmOk.textContent = okText
-  if (okEnabled != null) confirmOk.disabled = !okEnabled
+  confirmOk.textContent = okText
+  confirmOk.disabled = !okEnabled
+  confirmState = { okEnabled, onOk }
 }
 function hideConfirm() {
   if (!confirmOverlay) return
-  closeModal(confirmOverlay)
+  confirmOverlay.style.display = 'none'
+  confirmOverlay.setAttribute('aria-hidden', 'true')
+  confirmState = { okEnabled: true, onOk: null }
 }
 
 if (confirmOk) {
   confirmOk.addEventListener('click', () => {
-    if (!confirmOk.disabled) hideConfirm()
+    if (confirmOk.disabled) return
+    const cb = confirmState.onOk
+    hideConfirm()
+    try { cb?.() } catch (_) {}
+  })
+}
+if (confirmOverlay) {
+  confirmOverlay.addEventListener('click', (e) => {
+    if (e.target === confirmOverlay && confirmState.okEnabled) {
+      hideConfirm()
+      try { confirmState.onOk?.() } catch (_) {}
+    }
   })
 }
 
-// ========== API helper ==========
-async function apiGetJson(url, token) {
-  const headers = {}
-  if (token) headers['x-admin-token'] = token
-  const res = await fetch(url, { method: 'GET', headers })
-  const text = await res.text()
-  let json = null
-  try { json = text ? JSON.parse(text) : null } catch (_) {}
-  if (!res.ok) throw new Error(json?.error || json?.message || text || `HTTP ${res.status}`)
-  return json
+// =========================
+// MultiSelect component (固定 3 列；checkbox 左顶格；仅显示 name；搜索支持 name/slug；确认才生效)
+// 挂载点：<div id="productDomains" class="ia-ms"></div>
+// =========================
+let __msStyleInjected = false
+function ensureMultiSelectStyles() {
+  if (__msStyleInjected) return
+  __msStyleInjected = true
+
+  const style = document.createElement('style')
+  style.textContent = `
+  .ia-ms { border: 1px solid rgba(0,0,0,.20); border-radius: 12px; padding: 10px; box-sizing: border-box; }
+  .ia-ms-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .ia-ms-title { font-size: 13px; font-weight: 800; }
+  .ia-ms-actions { display:flex; gap:8px; align-items:center; }
+  .ia-ms-iconbtn {
+    border: 1px solid rgba(0,0,0,.25);
+    background: #fff;
+    border-radius: 999px;
+    width: 34px;
+    height: 34px;
+    cursor: pointer;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    font-size: 14px;
+    line-height: 1;
+  }
+  .ia-ms-iconbtn:disabled { opacity:.6; cursor:not-allowed; }
+
+  .ia-ms-summary { margin-top: 8px; font-size: 12px; color: rgba(0,0,0,.70); white-space: pre-wrap; }
+
+  .ia-ms-panel {
+    display:none;
+    margin-top: 10px;
+    border: 1px solid rgba(0,0,0,.18);
+    border-radius: 12px;
+    padding: 10px;
+    background: #fff;
+  }
+  .ia-ms-panel[style*="display: block"] { display:block; }
+
+  .ia-ms-search {
+    width:100%;
+    box-sizing:border-box;
+    border:1px solid rgba(0,0,0,.25);
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-size: 14px;
+    outline: none;
+  }
+  .ia-ms-hint { margin-top: 8px; font-size: 12px; color: rgba(0,0,0,.60); }
+
+  /* ✅ 固定 3 列 + 允许横向滚动（你说可以接受滚动条） */
+  .ia-ms-grid {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(260px, 1fr));
+    gap: 8px 16px;
+    max-height: 260px;
+    overflow: auto;
+    padding: 0;              /* ✅ 避免左侧空隙 */
+  }
+
+  /* ✅ 单项：label 必须是 flex，checkbox 左顶格，文字紧跟右侧 */
+  .ia-ms-row {
+    display:flex;
+    align-items:flex-start;
+    justify-content:flex-start;
+    gap: 8px;
+    padding: 2px 0;
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
+    cursor: pointer;
+    user-select:none;
+  }
+  .ia-ms-row input[type="checkbox"]{
+    margin: 0;               /* ✅ 左顶格核心 */
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+  }
+  .ia-ms-text{
+    display:block;
+    margin: 0;
+    padding: 0;
+    font-size: 13px;
+    color: #111;
+    line-height: 1.25;
+    white-space: normal;     /* ✅ 防止一列只显示一个字 */
+    word-break: break-word;
+  }
+
+  .ia-ms-foot { display:flex; justify-content:flex-end; gap:10px; margin-top: 10px; }
+  .ia-ms-btn {
+    border: 1px solid rgba(0,0,0,.25);
+    background:#fff;
+    border-radius: 10px;
+    padding: 8px 12px;
+    cursor:pointer;
+    font-size: 13px;
+  }
+  .ia-ms-btn-primary { border-color: rgba(0,0,0,.45); font-weight: 800; }
+  `
+  document.head.appendChild(style)
 }
 
-async function apiPostJson(url, payload, token) {
-  const headers = { 'Content-Type': 'application/json' }
-  if (token) headers['x-admin-token'] = token
-  const res = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-  })
-  const text = await res.text()
-  let json = null
-  try { json = text ? JSON.parse(text) : null } catch (_) {}
-  if (!res.ok) throw new Error(json?.error || json?.message || text || `HTTP ${res.status}`)
-  return json
-}
+/**
+ * createMultiSelect
+ * @param {Object} opts
+ * @param {string} opts.title - 标题
+ * @param {boolean} opts.multi - 是否多选（true=多选）
+ * @param {string} opts.searchPlaceholder - 搜索框 placeholder
+ * @returns {{ mount: (rootEl:HTMLElement)=>void, setOptions:(items:any[])=>void, getCommittedIds:()=>any[], clear:()=>void }}
+ */
+function createMultiSelect(opts) {
+  ensureMultiSelectStyles()
 
-// ========== MultiSelect (3列checkbox + 搜索 + 确认才生效 + 清空) ==========
-function createCheckboxMultiSelect3Col({
-  mountEl,
-  title = '选择',
-  placeholder = '搜索…',
-  // options: [{ id, name, slug }]
-  options = [],
-  // 搜索同时匹配 name 和 slug，但显示只显示 name
-  onChangeCommitted,
-}) {
-  if (!mountEl) throw new Error('createCheckboxMultiSelect3Col: mountEl missing')
+  const title = opts?.title ?? '选择'
+  const multi = opts?.multi !== false // 默认多选
+  const searchPlaceholder = opts?.searchPlaceholder ?? '搜索…'
 
-  // committed/draft 存 string id
-  let all = Array.isArray(options) ? options.slice() : []
-  let committed = new Set()
-  let draft = new Set()
-  let isOpen = false
+  // items: {id, name, slug?}
+  let all = []
   let query = ''
+  let isOpen = false
 
-  // head
+  // committed：最终生效集合（确认后写入）
+  const committed = new Map() // id -> item
+  // draft：面板打开期间临时勾选
+  let draft = new Map() // id -> item
+
+  // DOM
+  const root = document.createElement('div')
+  root.className = 'ia-ms'
+
   const head = document.createElement('div')
   head.className = 'ia-ms-head'
 
@@ -186,17 +375,18 @@ function createCheckboxMultiSelect3Col({
   const btnClear = document.createElement('button')
   btnClear.className = 'ia-ms-iconbtn'
   btnClear.type = 'button'
-  btnClear.textContent = '×'
   btnClear.title = '清空'
+  btnClear.textContent = '×'
 
   const btnArrow = document.createElement('button')
   btnArrow.className = 'ia-ms-iconbtn'
   btnArrow.type = 'button'
-  btnArrow.textContent = '▾'
   btnArrow.title = '展开'
+  btnArrow.textContent = '▾'
 
   actions.appendChild(btnClear)
   actions.appendChild(btnArrow)
+
   head.appendChild(titleEl)
   head.appendChild(actions)
 
@@ -204,25 +394,18 @@ function createCheckboxMultiSelect3Col({
   summary.className = 'ia-ms-summary'
   summary.textContent = '未选择'
 
-  // panel
   const panel = document.createElement('div')
   panel.className = 'ia-ms-panel'
 
-  const panelHead = document.createElement('div')
-  panelHead.className = 'ia-ms-panel-head'
-
   const search = document.createElement('input')
-  search.className = 'input ia-ms-search'
+  search.className = 'ia-ms-search'
   search.type = 'text'
-  search.placeholder = placeholder
+  search.placeholder = searchPlaceholder
   search.autocomplete = 'off'
 
-  const count = document.createElement('div')
-  count.className = 'ia-ms-count'
-  count.textContent = '共 0 项'
-
-  panelHead.appendChild(search)
-  panelHead.appendChild(count)
+  const hint = document.createElement('div')
+  hint.className = 'ia-ms-hint'
+  hint.textContent = '点击 ▾ 展开；勾选后点“确认”才生效；点“取消”放弃本次改动。'
 
   const grid = document.createElement('div')
   grid.className = 'ia-ms-grid'
@@ -231,82 +414,79 @@ function createCheckboxMultiSelect3Col({
   foot.className = 'ia-ms-foot'
 
   const btnCancel = document.createElement('button')
-  btnCancel.className = 'btn'
+  btnCancel.className = 'ia-ms-btn'
   btnCancel.type = 'button'
   btnCancel.textContent = '取消'
 
   const btnConfirm = document.createElement('button')
-  btnConfirm.className = 'btn btn-primary'
+  btnConfirm.className = 'ia-ms-btn ia-ms-btn-primary'
   btnConfirm.type = 'button'
   btnConfirm.textContent = '确认'
 
   foot.appendChild(btnCancel)
   foot.appendChild(btnConfirm)
 
-  panel.appendChild(panelHead)
+  panel.appendChild(search)
+  panel.appendChild(hint)
   panel.appendChild(grid)
   panel.appendChild(foot)
 
-  // mount
-  mountEl.innerHTML = ''
-  mountEl.appendChild(head)
-  mountEl.appendChild(summary)
-  mountEl.appendChild(panel)
+  root.appendChild(head)
+  root.appendChild(summary)
+  root.appendChild(panel)
 
   function setSummary() {
     if (committed.size === 0) {
       summary.textContent = '未选择'
       return
     }
-    const names = all
-      .filter(x => committed.has(String(x.id)))
-      .map(x => x.name)
-      .filter(Boolean)
-    summary.textContent = names.length ? `已选：${names.join('、')}` : `已选：${committed.size} 项`
+    const names = Array.from(committed.values()).map((x) => x.name).filter(Boolean)
+    summary.textContent = multi ? `已选：${names.join('、')}` : `已选：${names[0] ?? '1 项'}`
   }
 
-  function filteredOptions() {
-    const q = norm(query).toLowerCase()
-    if (!q) return all
-    return all.filter(o => {
-      const n = (o.name ?? '').toString().toLowerCase()
-      const s = (o.slug ?? '').toString().toLowerCase()
-      return n.includes(q) || s.includes(q)
-    })
+  function matches(item, q) {
+    if (!q) return true
+    const needle = q.toLowerCase()
+    const n = String(item?.name ?? '').toLowerCase()
+    const s = String(item?.slug ?? '').toLowerCase()
+    // ✅ 仅显示 name，但搜索支持 name/slug
+    return n.includes(needle) || s.includes(needle)
   }
 
   function renderGrid() {
     grid.innerHTML = ''
 
-    const shown = filteredOptions()
-    count.textContent = `共 ${shown.length} 项`
+    const q = norm(query).toLowerCase()
+    const shown = all.filter((it) => matches(it, q))
 
-    if (shown.length === 0) {
-      const empty = document.createElement('div')
-      empty.className = 'hint'
-      empty.textContent = '无匹配结果'
-      empty.style.gridColumn = '1 / -1'
-      grid.appendChild(empty)
-      return
-    }
+    for (const it of shown) {
+      const id = it.id
+      const checked = draft.has(id)
 
-    for (const o of shown) {
-      const id = String(o.id)
       const row = document.createElement('label')
       row.className = 'ia-ms-row'
 
       const cb = document.createElement('input')
       cb.type = 'checkbox'
-      cb.checked = draft.has(id)
-      cb.addEventListener('change', () => {
-        if (cb.checked) draft.add(id)
-        else draft.delete(id)
-      })
+      cb.checked = checked
 
       const text = document.createElement('span')
-      text.className = 'ia-ms-label'
-      // ✅ 只显示 name，不显示 slug
-      text.textContent = o.name ?? id
+      text.className = 'ia-ms-text'
+      // ✅ 只显示名称（不显示 slug）
+      text.textContent = String(it.name ?? '')
+
+      cb.addEventListener('change', (e) => {
+        const on = !!e.target.checked
+        if (!multi) {
+          draft.clear()
+          if (on) draft.set(id, it)
+          // 单选时：把其它 checkbox 状态刷新掉
+          renderGrid()
+          return
+        }
+        if (on) draft.set(id, it)
+        else draft.delete(id)
+      })
 
       row.appendChild(cb)
       row.appendChild(text)
@@ -317,12 +497,12 @@ function createCheckboxMultiSelect3Col({
   function open() {
     if (isOpen) return
     isOpen = true
-    draft = new Set(committed)
-    query = ''
-    search.value = ''
+    draft = new Map(committed) // 复制当前生效值作为草稿
     panel.style.display = 'block'
     btnArrow.textContent = '▴'
     btnArrow.title = '收起'
+    query = ''
+    search.value = ''
     renderGrid()
     search.focus()
   }
@@ -330,40 +510,43 @@ function createCheckboxMultiSelect3Col({
   function close({ commit = false } = {}) {
     if (!isOpen) return
     if (commit) {
-      committed = new Set(draft)
+      committed.clear()
+      for (const [k, v] of draft.entries()) committed.set(k, v)
       setSummary()
-      if (typeof onChangeCommitted === 'function') onChangeCommitted(getCommittedIds())
     } else {
-      draft = new Set(committed)
+      draft = new Map(committed)
     }
     isOpen = false
     panel.style.display = 'none'
     btnArrow.textContent = '▾'
     btnArrow.title = '展开'
+    query = ''
+    search.value = ''
   }
 
   function clear() {
     committed.clear()
     draft.clear()
-    query = ''
-    search.value = ''
     setSummary()
     if (isOpen) renderGrid()
-    if (typeof onChangeCommitted === 'function') onChangeCommitted(getCommittedIds())
   }
 
-  function setOptions(next) {
-    all = Array.isArray(next) ? next.slice() : []
-    // 保留 committed 中仍存在的 id
-    const exist = new Set(all.map(x => String(x.id)))
-    committed = new Set(Array.from(committed).filter(id => exist.has(id)))
-    draft = new Set(committed)
+  function setOptions(items) {
+    // items: [{id,name,slug?}]
+    all = Array.isArray(items) ? items : []
+    // 保留已选（按 id）
+    const keep = new Map()
+    for (const it of all) {
+      if (committed.has(it.id)) keep.set(it.id, it)
+    }
+    committed.clear()
+    for (const [k, v] of keep.entries()) committed.set(k, v)
     setSummary()
     if (isOpen) renderGrid()
   }
 
   function getCommittedIds() {
-    return Array.from(committed.values())
+    return Array.from(committed.keys())
   }
 
   // events
@@ -379,19 +562,48 @@ function createCheckboxMultiSelect3Col({
     renderGrid()
   })
 
-  // init
-  setOptions(all)
+  // outside click: close panel but do not commit
+  document.addEventListener('click', (e) => {
+    if (!isOpen) return
+    if (!root.contains(e.target)) close({ commit: false })
+  })
+
+  setSummary()
 
   return {
-    open,
-    close,
-    clear,
+    mount(rootEl) {
+      rootEl.innerHTML = ''
+      rootEl.appendChild(root)
+    },
     setOptions,
     getCommittedIds,
+    clear,
   }
 }
 
-// ========== Buttons: open modals ==========
+// =========================
+// Domain dropdown loading
+// =========================
+let __domainsCache = null
+async function refreshDomains() {
+  const token = getToken()
+  const data = await apiGetJson(API.dropdownDomains, token)
+  const items = (data?.items || []).map((x) => ({
+    id: x.id,
+    name: x.name,
+    slug: x.slug,
+  }))
+  __domainsCache = items
+  return items
+}
+async function ensureDomainsLoaded() {
+  if (__domainsCache && Array.isArray(__domainsCache)) return __domainsCache
+  return refreshDomains()
+}
+
+// =========================
+// Wire buttons -> modals
+// =========================
 const btnOpenOrg = $('#btnOpenOrg')
 const btnOpenDomain = $('#btnOpenDomain')
 const btnOpenProduct = $('#btnOpenProduct')
@@ -405,21 +617,24 @@ if (btnOpenOrg) btnOpenOrg.addEventListener('click', () => openModal(orgModal))
 if (btnOpenDomain) btnOpenDomain.addEventListener('click', () => openModal(domainModal))
 if (btnOpenProduct) btnOpenProduct.addEventListener('click', async () => {
   openModal(productModal)
-  // 打开产品弹窗时，确保 domains 列表已加载
   await ensureDomainsLoaded()
+  msDomains.setOptions(__domainsCache)
 })
 if (btnOpenOrgProduct) btnOpenOrgProduct.addEventListener('click', () => {
-  // 你还没做企业产品弹窗，这里先提示，不影响其它功能
   alert('“录入企业产品”窗口尚未实现（下一步做）。')
 })
 
-// 点击遮罩关闭（避免 aria-hidden focus 报错，不在关闭前乱改 aria-hidden）
+// click overlay to close
 for (const m of [orgModal, domainModal, productModal]) {
   if (!m) continue
-  m.addEventListener('click', (e) => { if (e.target === m) closeModal(m) })
+  m.addEventListener('click', (e) => {
+    if (e.target === m) closeModal(m)
+  })
 }
 
-// ========== Organization modal ==========
+// =========================
+// Organization modal
+// =========================
 const orgClose = $('#orgClose')
 const orgReset = $('#orgReset')
 const orgSubmit = $('#orgSubmit')
@@ -485,7 +700,7 @@ if (orgSubmit) {
       organization_slug: norm(orgSlug?.value),
     }
 
-    showConfirm({ title: '录入中', body: '写入中…请稍候', okEnabled: false })
+    showConfirm({ title: '录入中', body: '写入企业/机构中…请稍候', okEnabled: false })
 
     try {
       const res = await apiPostJson(API.createOrganization, payload, getToken())
@@ -494,8 +709,10 @@ if (orgSubmit) {
         body: `✅ 已写入 organization\n\n${JSON.stringify(res ?? {}, null, 2)}`,
         okText: '确认返回',
         okEnabled: true,
+        onOk: () => {
+          // 不自动关闭 orgModal：你可以继续录入；确认后返回当前弹窗
+        },
       })
-      // 成功后：不自动关闭企业弹窗，允许你继续录入；你点确认后自己回到弹窗即可
       resetOrgForm()
     } catch (e) {
       updateConfirm({
@@ -508,7 +725,9 @@ if (orgSubmit) {
   })
 }
 
-// ========== Domain modal ==========
+// =========================
+// Domain modal
+// =========================
 const domainClose = $('#domainClose')
 const domainReset = $('#domainReset')
 const domainSubmit = $('#domainSubmit')
@@ -553,8 +772,8 @@ if (domainSubmit) {
     if (!validateDomainForm()) return
 
     const payload = {
-      [FIELD.domainName]: norm(domainName?.value),
-      [FIELD.domainSlug]: norm(domainSlug?.value),
+      security_domain_name: norm(domainName?.value),
+      cybersecurity_domain_slug: norm(domainSlug?.value),
     }
 
     showConfirm({ title: '录入中', body: '写入安全领域中…请稍候', okEnabled: false })
@@ -569,8 +788,9 @@ if (domainSubmit) {
       })
       resetDomainForm()
 
-      // 新增领域后：刷新产品弹窗的领域候选
+      // 新增领域后：刷新产品弹窗候选
       await refreshDomains()
+      msDomains.setOptions(__domainsCache)
     } catch (e) {
       updateConfirm({
         title: '录入失败',
@@ -582,7 +802,9 @@ if (domainSubmit) {
   })
 }
 
-// ========== Product modal ==========
+// =========================
+// Product modal + domain MultiSelect
+// =========================
 const productClose = $('#productClose')
 const productReset = $('#productReset')
 const productSubmit = $('#productSubmit')
@@ -601,7 +823,7 @@ function resetProductForm() {
   clearInvalid(productName, productNameErr)
   clearInvalid(productSlug, productSlugErr)
   clearInvalid(null, productDomainsErr)
-  if (msDomains) msDomains.clear()
+  msDomains.clear()
   productName?.focus()
 }
 if (productReset) productReset.addEventListener('click', resetProductForm)
@@ -623,9 +845,9 @@ function validateProductForm() {
     ok = false
   } else clearInvalid(productSlug, productSlugErr)
 
-  const ids = msDomains ? msDomains.getCommittedIds() : []
-  if (!ids.length) {
-    setInvalid(null, productDomainsErr, '必须至少选择 1 个对应安全领域。')
+  const domainIds = msDomains.getCommittedIds()
+  if (!domainIds.length) {
+    setInvalid(null, productDomainsErr, '对应安全领域为必选（至少 1 个）。')
     ok = false
   } else {
     clearInvalid(null, productDomainsErr)
@@ -634,60 +856,26 @@ function validateProductForm() {
   return ok
 }
 
-// ===== domains dropdowns cache + multiselect instance =====
-let __domainsLoaded = false
-let __domainOptions = [] // [{id,name,slug}]
-let msDomains = null
-
-async function refreshDomains() {
-  // 期望后端返回：{ domains: [{security_domain_id, security_domain_name, cybersecurity_domain_slug}] }
-  // 或者直接数组；两种都兼容
-  const json = await apiGetJson(API.listDomains, getToken())
-
-  const raw = Array.isArray(json) ? json : (json?.domains || json?.data || [])
-  const options = (raw || []).map(x => ({
-    id: x.security_domain_id ?? x.id,
-    name: x.security_domain_name ?? x.name,
-    slug: x.cybersecurity_domain_slug ?? x.slug,
-  })).filter(x => x.id != null && norm(x.name))
-
-  __domainOptions = options
-  __domainsLoaded = true
-
-  if (msDomains) msDomains.setOptions(__domainOptions)
-}
-
-async function ensureDomainsLoaded() {
-  if (!msDomains) {
-    const mount = $('#productDomains')
-    msDomains = createCheckboxMultiSelect3Col({
-      mountEl: mount,
-      title: '安全领域',
-      placeholder: '搜索领域名称（也支持输入 slug 搜索，但不显示 slug）…',
-      options: __domainOptions,
-    })
-  }
-  if (!__domainsLoaded) {
-    try {
-      await refreshDomains()
-    } catch (e) {
-      // 不直接弹 confirm，避免打断；把错误显示在 err 区
-      setInvalid(null, productDomainsErr, `领域候选加载失败：${e?.message || String(e)}`)
-    }
-  }
+// mount MultiSelect into #productDomains
+const msDomains = createMultiSelect({
+  title: '安全领域',
+  multi: true,
+  searchPlaceholder: '搜索领域名称（也支持输入 slug 搜索，但不显示 slug）…',
+})
+{
+  const mountEl = $('#productDomains')
+  if (mountEl) msDomains.mount(mountEl)
 }
 
 if (productSubmit) {
   productSubmit.addEventListener('click', async () => {
-    await ensureDomainsLoaded()
     if (!validateProductForm()) return
 
-    const domainIds = msDomains.getCommittedIds().map(x => Number(x)).filter(Number.isFinite)
-
     const payload = {
-      [FIELD.productName]: norm(productName?.value),
-      [FIELD.productSlug]: norm(productSlug?.value),
-      [FIELD.productDomainIds]: domainIds,
+      security_product_name: norm(productName?.value),
+      security_product_slug: norm(productSlug?.value),
+      // ✅ 对接后端 product.js：字段名必须叫 domains
+      domains: msDomains.getCommittedIds(),
     }
 
     showConfirm({ title: '录入中', body: '写入安全产品中…请稍候', okEnabled: false })
@@ -696,7 +884,7 @@ if (productSubmit) {
       const res = await apiPostJson(API.createProduct, payload, getToken())
       updateConfirm({
         title: '录入成功',
-        body: `✅ 已写入 cybersecurity_product（并绑定领域）\n\n${JSON.stringify(res ?? {}, null, 2)}`,
+        body: `✅ 已写入 cybersecurity_product + cybersecurity_product_domain\n\n${JSON.stringify(res ?? {}, null, 2)}`,
         okText: '确认返回',
         okEnabled: true,
       })
@@ -711,3 +899,13 @@ if (productSubmit) {
     }
   })
 }
+
+// =========================
+// Initial: preload domains cache (non-blocking)
+// =========================
+ensureDomainsLoaded()
+  .then((items) => msDomains.setOptions(items))
+  .catch((e) => {
+    // 不阻塞 UI，只在控制台提示
+    console.warn('domains preload failed:', e?.message || e)
+  })
