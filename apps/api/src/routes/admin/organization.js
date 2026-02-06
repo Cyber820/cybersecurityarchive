@@ -3,135 +3,118 @@ import { supabase } from '../../supabase.js'
 import { requireAdmin } from './auth.js'
 
 /**
- * POST /api/admin/organization
+ * Admin: Organization（企业/机构基础信息）
  *
- * Body (示例):
- * {
- *   "company_short_name":"Acme",
- *   "company_full_name":"Acme Security Inc.",
- *   "establish_year":2001,
- *   "organization_slug":"acme",
- *   "products": [
- *     { "security_product_id": 12, "product_release_year": 2019, "product_end_year": null },
- *     { "security_product_slug": "acme-waf", "product_release_year": 2020 }
- *   ]
- * }
+ * 当前 schema（来自你贴的 ERD）：
+ * - organization
+ *   - organization_id (int8, PK)
+ *   - organization_short_name (text, required)
+ *   - organization_full_name (text, optional)
+ *   - establish_year (int4, optional)
+ *   - organization_slug (text, required)
  *
- * products 支持两种写法（可混用）：
- * - 传 security_product_id
- * - 或传 security_product_slug（会自动 lookup id）
+ * - organization_product（关联表，未来再做场景时加）
+ *   - organization_id (int8)
+ *   - security_product_id (int8)
+ *   - product_release_year (int4)
+ *   - product_end_year (int4)
+ *   - organization_product_id (int8, PK)
  *
- * 返回：
- * {
- *   organization: {...},
- *   products_bound: [{security_product_id, product_release_year, product_end_year}, ...]
- * }
+ * 设计约束（按你的规划）：
+ * - 关联表的写入逻辑会收敛到对应基础表的 route 文件里（例如未来在这里处理 organization_product）
+ * - 但当前阶段：只创建 organization 基础信息，不处理 organization_product
  */
+
 export function registerOrganizationAdmin(app) {
+  /**
+   * POST /api/admin/organization
+   *
+   * Body:
+   * {
+   *   "organization_short_name": "Acme",
+   *   "organization_full_name": "Acme Security Inc.",
+   *   "establish_year": 2001,
+   *   "organization_slug": "acme"
+   * }
+   *
+   * Return:
+   * { organization: {...} }
+   */
   app.post('/organization', async (req, reply) => {
     if (!requireAdmin(req, reply)) return
 
     const body = req.body || {}
-    const { products, ...orgPayload } = body
 
-    // 1) create organization
-    const { data: organization, error: oErr } = await supabase
+    // ✅ 白名单：只允许写入基础字段
+    const payload = {
+      organization_short_name: norm(body.organization_short_name),
+      organization_full_name: norm(body.organization_full_name) || null,
+      establish_year: body.establish_year ?? null,
+      organization_slug: norm(body.organization_slug),
+    }
+
+    // ===== validate: short_name =====
+    if (!payload.organization_short_name) {
+      return reply.code(400).send({ error: 'organization_short_name is required' })
+    }
+
+    // ===== validate: slug =====
+    if (!payload.organization_slug) {
+      return reply.code(400).send({ error: 'organization_slug is required' })
+    }
+    // 你要求“验证英文”：这里按 slug 规范收紧（小写英文/数字/连字符）
+    if (!/^[a-z0-9-]+$/.test(payload.organization_slug)) {
+      return reply.code(400).send({ error: 'organization_slug must match /^[a-z0-9-]+$/' })
+    }
+
+    // ===== validate: establish_year =====
+    // 允许：null / undefined / '' → null
+    if (payload.establish_year === '' || payload.establish_year === undefined) {
+      payload.establish_year = null
+    }
+    if (payload.establish_year !== null) {
+      const year = Number(payload.establish_year)
+      const nowYear = new Date().getFullYear()
+
+      // int 校验
+      if (!Number.isFinite(year) || !Number.isInteger(year)) {
+        return reply.code(400).send({ error: 'establish_year must be an integer year' })
+      }
+      // 范围校验（按你要求：1990 ~ 当前年份）
+      if (year < 1990 || year > nowYear) {
+        return reply.code(400).send({ error: `establish_year must be between 1990 and ${nowYear}` })
+      }
+
+      payload.establish_year = year
+    }
+
+    // ===== insert organization =====
+    const { data: organization, error } = await supabase
       .from('organization')
-      .insert(orgPayload)
+      .insert(payload)
       .select('*')
       .single()
 
-    if (oErr) return reply.code(400).send({ error: oErr.message })
+    if (error) return reply.code(400).send({ error: error.message })
 
-    // 2) optionally bind products
-    try {
-      const rows = await normalizeOrganizationProducts(organization.organization_id, products)
-      if (rows.length) {
-        // UNIQUE(organization_id, security_product_id)
-        const { error: rErr } = await supabase
-          .from('organization_product')
-          .insert(rows)
+    /**
+     * 未来扩展点（暂不启用）：
+     * - 如果你想在“新增企业时顺手绑定产品”（organization_product）
+     *   可以在这里接收 body.products 并写入 organization_product。
+     * - 但按你当前 UI 规划：企业产品会由独立按钮完成，所以这里先不做。
+     */
 
-        if (rErr) throw rErr
-      }
-
-      return reply.send({
-        organization,
-        products_bound: rows.map(({ security_product_id, product_release_year, product_end_year }) => ({
-          security_product_id,
-          product_release_year: product_release_year ?? null,
-          product_end_year: product_end_year ?? null
-        }))
-      })
-    } catch (e) {
-      // best-effort rollback: delete organization to avoid orphan if relation insert failed
-      await supabase
-        .from('organization')
-        .delete()
-        .eq('organization_id', organization.organization_id)
-
-      return reply.code(400).send({ error: e?.message || String(e) })
-    }
+    return reply.send({ organization })
   })
+
+  /**
+   * （可选）未来你做“编辑现有企业/机构信息”时，建议在这里加：
+   * - PATCH /api/admin/organization/:id
+   * - GET /api/admin/organization/:id
+   * 但你没要求，我先不加，避免影响当前开发节奏。
+   */
 }
 
-async function normalizeOrganizationProducts(organization_id, products) {
-  if (!products) return []
-  if (!Array.isArray(products)) throw new Error('products must be an array')
-
-  const cleaned = products.filter((x) => x && typeof x === 'object')
-  if (!cleaned.length) return []
-
-  // collect slugs to lookup
-  const slugs = Array.from(
-    new Set(
-      cleaned
-        .map((p) => (typeof p.security_product_slug === 'string' ? p.security_product_slug.trim() : ''))
-        .filter(Boolean)
-    )
-  )
-
-  let slugToId = new Map()
-  if (slugs.length) {
-    const { data, error } = await supabase
-      .from('cybersecurity_product')
-      .select('security_product_id, security_product_slug')
-      .in('security_product_slug', slugs)
-
-    if (error) throw error
-    slugToId = new Map((data || []).map((x) => [x.security_product_slug, x.security_product_id]))
-
-    const missing = slugs.filter((s) => !slugToId.has(s))
-    if (missing.length) throw new Error(`Unknown product slugs: ${missing.join(', ')}`)
-  }
-
-  const rows = []
-  const seen = new Set()
-
-  for (const p of cleaned) {
-    let security_product_id = null
-
-    if (typeof p.security_product_id === 'number' && Number.isFinite(p.security_product_id)) {
-      security_product_id = p.security_product_id
-    } else if (typeof p.security_product_slug === 'string' && p.security_product_slug.trim()) {
-      security_product_id = slugToId.get(p.security_product_slug.trim())
-    }
-
-    if (!security_product_id) {
-      throw new Error('Each products[] item must include security_product_id (number) or security_product_slug (string)')
-    }
-
-    const key = `${organization_id}:${security_product_id}`
-    if (seen.has(key)) continue
-    seen.add(key)
-
-    rows.push({
-      organization_id,
-      security_product_id,
-      product_release_year: p.product_release_year ?? null,
-      product_end_year: p.product_end_year ?? null
-    })
-  }
-
-  return rows
+function norm(v) {
+  return (v ?? '').toString().trim()
 }
