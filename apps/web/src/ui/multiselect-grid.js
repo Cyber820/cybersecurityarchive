@@ -7,7 +7,9 @@
  * - 展开态：搜索框 + 三列 checkbox 列表 + 确认/取消
  * - 勾选只影响 draft；点“确认”才写入 committed
  *
- * 依赖：无（纯 DOM + CSS 注入）
+ * ✅ 本版修复：
+ * 1) “每行只有一个字” —— 给 grid 列设置最小宽度 minmax(220px, 1fr)，避免列被压到极窄
+ * 2) “checkbox 不左顶格” —— 去掉 row 左 padding，grid 加 padding-left:0，并强制 checkbox margin:0
  */
 
 function el(tag, attrs = {}, children = []) {
@@ -40,14 +42,13 @@ function normalizeOptions(options) {
   for (const it of options || []) {
     if (it == null) continue;
     if (typeof it === 'string') {
-      out.push({ id: it, name: it, description: null });
+      out.push({ id: it, name: it, description: null, slug: null });
       continue;
     }
     out.push({
       id: it.id ?? it.value ?? it.key,
       name: it.name ?? it.label ?? String(it.id ?? ''),
       description: it.description ?? it.desc ?? null,
-      // 可额外带 slug，但不强制
       slug: it.slug ?? null,
     });
   }
@@ -81,24 +82,27 @@ function injectStyleOnce() {
   }
   .ia-ms-hint{ margin-top:6px; font-size:12px; color:rgba(0,0,0,.6); }
 
+  /* ✅ 三列网格：每列有最小宽度，避免被压到“一行一个字” */
   .ia-ms-grid{
     margin-top:10px;
     display:grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(220px, 1fr));
     column-gap: 12px;
     row-gap: 4px;
     align-items:start;
     max-height: 320px;
     overflow:auto;
+    padding-left: 0;      /* ✅ 左顶格 */
     padding-right: 4px;
   }
   @media (max-width: 900px){
-    .ia-ms-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ia-ms-grid{ grid-template-columns: repeat(2, minmax(220px, 1fr)); }
   }
   @media (max-width: 520px){
     .ia-ms-grid{ grid-template-columns: 1fr; }
   }
 
+  /* ✅ 行内布局：取消左 padding，checkbox + 文字紧贴 */
   .ia-ms-row{
     display:flex;
     align-items:flex-start;
@@ -106,7 +110,7 @@ function injectStyleOnce() {
     gap:8px;
     cursor:pointer;
     user-select:none;
-    padding:2px 6px;
+    padding:2px 0;        /* ✅ 原来会有左侧 padding，导致不顶格 */
     border-radius:8px;
     color:#111;
     line-height:1.2;
@@ -114,7 +118,7 @@ function injectStyleOnce() {
   .ia-ms-row:hover{ background:rgba(0,0,0,.05); }
 
   .ia-ms-row > input[type="checkbox"]{
-    margin:0; /* ✅ 左顶格关键 */
+    margin:0 !important;  /* ✅ 强制清零，避免 UA 样式/全局 reset 干扰 */
     flex:0 0 auto;
     width:14px; height:14px;
   }
@@ -159,7 +163,7 @@ function injectStyleOnce() {
  * @param {string} [cfg.placeholder='搜索并选择…']
  * @param {string} [cfg.hint]
  * @param {Array} [cfg.options=[]]  // {id,name,description?,slug?} or string
- * @param {function(item):string} [cfg.searchText] // 默认 name+description+slug
+ * @param {function(item):string} [cfg.searchText] // 默认 name+description+slug（仅用于搜索，不影响显示）
  */
 export function createMultiSelectGrid(cfg) {
   injectStyleOnce();
@@ -200,7 +204,7 @@ export function createMultiSelectGrid(cfg) {
 
   const panel = el('div', { class: 'ia-ms-panel' });
   const input = el('input', { class: 'ia-ms-input', type: 'text', placeholder, autocomplete: 'off' });
-  const hintEl = el('div', { class: 'ia-ms-hint' }, hint || '输入搜索；勾选后点“确认”生效；点“取消”丢弃本次改动。');
+  const hintEl = el('div', { class: 'ia-ms-hint' }, hint || '▾ 展开；勾选后点“确认”生效；点“取消”放弃本次改动。');
   const grid = el('div', { class: 'ia-ms-grid' });
   const empty = el('div', { class: 'ia-ms-empty', style: 'display:none' }, '无匹配结果');
 
@@ -251,6 +255,7 @@ export function createMultiSelectGrid(cfg) {
       const id = String(opt.id);
       const checked = state.draft.has(id);
 
+      // ✅ 显示：只显示 opt.name（不显示 slug/desc）
       const row = el('label', { class: 'ia-ms-row' }, [
         el('input', {
           type: 'checkbox',
@@ -260,10 +265,7 @@ export function createMultiSelectGrid(cfg) {
             else state.draft.delete(id);
           },
         }),
-        el('span', { class: 'ia-ms-text' }, [
-          opt.name,
-          opt.description ? el('span', { class: 'ia-ms-desc' }, ` — ${opt.description}`) : null,
-        ]),
+        el('span', { class: 'ia-ms-text' }, opt.name),
       ]);
 
       grid.appendChild(row);
@@ -322,12 +324,11 @@ export function createMultiSelectGrid(cfg) {
     }
   });
 
-  // api
   setSummary();
 
   return {
     element: root,
-    getValues: () => [...state.committed],                 // string ids
+    getValues: () => [...state.committed], // string ids
     setOptions: (next) => { state.options = normalizeOptions(next); if (state.isOpen) render(); setSummary(); },
     setValues: (ids) => { state.committed = new Set((ids || []).map((x) => String(x))); state.draft = new Set(state.committed); setSummary(); if (state.isOpen) render(); },
     clear: () => { state.committed.clear(); state.draft.clear(); state.query=''; setSummary(); if (state.isOpen) render(); },
