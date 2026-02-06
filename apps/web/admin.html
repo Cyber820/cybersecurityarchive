@@ -94,7 +94,7 @@
     .confirm-body { font-size: 13px; color: var(--txt); white-space: pre-wrap; }
     .confirm-actions { display:flex; justify-content:flex-end; gap: 10px; margin-top: 12px; }
 
-    /* ===== multi-select panel (3 columns, scroll) ===== */
+    /* ===== multi-select panel (kept, used by product domains) ===== */
     .ia-ms { border: 1px solid var(--bd); border-radius: 12px; padding: 10px; }
     .ia-ms-head { display:flex; align-items:center; justify-content:space-between; gap: 10px; }
     .ia-ms-title { font-size: 13px; font-weight: 800; }
@@ -121,39 +121,11 @@
       padding:10px;
       display:none;
     }
-    .ia-ms-panel-head{ display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
-    .ia-ms-search{ flex: 1 1 320px; min-width: 240px; }
-    .ia-ms-count{ font-size:12px; color: var(--muted); }
-    .ia-ms-grid{
-      margin-top:10px;
-      display:grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap:8px 14px;
-      max-height:260px;
-      overflow:auto;
-      padding-left:0;
-    }
-    .ia-ms-row{
-      width:100%;
-      display:flex;
-      align-items:center;
-      justify-content:flex-start;
-      gap:8px;
-      cursor:pointer;
-      user-select:none;
-      margin:0;
-      padding:2px 0;
-      box-sizing:border-box;
-    }
-    .ia-ms-row input{ margin:0; flex:0 0 auto; }
-    .ia-ms-label{
-      font-size:13px;
-      color: var(--txt);
-      line-height:1.2;
-      white-space:normal;
-      word-break:break-word;
-    }
-    .ia-ms-foot{ display:flex; justify-content:flex-end; gap:10px; margin-top:10px; flex-wrap:wrap; }
+
+    /* simple KV in info modal */
+    .kv { display:flex; gap:10px; padding:6px 0; border-bottom:1px solid rgba(0,0,0,0.08); }
+    .kv-k { width:160px; flex:0 0 160px; font-weight:700; font-size:13px; color:rgba(0,0,0,.75); }
+    .kv-v { flex:1 1 auto; min-width:0; font-size:13px; white-space:pre-wrap; word-break:break-word; }
   </style>
 </head>
 
@@ -163,6 +135,8 @@
 
     <div class="toolbar">
       <button id="btnOpenOrg" class="btn btn-primary" type="button">添加企业/机构</button>
+      <button id="btnOpenOrgEdit" class="btn" type="button">编辑企业/机构</button>
+
       <button id="btnOpenDomain" class="btn" type="button">录入安全领域</button>
       <button id="btnOpenProduct" class="btn" type="button">录入安全产品</button>
       <button id="btnOpenOrgProduct" class="btn" type="button">录入企业产品</button>
@@ -175,11 +149,11 @@
     </div>
   </div>
 
-  <!-- 添加企业/机构 Modal -->
+  <!-- 添加/编辑企业/机构 Modal（同一个表单，admin.js 控制 mode） -->
   <div id="orgModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="添加企业/机构">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="企业/机构">
       <div class="modal-head">
-        <div class="modal-title">添加企业/机构</div>
+        <div id="orgModalTitle" class="modal-title">添加企业/机构</div>
         <button id="orgClose" class="btn" type="button">关闭</button>
       </div>
 
@@ -216,14 +190,60 @@
         </div>
       </div>
 
-      <div class="modal-actions">
+      <div class="modal-actions" id="orgActionsCreate">
         <button id="orgReset" class="btn" type="button">清空</button>
         <button id="orgSubmit" class="btn btn-primary" type="button">录入</button>
+      </div>
+
+      <div class="modal-actions" id="orgActionsEdit" style="display:none;">
+        <button id="orgEditReset" class="btn" type="button">重置</button>
+        <button id="orgEditCancel" class="btn" type="button">取消</button>
+        <button id="orgEditSubmit" class="btn btn-primary" type="button">确定更新</button>
       </div>
     </div>
   </div>
 
-  <!-- 录入安全领域 Modal -->
+  <!-- 编辑：搜索企业/机构 Modal -->
+  <div id="orgSearchModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="搜索企业/机构">
+      <div class="modal-head">
+        <div class="modal-title">编辑企业/机构（搜索）</div>
+        <button id="orgSearchClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div class="row" style="grid-template-columns: 1fr;">
+        <div>
+          <input id="orgSearchInput" class="input" type="text" placeholder="搜索 short_name / full_name / slug ..." />
+          <div class="hint">点击结果进入详情；同企业不会重复返回。</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="label">搜索结果</div>
+        <div id="orgSearchStatus" class="hint" style="margin-top:6px;">请输入关键字开始搜索。</div>
+        <div id="orgSearchList" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 编辑：企业详情（只读）Modal -->
+  <div id="orgInfoModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="企业信息">
+      <div class="modal-head">
+        <div class="modal-title">企业/机构信息</div>
+        <button id="orgInfoClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div id="orgInfoBody"></div>
+
+      <div class="modal-actions">
+        <button id="orgInfoCancel" class="btn" type="button">取消</button>
+        <button id="orgInfoEdit" class="btn btn-primary" type="button">编辑</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 录入安全领域 Modal（保留你现有的，admin.js 会继续绑定） -->
   <div id="domainModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="录入安全领域">
       <div class="modal-head">
@@ -255,7 +275,7 @@
     </div>
   </div>
 
-  <!-- 录入安全产品 Modal -->
+  <!-- 录入安全产品 Modal（保留你现有的，admin.js 会继续绑定） -->
   <div id="productModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="录入安全产品">
       <div class="modal-head">
