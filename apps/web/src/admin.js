@@ -82,9 +82,10 @@ const domainMount = $('domainMsMount');
 const domainMs = createMultiSelectGrid({
   title: '安全领域',
   required: false,
-  placeholder: '搜索领域名称或 slug…',
+  placeholder: '搜索领域名称（也支持输入 slug 搜索，但不显示 slug）…',
   hint: '▾ 展开；勾选后点“确认”生效；点“取消”放弃本次改动。',
-  options: [], // 打开 product modal 时再加载
+  options: [],
+  // ✅ 搜索仍支持 slug，但 UI 只显示 name
   searchText: (o) => `${o?.name ?? ''} ${o?.slug ?? ''}`.trim()
 });
 
@@ -93,13 +94,15 @@ domainMount.appendChild(domainMs.element);
 
 async function loadDomainsIntoMs() {
   if (!requireTokenOrPrompt()) return;
+
   const data = await apiGet('/api/admin/dropdowns/domains?limit=500');
   const items = (data?.items || []).map(x => ({
     id: String(x.id),
-    name: x.name,
-    description: x.slug ? `(${x.slug})` : null,
-    slug: x.slug
+    name: x.name,     // ✅ 显示用
+    slug: x.slug || '' // ✅ 仅用于搜索
+    // description 不再传，避免任何地方显示 slug
   }));
+
   domainMs.setOptions(items);
 }
 
@@ -147,7 +150,6 @@ $('btnDomainSubmit').addEventListener('click', async () => {
     $('dom_name').value = '';
     $('dom_slug').value = '';
 
-    // 新增后刷新候选
     await loadDomainsIntoMs();
   } catch (e) {
     showMsg('domainMsg', { ok: false, error: e.message, status: e.status, detail: e.data });
@@ -161,7 +163,6 @@ $('btnProductSubmit').addEventListener('click', async () => {
 
   clearMsg('productMsg');
 
-  // ✅ committed 值（确认后才会进入）
   const domainIds = domainMs.getValues().map(x => Number(x)).filter(Number.isFinite);
 
   const body = {
@@ -178,7 +179,7 @@ $('btnProductSubmit').addEventListener('click', async () => {
 
     $('prod_name').value = '';
     $('prod_slug').value = '';
-    // 领域选择默认保留，方便连续录入；需要清空就点 ×
+    // 默认保留选择；需要清空点 ×
   } catch (e) {
     showMsg('productMsg', { ok: false, error: e.message, status: e.status, detail: e.data });
     busyFail('安全产品录入失败');
