@@ -136,28 +136,19 @@ function injectStyleOnce() {
    * 每行（label）
    * ========================= */
   .ia-ms-row{
-    /* ⭐【左对齐关键参数 #3】让 label 撑满格子宽度，避免内容漂移 */
-    width: 100% !important;
-grid-column: auto !important;
-    display:flex !important;
-    align-items:center;
-    justify-content:flex-start !important;
-    gap:8px !important;
-
-    cursor:pointer;
-    user-select:none;
-
-    /* ⭐【左对齐关键参数 #4】去掉左 padding（常见问题：全局 label padding-left） */
-    padding-left: 0 !important;
-    padding-right: 0 !important;
-    padding-top: 2px !important;
-    padding-bottom: 2px !important;
-
-    margin: 0 !important; /* 防止 label 默认 margin */
-    border-radius:8px;
-    color:#111;
-    line-height:1.2;
-    box-sizing:border-box;
+    grid-column: auto !important;
+    display: flex !important;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    gap: 6px;
+    padding: 2px 6px;
+    padding-right: 4px;
+    border-radius: 8px;
+    color: #111;
+    font-size: 10.5px;
+    line-height: 1.15;
+    justify-content: flex-start;
   }
   .ia-ms-row:hover{ background:rgba(0,0,0,.05); }
 
@@ -165,35 +156,29 @@ grid-column: auto !important;
    * checkbox 本体
    * ========================= */
   .ia-ms-row > input[type="checkbox"]{
-    /* ⭐【左对齐关键参数 #5】强制清掉浏览器/全局CSS的 margin-left */
     order: 1;
-    margin:0 !important;
-
-    flex:0 0 auto;
-    width:14px; height:14px;
-
-    /* 有些全局 CSS 会给 checkbox 加 position/left，这里直接重置 */
-    position: static !important;
-    left: auto !important;
+    margin-left: 0;
+    margin-right: 0;
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
   }
 
   /* =========================
    * 文本
    * ========================= */
   .ia-ms-text{
-    flex:1 1 auto;
-    min-width:0;
-
-    /* ✅ 正常横排 + 自动换行，不会一字一行 */
-    white-space: normal !important;
-    overflow-wrap: anywhere;
-    word-break: normal;
-
-    color:#111;
-    font-size:13px;
+order: 2;
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    word-break: break-word;
+    color: #111;
   }
 
-  .ia-ms-empty{ padding:10px; font-size:12px; color:rgba(0,0,0,.6); }
+  .ia-ms-empty{  grid-column: 1 / -1; padding: 10px; font-size: 12px; opacity: 0.75; color: #111; } 
 
   /* =========================
    * 底部按钮
