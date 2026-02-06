@@ -1,5 +1,5 @@
 // apps/web/src/admin.js
-import { createDropdownCheckboxMultiSelect } from './ui/checkbox-multiselect.js';
+import { createLookupSelect } from './ui/lookup-select.js';
 
 const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = 'industry_admin_token_v1';
@@ -35,19 +35,12 @@ function openModal(id) {
   el.style.display = 'flex';
   el.setAttribute('aria-hidden', 'false');
 }
-
 function closeModal(id) {
   const el = $(id);
-
-  // Fix a11y warning: don't aria-hide a focused descendant
-  if (el.contains(document.activeElement)) {
-    document.activeElement.blur();
-  }
-
+  if (el.contains(document.activeElement)) document.activeElement.blur();
   el.style.display = 'none';
   el.setAttribute('aria-hidden', 'true');
 }
-
 function showMsg(containerId, msgObj) {
   const el = $(containerId);
   el.style.display = 'block';
@@ -80,7 +73,7 @@ async function apiPost(url, body) {
 }
 
 /** =========================
- * Busy modal (3-state)
+ * Busy modal
  * ========================= */
 function busyStart(title = '录入中…') {
   $('busyTitle').textContent = title;
@@ -122,38 +115,36 @@ document.addEventListener('click', (e) => {
 });
 
 /** =========================
- * Dropdown multi-select: Domains
+ * Domain lookup select (same rendering as your other DB)
  * ========================= */
-const domainDd = createDropdownCheckboxMultiSelect({
-  triggerEl: $('domainDdBtn'),
-  summaryEl: $('domainDdSummary'),
-  panelEl: $('domainDdPanel'),
+const mount = $('domainLookupMount');
 
-  searchEl: $('domainSearch'),
-  metaEl: $('domainMeta'),
-  gridEl: $('domainCheckboxGrid'),
-  emptyEl: $('domainEmpty'),
+const domainSelect = createLookupSelect({
+  title: '安全领域',
+  mode: 'multi',
+  placeholder: '输入安全领域名称或 slug 搜索…',
+  hint: '输入搜索；点击条目选择/取消；点“确定”提交本次选择。',
+  fetchLookup: async () => {
+    if (!requireTokenOrPrompt()) return [];
+    const data = await apiGet('/api/admin/dropdowns/domains?limit=500');
 
-  confirmEl: $('domainDdConfirm'),
-  cancelEl: $('domainDdCancel'),
-  clearEl: $('domainDdClear'),
+    // 兼容你的 dropdown 返回结构：{items:[{id,name,slug}...]}
+    const items = (data?.items || []).map(x => ({
+      id: x.id,
+      name: x.name,
+      slug: x.slug
+    }));
 
-  idPrefix: 'domain_dd_cb',
-
-  fetchOptions: async () => {
-    if (!requireTokenOrPrompt()) return { items: [] };
-    return apiGet('/api/admin/dropdowns/domains?limit=500');
+    return items;
   },
-
-  formatLabel: (d) => `${d.name} (${d.slug})`,
-
-  // summary：最多显示 3 个，否则显示数量
-  formatSummary: (items) => {
-    if (!items.length) return '未选择';
-    if (items.length <= 3) return items.map((x) => `${x.name}(${x.slug})`).join('，');
-    return `已选择 ${items.length} 项`;
-  }
+  // 搜索：name + slug
+  searchText: (it) => `${it?.name ?? ''} ${it?.slug ?? ''}`.trim(),
+  // 列表显示：name (slug)
+  itemText: (it) => `${it?.name ?? ''} (${it?.slug ?? ''})`.trim(),
 });
+
+mount.innerHTML = '';
+mount.appendChild(domainSelect.element);
 
 /** =========================
  * Entry buttons
@@ -173,17 +164,13 @@ $('btnProduct').addEventListener('click', async () => {
   $('prod_name').value = '';
   $('prod_slug').value = '';
 
-  // 打开产品 modal
   openModal('productModal');
 
-  // 每次打开产品录入，刷新 domains 列表（避免新增领域后下拉没更新）
+  // 打开产品录入时，刷新候选（避免新增领域后看不到）
   try {
-    $('domainSearch').value = '';
-    await domainDd.load(true);
-    // 默认不展开面板（按你的要求：点箭头才展开）
-    domainDd.close();
+    await domainSelect.refresh({ useCache: false });
   } catch (e) {
-    showMsg('productMsg', { ok: false, error: '加载领域失败：' + e.message, status: e.status, detail: e.data });
+    showMsg('productMsg', { ok: false, error: '加载领域失败：' + e.message });
   }
 });
 
@@ -194,7 +181,6 @@ $('btnDomainSubmit').addEventListener('click', async () => {
   if (!requireTokenOrPrompt()) return;
 
   clearMsg('domainMsg');
-
   const body = {
     security_domain_name: $('dom_name').value.trim(),
     cybersecurity_domain_slug: $('dom_slug').value.trim()
@@ -209,9 +195,8 @@ $('btnDomainSubmit').addEventListener('click', async () => {
     $('dom_name').value = '';
     $('dom_slug').value = '';
 
-    // 新增领域后，刷新下拉数据（不自动展开）
-    await domainDd.load(true);
-    domainDd.close();
+    // 录入新领域后刷新候选
+    await domainSelect.refresh({ useCache: false });
   } catch (e) {
     showMsg('domainMsg', { ok: false, error: e.message, status: e.status, detail: e.data });
     busyFail('安全领域录入失败');
@@ -226,8 +211,8 @@ $('btnProductSubmit').addEventListener('click', async () => {
 
   clearMsg('productMsg');
 
-  // ✅ 只取“已确认”的选择（点确定后才会写入 committed）
-  const domainIds = domainDd.getSelectedIds();
+  const selected = domainSelect.getSelected();
+  const domainIds = selected.map(x => Number(x.id)).filter(Number.isFinite);
 
   const body = {
     security_product_name: $('prod_name').value.trim(),
@@ -243,9 +228,7 @@ $('btnProductSubmit').addEventListener('click', async () => {
 
     $('prod_name').value = '';
     $('prod_slug').value = '';
-
-    // 不强制清空：由你决定是否保留上一次选择
-    // 你要求“清空选项功能”，用户可点“清空”按钮手动清空
+    // 是否清空领域选择由你决定；这里默认保留，方便连续录入同一领域下产品
   } catch (e) {
     showMsg('productMsg', { ok: false, error: e.message, status: e.status, detail: e.data });
     busyFail('安全产品录入失败');
