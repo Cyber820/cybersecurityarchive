@@ -2,21 +2,16 @@
 /**
  * MultiSelectGrid（可搜索 + 固定3列 checkbox + “确认才生效”）
  *
- * 需求：
- * - 固定 3 列（允许横向滚动）
- * - checkbox 左顶格
- * - 文字正常显示（不再一字一行竖排）
+ * 目标：
+ * - 固定 3 列（你接受横向滚动）
+ * - checkbox 在每列内部“真正左顶格”
+ * - 文字正常横排显示（不会一字一行竖排）
  * - 列表只显示 name（不显示 slug），slug 仅用于搜索（由上层 searchText 决定）
  *
- * ✅ 修复要点：
- * 1) 固定3列时，必须给列一个“可读的列宽”，否则列会被压到极窄导致竖排
- *    -> grid-template-columns: repeat(3, 260px)（可调）
- *    -> overflow-x: auto
- *
- * 2) checkbox 左顶格
- *    -> justify-items: start
- *    -> row width:100% + padding-left:0
- *    -> checkbox margin:0 !important
+ * ⭐ “左对齐/顶格”由三件事共同决定：
+ *  A) .ia-ms-grid { justify-items: start; }   <-- 【最关键】让 grid item 在单元格内贴左
+ *  B) .ia-ms-row  { width: 100%; }           <-- 让 label 撑满单元格宽度，避免内容在中间漂
+ *  C) checkbox    { margin:0 !important; }   <-- 抢回浏览器/全局CSS给 checkbox 的默认外边距
  */
 
 function el(tag, attrs = {}, children = []) {
@@ -27,8 +22,9 @@ function el(tag, attrs = {}, children = []) {
 
     if (k === 'class') node.className = v;
     else if (k === 'html') node.innerHTML = v;
-    else if (k.startsWith('on') && typeof v === 'function') node.addEventListener(k.slice(2).toLowerCase(), v);
-    else if (k === 'checked' && tag === 'input') node.checked = !!v;
+    else if (k.startsWith('on') && typeof v === 'function') {
+      node.addEventListener(k.slice(2).toLowerCase(), v);
+    } else if (k === 'checked' && tag === 'input') node.checked = !!v;
     else if (k === 'disabled') node.disabled = !!v;
     else node.setAttribute(k, String(v));
   }
@@ -44,14 +40,19 @@ function norm(s) {
   return (s ?? '').toString().trim();
 }
 
+/**
+ * 将 options 统一成 {id, name, description?, slug?}
+ */
 function normalizeOptions(options) {
   const out = [];
   for (const it of options || []) {
     if (it == null) continue;
+
     if (typeof it === 'string') {
       out.push({ id: it, name: it, description: null, slug: null });
       continue;
     }
+
     out.push({
       id: it.id ?? it.value ?? it.key,
       name: it.name ?? it.label ?? String(it.id ?? ''),
@@ -59,18 +60,29 @@ function normalizeOptions(options) {
       slug: it.slug ?? null,
     });
   }
+
+  // 必须有 id + name
   return out.filter((x) => x.id != null && String(x.name || '').trim().length > 0);
 }
 
 let __msStyleInjected = false;
+
+/**
+ * 注入一次样式（组件自带 CSS）
+ * 如果你遇到“还是不左顶格”，90% 是全局 CSS 覆盖。
+ * 所以本版本增加了更强的选择器 + !important 来夺回控制权。
+ */
 function injectStyleOnce() {
   if (__msStyleInjected) return;
   __msStyleInjected = true;
 
-  // ✅ 你可以只调整这里的列宽
-  const COL_W = 260; // 每列宽度（px）：觉得挤就 280/300；想少滚动就 220/240
+  // ✅ 固定 3 列时每列宽度。越大越不容易挤成竖排，但横向滚动越多。
+  const COL_W = 280;
 
   const css = `
+  /* =========================
+   * 容器与头部
+   * ========================= */
   .ia-ms { border:1px solid rgba(0,0,0,.20); border-radius:12px; padding:10px; box-sizing:border-box; }
   .ia-ms-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
   .ia-ms-title{ font-size:13px; font-weight:700; }
@@ -81,7 +93,6 @@ function injectStyleOnce() {
     display:inline-flex; align-items:center; justify-content:center;
     font-size:14px; line-height:1;
   }
-  .ia-ms-iconbtn:disabled{ opacity:.6; cursor:not-allowed; }
   .ia-ms-summary{ margin-top:8px; font-size:12px; color:rgba(0,0,0,.70); white-space:pre-wrap; }
 
   .ia-ms-panel{ margin-top:10px; border:1px solid rgba(0,0,0,.15); border-radius:12px; padding:10px; display:none; background:#fff; }
@@ -92,36 +103,57 @@ function injectStyleOnce() {
   }
   .ia-ms-hint{ margin-top:6px; font-size:12px; color:rgba(0,0,0,.6); }
 
-  /* ✅ 固定3列 + 允许横向滚动 */
+  /* =========================
+   * 核心：固定 3 列 grid
+   * ========================= */
   .ia-ms-grid{
     margin-top:10px;
     display:grid;
 
-    grid-template-columns: repeat(3, ${COL_W}px);  /* ✅ 固定列宽，防止被压到一字一行 */
+    /* ✅ 固定 3 列并给列宽（避免列被压到“一个字一行”） */
+    grid-template-columns: repeat(3, ${COL_W}px);
+
     column-gap: 12px;
     row-gap: 6px;
 
-    justify-items: start; /* ✅ item 贴左 */
+    /* ⭐【左对齐关键参数 #1】让每个 grid item 在“格子内”贴左 */
+    justify-items: start !important;
+
+    /* 顶部对齐 */
     align-items: start;
 
     max-height: 320px;
     overflow-y: auto;
-    overflow-x: auto;     /* ✅ 横向滚动 */
+    overflow-x: auto;  /* ✅ 允许横向滚动 */
 
-    padding-left: 0;
+    /* ⭐【左对齐关键参数 #2】grid 自身不要左 padding，不然整体会被推右 */
+    padding-left: 0 !important;
     padding-right: 6px;
+    box-sizing: border-box;
   }
 
-  /* ✅ 行：撑满单元格，checkbox 真正左顶格 */
+  /* =========================
+   * 每行（label）
+   * ========================= */
   .ia-ms-row{
-    width: 100%;
-    display:flex;
-    align-items:flex-start;
-    justify-content:flex-start;
-    gap:8px;
+    /* ⭐【左对齐关键参数 #3】让 label 撑满格子宽度，避免内容漂移 */
+    width: 100% !important;
+grid-column: auto !important;
+    display:flex !important;
+    align-items:center;
+    justify-content:flex-start !important;
+    gap:8px !important;
+
     cursor:pointer;
     user-select:none;
-    padding:2px 0;        /* ✅ 取消左 padding */
+
+    /* ⭐【左对齐关键参数 #4】去掉左 padding（常见问题：全局 label padding-left） */
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+
+    margin: 0 !important; /* 防止 label 默认 margin */
     border-radius:8px;
     color:#111;
     line-height:1.2;
@@ -129,23 +161,43 @@ function injectStyleOnce() {
   }
   .ia-ms-row:hover{ background:rgba(0,0,0,.05); }
 
+  /* =========================
+   * checkbox 本体
+   * ========================= */
   .ia-ms-row > input[type="checkbox"]{
+    /* ⭐【左对齐关键参数 #5】强制清掉浏览器/全局CSS的 margin-left */
+    order: 1;
     margin:0 !important;
+
     flex:0 0 auto;
     width:14px; height:14px;
+
+    /* 有些全局 CSS 会给 checkbox 加 position/left，这里直接重置 */
+    position: static !important;
+    left: auto !important;
   }
 
+  /* =========================
+   * 文本
+   * ========================= */
   .ia-ms-text{
     flex:1 1 auto;
     min-width:0;
-    white-space: normal;      /* ✅ 正常换行（按词/字） */
-    overflow-wrap: anywhere;  /* ✅ 极端长词也能断开 */
+
+    /* ✅ 正常横排 + 自动换行，不会一字一行 */
+    white-space: normal !important;
+    overflow-wrap: anywhere;
+    word-break: normal;
+
     color:#111;
     font-size:13px;
   }
 
   .ia-ms-empty{ padding:10px; font-size:12px; color:rgba(0,0,0,.6); }
 
+  /* =========================
+   * 底部按钮
+   * ========================= */
   .ia-ms-foot{
     margin-top:10px;
     display:flex;
@@ -169,6 +221,19 @@ function injectStyleOnce() {
   document.head.appendChild(style);
 }
 
+/**
+ * createMultiSelectGrid
+ *
+ * @param {object} cfg
+ * @param {string} cfg.title - 标题（UI显示）
+ * @param {boolean} [cfg.required=false] - 是否必填（仅 UI 标识）
+ * @param {string} [cfg.placeholder] - 搜索框 placeholder
+ * @param {string} [cfg.hint] - 说明文字
+ * @param {Array}  [cfg.options=[]] - 候选项：{id,name,slug?,description?} 或 string
+ * @param {function(item):string} [cfg.searchText]
+ *   - 搜索匹配用的文本拼接（不影响显示）
+ *   - 你可以传 name+slug，让用户输入 slug 也能搜索，但显示仍只显示 name
+ */
 export function createMultiSelectGrid(cfg) {
   injectStyleOnce();
 
@@ -178,7 +243,6 @@ export function createMultiSelectGrid(cfg) {
     placeholder = '搜索并选择…',
     hint,
     options = [],
-    // 默认搜索字段：name/description/slug；你在 admin.js 里可覆盖为 name+slug
     searchText = (o) => `${o?.name ?? ''} ${o?.description ?? ''} ${o?.slug ?? ''}`.trim(),
   } = cfg;
 
@@ -186,12 +250,13 @@ export function createMultiSelectGrid(cfg) {
     isOpen: false,
     query: '',
     options: normalizeOptions(options),
-    committed: new Set(), // string id
-    draft: new Set(),     // string id
+    committed: new Set(), // 已生效选择（string id）
+    draft: new Set(),     // 展开态临时选择（string id）
   };
 
   const root = el('div', { class: 'ia-ms' });
 
+  // header
   const titleEl = el('div', { class: 'ia-ms-title' }, [
     title ?? '选择',
     required ? el('span', { html: ' *', style: 'color:#b00020' }) : null,
@@ -207,6 +272,7 @@ export function createMultiSelectGrid(cfg) {
 
   const summary = el('div', { class: 'ia-ms-summary' }, '未选择');
 
+  // panel
   const panel = el('div', { class: 'ia-ms-panel' });
   const input = el('input', { class: 'ia-ms-input', type: 'text', placeholder, autocomplete: 'off' });
   const hintEl = el('div', { class: 'ia-ms-hint' }, hint || '▾ 展开；勾选后点“确认”生效；点“取消”放弃本次改动。');
@@ -301,6 +367,7 @@ export function createMultiSelectGrid(cfg) {
     setSummary();
   }
 
+  // events
   btnArrow.addEventListener('click', () => {
     if (state.isOpen) close({ commit: false });
     else open();
@@ -335,7 +402,7 @@ export function createMultiSelectGrid(cfg) {
     getValues: () => [...state.committed],
     setOptions: (next) => { state.options = normalizeOptions(next); if (state.isOpen) render(); setSummary(); },
     setValues: (ids) => { state.committed = new Set((ids || []).map((x) => String(x))); state.draft = new Set(state.committed); setSummary(); if (state.isOpen) render(); },
-    clear: () => { state.committed.clear(); state.draft.clear(); state.query=''; setSummary(); if (state.isOpen) render(); },
+    clear: () => { state.committed.clear(); state.draft.clear(); state.query = ''; setSummary(); if (state.isOpen) render(); },
     open,
     close,
   };
