@@ -1,23 +1,22 @@
 // apps/web/src/ui/multiselect-grid.js
 /**
- * MultiSelectGrid（可搜索 + 固定3列 checkbox + “确认才生效”）
+ * MultiSelectGrid（可搜索 + 固定3列 + 自绘checkbox + “确认才生效”）
  *
- * 重点：为避免任何全局 CSS 干扰，本版本把“会影响对齐/显示”的关键布局
- * 全部用 inline style（node.style.xxx）强制写死。
+ * 为什么要自绘 checkbox？
+ * - 原生 checkbox 在不同平台/缩放/DPI 下“绘制区域”会产生视觉偏移，
+ *   即使布局已左顶格，也会看起来“不贴左”。
+ * - 自绘后：方框从像素级贴左，观感统一。
  *
- * ⭐你要的“左顶格”不再依赖 CSS 选择器：
- * - grid 的 justify-items / padding-left / overflow
- * - row label 的 display:flex / gap / width / padding
- * - checkbox 的 margin
- * - text 的 white-space / overflow-wrap
+ * 左对齐的关键（本文件已强制）：
+ * - grid.style.justifyItems = 'start'
+ * - row.style.width = '100%'
+ * - 自绘 box 不依赖 input 默认样式
  */
 
 function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
-
   for (const [k, v] of Object.entries(attrs)) {
     if (v == null) continue;
-
     if (k === "class") node.className = v;
     else if (k === "html") node.innerHTML = v;
     else if (k.startsWith("on") && typeof v === "function") node.addEventListener(k.slice(2).toLowerCase(), v);
@@ -25,7 +24,6 @@ function el(tag, attrs = {}, children = []) {
     else if (k === "disabled") node.disabled = !!v;
     else node.setAttribute(k, String(v));
   }
-
   for (const c of Array.isArray(children) ? children : [children]) {
     if (c == null) continue;
     node.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
@@ -60,7 +58,6 @@ function injectStyleOnce() {
   if (__styleInjected) return;
   __styleInjected = true;
 
-  // 这些只负责“整体美观”；关键对齐用 inline style 强制
   const css = `
     .ia-ms { border:1px solid rgba(0,0,0,.20); border-radius:12px; padding:10px; box-sizing:border-box; }
     .ia-ms-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
@@ -106,6 +103,75 @@ function injectStyleOnce() {
   document.head.appendChild(style);
 }
 
+/**
+ * 创建“自绘 checkbox”
+ * - 返回 { wrap, input, setChecked(boolean), getChecked() }
+ * - input 仍存在用于可访问性/状态，但隐藏
+ */
+function createFakeCheckbox({ checked = false } = {}) {
+  const wrap = document.createElement("span");
+  // wrap 作为视觉 checkbox 容器：像素级可控
+  wrap.style.display = "inline-flex";
+  wrap.style.alignItems = "flex-start";
+  wrap.style.justifyContent = "flex-start";
+  wrap.style.width = "14px";
+  wrap.style.height = "14px";
+  wrap.style.flex = "0 0 auto";
+
+  // 真 input：隐藏但保留可访问性/状态
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.checked = !!checked;
+
+  // 隐藏 input（但仍可通过 label 点击切换）
+  input.style.position = "absolute";
+  input.style.opacity = "0";
+  input.style.pointerEvents = "none";
+  input.style.width = "1px";
+  input.style.height = "1px";
+  input.style.margin = "0";
+
+  // 视觉方框
+  const box = document.createElement("span");
+  box.style.display = "inline-block";
+  box.style.width = "14px";
+  box.style.height = "14px";
+  box.style.boxSizing = "border-box";
+  box.style.border = "1px solid rgba(0,0,0,.55)";
+  box.style.borderRadius = "3px";
+  box.style.background = "#fff";
+  box.style.position = "relative";
+
+  // 勾（用伪元素效果：一个小的旋转边框）
+  const tick = document.createElement("span");
+  tick.style.position = "absolute";
+  tick.style.left = "3px";
+  tick.style.top = "1px";
+  tick.style.width = "6px";
+  tick.style.height = "9px";
+  tick.style.borderRight = "2px solid #111";
+  tick.style.borderBottom = "2px solid #111";
+  tick.style.transform = "rotate(40deg)";
+  tick.style.display = checked ? "block" : "none";
+
+  box.appendChild(tick);
+  wrap.appendChild(box);
+  wrap.appendChild(input);
+
+  function setChecked(v) {
+    input.checked = !!v;
+    tick.style.display = input.checked ? "block" : "none";
+  }
+  function getChecked() {
+    return !!input.checked;
+  }
+
+  // 同步：当 input 状态变化时更新 tick（以防 label 默认切换）
+  input.addEventListener("change", () => setChecked(input.checked));
+
+  return { wrap, input, setChecked, getChecked };
+}
+
 export function createMultiSelectGrid(cfg) {
   injectStyleOnce();
 
@@ -115,10 +181,8 @@ export function createMultiSelectGrid(cfg) {
     placeholder = "搜索并选择…",
     hint,
     options = [],
-    // 搜索匹配用：可让用户输入 slug 搜索，但显示依然只显示 name
     searchText = (o) => `${o?.name ?? ""} ${o?.description ?? ""} ${o?.slug ?? ""}`.trim(),
-    // 固定 3 列每列宽度（px）：你想滚动少就调小；想更舒适就调大
-    colWidth = 280,
+    colWidth = 280, // 固定3列每列宽度
   } = cfg;
 
   const state = {
@@ -149,23 +213,24 @@ export function createMultiSelectGrid(cfg) {
   const panel = el("div", { class: "ia-ms-panel" });
   const input = el("input", { class: "ia-ms-input", type: "text", placeholder, autocomplete: "off" });
   const hintEl = el("div", { class: "ia-ms-hint" }, hint || "▾ 展开；勾选后点“确认”生效；点“取消”放弃本次改动。");
-  const grid = el("div", {}); // 不给 class，避免被全局 CSS 命中（关键布局全部 inline）
-  const empty = el("div", { class: "ia-ms-empty", style: "display:none" }, "无匹配结果");
 
-  // ✅ 强制 grid 的布局（inline）
+  // grid（关键布局全部 inline，避免任何全局 CSS 干扰）
+  const grid = document.createElement("div");
   grid.style.marginTop = "10px";
   grid.style.display = "grid";
-  grid.style.gridTemplateColumns = `repeat(3, ${colWidth}px)`; // 固定 3 列
+  grid.style.gridTemplateColumns = `repeat(3, ${colWidth}px)`; // 固定3列
   grid.style.columnGap = "12px";
   grid.style.rowGap = "6px";
-  grid.style.justifyItems = "start"; // ←【左对齐核心：单元格内贴左】
+  grid.style.justifyItems = "start"; // ← 左对齐核心
   grid.style.alignItems = "start";
   grid.style.maxHeight = "320px";
   grid.style.overflowY = "auto";
-  grid.style.overflowX = "auto";     // 允许横向滚动
-  grid.style.paddingLeft = "0";      // 整体不左缩进
+  grid.style.overflowX = "auto";
+  grid.style.paddingLeft = "0";
   grid.style.paddingRight = "6px";
   grid.style.boxSizing = "border-box";
+
+  const empty = el("div", { class: "ia-ms-empty", style: "display:none" }, "无匹配结果");
 
   const btnConfirm = el("button", { class: "ia-btn ia-btn-primary", type: "button" }, "确认");
   const btnCancel = el("button", { class: "ia-btn", type: "button" }, "取消");
@@ -214,50 +279,54 @@ export function createMultiSelectGrid(cfg) {
       const id = String(opt.id);
       const checked = state.draft.has(id);
 
-      // 用 label 包住 checkbox + 文本（点击文本也能勾选）
-      const row = el("label", {}, []);
-
-      // ✅ 强制 row 的布局（inline）—— 不吃任何 label 全局 CSS
-      row.style.width = "100%";                 // ←【左对齐核心：撑满单元格】
+      // 行 label（点击文字也能切换）
+      const row = document.createElement("label");
+      row.style.width = "100%";                 // ← 行撑满单元格
       row.style.display = "flex";
       row.style.alignItems = "flex-start";
       row.style.justifyContent = "flex-start";
       row.style.gap = "8px";
       row.style.cursor = "pointer";
       row.style.userSelect = "none";
-      row.style.padding = "2px 0";              // ← 没有左 padding
+      row.style.padding = "2px 0";              // 无左 padding
       row.style.margin = "0";
       row.style.boxSizing = "border-box";
 
-      const cb = el("input", {
-        type: "checkbox",
-        checked,
-        onChange: (e) => {
-          if (e.target.checked) state.draft.add(id);
-          else state.draft.delete(id);
-        },
-      });
+      // 自绘 checkbox（视觉方框 + 隐藏 input）
+      const fake = createFakeCheckbox({ checked });
 
-      // ✅ 强制 checkbox 的边距（inline）
-      cb.style.margin = "0";
-      cb.style.width = "14px";
-      cb.style.height = "14px";
-      cb.style.flex = "0 0 auto";
-
-      const text = el("span", {}, opt.name); // ✅ 显示只显示 name
-
-      // ✅ 强制文本正常显示（inline）
+      // 文本（只显示 name，不显示 slug）
+      const text = document.createElement("span");
+      text.textContent = opt.name;
       text.style.flex = "1 1 auto";
       text.style.minWidth = "0";
-      text.style.whiteSpace = "normal";        // ← 不会一字一行（除非列宽极小）
+      text.style.whiteSpace = "normal";
       text.style.overflowWrap = "anywhere";
       text.style.wordBreak = "normal";
       text.style.fontSize = "13px";
       text.style.color = "#111";
       text.style.lineHeight = "1.2";
 
-      row.appendChild(cb);
+      row.appendChild(fake.wrap);
       row.appendChild(text);
+
+      // 当 input 状态变化时，同步到 draft
+      fake.input.addEventListener("change", () => {
+        const now = !!fake.input.checked;
+        if (now) state.draft.add(id);
+        else state.draft.delete(id);
+      });
+
+      // 允许点击整行时切换（部分浏览器对隐藏 input 点击区域不一致）
+      row.addEventListener("click", (e) => {
+        // 如果点击的是 input 本身，让默认行为走；否则手动切换
+        if (e.target === fake.input) return;
+        // 避免双触发：用 preventDefault + 手动 toggle
+        e.preventDefault();
+        fake.setChecked(!fake.getChecked());
+        // 手动触发 change 同步 draft（上面监听 change）
+        fake.input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
 
       grid.appendChild(row);
     }
@@ -287,7 +356,6 @@ export function createMultiSelectGrid(cfg) {
     setSummary();
   }
 
-  // events
   btnArrow.addEventListener("click", () => {
     if (state.isOpen) close({ commit: false });
     else open();
