@@ -30,6 +30,7 @@
     }
     button.primary{border-color:#0b57d0}
     button:disabled{opacity:.6;cursor:not-allowed}
+
     input{
       padding:10px 12px;
       font-size:14px;
@@ -59,34 +60,95 @@
     .modal .msg{margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--bg);white-space:pre-wrap}
 
     /* ================================
-       Multi-select (Checkbox Grid)
-       目标：每列 checkbox 顶到本列最左侧
+       Dropdown Multi-select
        ================================ */
 
-    /* 外框：这里会导致整体“离左边框有距离”，所以我们把左 padding 调到 0 */
-    .ms-wrap{
+    .dd-wrap{
       border:1px solid var(--border);
       border-radius:12px;
+      padding:10px;
       background:#fff;
-
-      /* ✅ 关键：让网格顶到外框左侧 */
-      padding:10px 10px 10px 0;
     }
 
-    .ms-top{
+    .dd-trigger-row{
       display:flex;
       gap:10px;
       align-items:center;
       flex-wrap:wrap;
-
-      /* ✅ 左侧也顶格（配合 ms-wrap 的 padding-left=0） */
-      padding-left:0;
     }
 
-    .ms-search{min-width:260px}
-    .ms-meta{font-size:12px;color:var(--muted)}
+    .dd-trigger{
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+      padding:10px 12px;
+      border:1px solid #ccc;
+      border-radius:10px;
+      background:#fff;
+      cursor:pointer;
+      min-width: 320px;
+      justify-content: space-between;
+    }
 
-    .ms-grid{
+    .dd-trigger-left{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width: 0;
+    }
+
+    .dd-summary{
+      color:#111;
+      font-size:14px;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      max-width: 520px;
+    }
+
+    .dd-caret{
+      width:0;height:0;
+      border-left:6px solid transparent;
+      border-right:6px solid transparent;
+      border-top:8px solid #333;
+      flex:0 0 auto;
+    }
+
+    .dd-actions{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+
+    .dd-small{
+      padding:8px 10px;
+      font-size:13px;
+      border-radius:10px;
+    }
+
+    .dd-panel{
+      margin-top:10px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:10px;
+      background:#fff;
+      display:none; /* 默认不展开 */
+    }
+
+    .dd-top{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+    }
+
+    .dd-meta{
+      font-size:12px;
+      color:var(--muted);
+    }
+
+    .dd-grid{
       margin-top:10px;
       display:grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -95,14 +157,12 @@
       max-height:260px;
       overflow:auto;
 
-      /* ✅ 关键：grid 内部不再有 padding，内容从最左开始 */
       padding:0;
       justify-items:start;
       align-items:start;
     }
 
-    /* 每个单元格里一行：占满单元格宽度，让 checkbox 从单元格左起点开始 */
-    .ms-item{
+    .dd-item{
       width:100%;
       display:flex;
       justify-content:flex-start;
@@ -115,14 +175,11 @@
       min-width:0;
       cursor:pointer;
     }
-
-    /* ✅ 关键：去掉 checkbox 默认 margin，避免看起来“离左边有距离” */
-    .ms-item input[type="checkbox"]{
+    .dd-item input[type="checkbox"]{
       margin:0;
       flex:0 0 auto;
     }
-
-    .ms-label{
+    .dd-label{
       display:block;
       flex:1 1 auto;
       min-width:0;
@@ -137,18 +194,27 @@
       white-space:nowrap;
     }
 
-    .ms-empty{
+    .dd-empty{
       margin-top:10px;
       font-size:13px;
       color:var(--muted);
-      padding-left:0;
+    }
+
+    .dd-footer{
+      display:flex;
+      gap:10px;
+      justify-content:flex-end;
+      flex-wrap:wrap;
+      margin-top:10px;
     }
 
     @media (max-width: 720px){
-      .ms-grid{grid-template-columns: repeat(2, minmax(0, 1fr));}
+      .dd-grid{grid-template-columns: repeat(2, minmax(0, 1fr));}
+      .dd-trigger{min-width: 280px;}
     }
     @media (max-width: 480px){
-      .ms-grid{grid-template-columns: 1fr;}
+      .dd-grid{grid-template-columns: 1fr;}
+      .dd-trigger{min-width: 240px;}
     }
   </style>
 </head>
@@ -221,6 +287,7 @@
   <div id="productModal" class="modal-overlay" aria-hidden="true">
     <div class="modal">
       <h2>录入安全产品</h2>
+
       <div class="grid">
         <div class="row">
           <div>
@@ -234,24 +301,45 @@
         </div>
 
         <div>
-          <label>对应安全领域（可多选，可搜索）</label>
-          <div class="ms-wrap">
-            <div class="ms-top">
-              <input id="domainSearch" class="ms-search" placeholder="搜索领域名称或 slug…" />
-              <div id="domainMeta" class="ms-meta">加载中…</div>
+          <label>对应安全领域（点击下拉箭头选择，多选后点确定生效）</label>
+
+          <div class="dd-wrap" id="domainDropdownRoot">
+            <div class="dd-trigger-row">
+              <button type="button" class="dd-trigger" id="domainDdBtn">
+                <span class="dd-trigger-left">
+                  <span class="dd-summary" id="domainDdSummary">未选择</span>
+                </span>
+                <span class="dd-caret" aria-hidden="true"></span>
+              </button>
+
+              <div class="dd-actions">
+                <button type="button" class="dd-small" id="domainDdClear">清空</button>
+              </div>
             </div>
 
-            <div id="domainCheckboxGrid" class="ms-grid"></div>
-            <div id="domainEmpty" class="ms-empty" style="display:none">没有匹配的领域</div>
+            <div class="dd-panel" id="domainDdPanel">
+              <div class="dd-top">
+                <input id="domainSearch" class="ms-search" placeholder="搜索领域名称或 slug…" />
+                <div id="domainMeta" class="dd-meta">加载中…</div>
+              </div>
+
+              <div id="domainCheckboxGrid" class="dd-grid"></div>
+              <div id="domainEmpty" class="dd-empty" style="display:none">没有匹配的领域</div>
+
+              <div class="dd-footer">
+                <button type="button" class="dd-small" id="domainDdCancel">取消</button>
+                <button type="button" class="dd-small primary" id="domainDdConfirm">确定</button>
+              </div>
+            </div>
           </div>
         </div>
 
         <div id="productMsg" class="msg" style="display:none"></div>
+      </div>
 
-        <div class="footer">
-          <button data-close="productModal">关闭</button>
-          <button id="btnProductSubmit" class="primary">录入</button>
-        </div>
+      <div class="footer">
+        <button data-close="productModal">关闭</button>
+        <button id="btnProductSubmit" class="primary">录入</button>
       </div>
     </div>
   </div>
