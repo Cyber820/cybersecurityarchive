@@ -1,5 +1,5 @@
 // apps/web/src/admin.js
-import { createCheckboxMultiSelect } from './ui/checkbox-multiselect.js';
+import { createDropdownCheckboxMultiSelect } from './ui/checkbox-multiselect.js';
 
 const $ = (id) => document.getElementById(id);
 const STORAGE_KEY = 'industry_admin_token_v1';
@@ -39,7 +39,7 @@ function openModal(id) {
 function closeModal(id) {
   const el = $(id);
 
-  // ✅ Fix a11y warning: don't aria-hide a focused descendant
+  // Fix a11y warning: don't aria-hide a focused descendant
   if (el.contains(document.activeElement)) {
     document.activeElement.blur();
   }
@@ -80,7 +80,7 @@ async function apiPost(url, body) {
 }
 
 /** =========================
- * Busy Modal (3-state)
+ * Busy modal (3-state)
  * ========================= */
 function busyStart(title = '录入中…') {
   $('busyTitle').textContent = title;
@@ -122,19 +122,37 @@ document.addEventListener('click', (e) => {
 });
 
 /** =========================
- * Multi-select instances
+ * Dropdown multi-select: Domains
  * ========================= */
-const domainMultiSelect = createCheckboxMultiSelect({
+const domainDd = createDropdownCheckboxMultiSelect({
+  triggerEl: $('domainDdBtn'),
+  summaryEl: $('domainDdSummary'),
+  panelEl: $('domainDdPanel'),
+
   searchEl: $('domainSearch'),
   metaEl: $('domainMeta'),
   gridEl: $('domainCheckboxGrid'),
   emptyEl: $('domainEmpty'),
-  idPrefix: 'domain_cb',
+
+  confirmEl: $('domainDdConfirm'),
+  cancelEl: $('domainDdCancel'),
+  clearEl: $('domainDdClear'),
+
+  idPrefix: 'domain_dd_cb',
+
   fetchOptions: async () => {
     if (!requireTokenOrPrompt()) return { items: [] };
     return apiGet('/api/admin/dropdowns/domains?limit=500');
   },
-  formatLabel: (d) => `${d.name} (${d.slug})`
+
+  formatLabel: (d) => `${d.name} (${d.slug})`,
+
+  // summary：最多显示 3 个，否则显示数量
+  formatSummary: (items) => {
+    if (!items.length) return '未选择';
+    if (items.length <= 3) return items.map((x) => `${x.name}(${x.slug})`).join('，');
+    return `已选择 ${items.length} 项`;
+  }
 });
 
 /** =========================
@@ -155,19 +173,17 @@ $('btnProduct').addEventListener('click', async () => {
   $('prod_name').value = '';
   $('prod_slug').value = '';
 
+  // 打开产品 modal
   openModal('productModal');
 
+  // 每次打开产品录入，刷新 domains 列表（避免新增领域后下拉没更新）
   try {
     $('domainSearch').value = '';
-    await domainMultiSelect.load(true);
-    domainMultiSelect.applyFilter('');
+    await domainDd.load(true);
+    // 默认不展开面板（按你的要求：点箭头才展开）
+    domainDd.close();
   } catch (e) {
-    showMsg('productMsg', {
-      ok: false,
-      error: '加载领域失败：' + e.message,
-      status: e.status,
-      detail: e.data
-    });
+    showMsg('productMsg', { ok: false, error: '加载领域失败：' + e.message, status: e.status, detail: e.data });
   }
 });
 
@@ -178,6 +194,7 @@ $('btnDomainSubmit').addEventListener('click', async () => {
   if (!requireTokenOrPrompt()) return;
 
   clearMsg('domainMsg');
+
   const body = {
     security_domain_name: $('dom_name').value.trim(),
     cybersecurity_domain_slug: $('dom_slug').value.trim()
@@ -192,9 +209,9 @@ $('btnDomainSubmit').addEventListener('click', async () => {
     $('dom_name').value = '';
     $('dom_slug').value = '';
 
-    // refresh domains for product modal
-    await domainMultiSelect.load(true);
-    domainMultiSelect.applyFilter($('domainSearch').value || '');
+    // 新增领域后，刷新下拉数据（不自动展开）
+    await domainDd.load(true);
+    domainDd.close();
   } catch (e) {
     showMsg('domainMsg', { ok: false, error: e.message, status: e.status, detail: e.data });
     busyFail('安全领域录入失败');
@@ -209,7 +226,8 @@ $('btnProductSubmit').addEventListener('click', async () => {
 
   clearMsg('productMsg');
 
-  const domainIds = domainMultiSelect.getSelectedIds();
+  // ✅ 只取“已确认”的选择（点确定后才会写入 committed）
+  const domainIds = domainDd.getSelectedIds();
 
   const body = {
     security_product_name: $('prod_name').value.trim(),
@@ -225,7 +243,9 @@ $('btnProductSubmit').addEventListener('click', async () => {
 
     $('prod_name').value = '';
     $('prod_slug').value = '';
-    domainMultiSelect.clearSelection();
+
+    // 不强制清空：由你决定是否保留上一次选择
+    // 你要求“清空选项功能”，用户可点“清空”按钮手动清空
   } catch (e) {
     showMsg('productMsg', { ok: false, error: e.message, status: e.status, detail: e.data });
     busyFail('安全产品录入失败');
@@ -233,7 +253,7 @@ $('btnProductSubmit').addEventListener('click', async () => {
 });
 
 /** =========================
- * init
+ * Init
  * ========================= */
 refreshTokenStatus();
 
