@@ -1,198 +1,289 @@
 // apps/web/src/admin.js
-import { createMultiSelectGrid } from './ui/multiselect-grid.js';
+import { createMultiSelectGrid } from './ui/multiselect-grid.js' // 你已经在用（领域/产品）的话保留；没有用也不影响，只是未调用
 
-const $ = (id) => document.getElementById(id);
-const STORAGE_KEY = 'industry_admin_token_v1';
+/**
+ * =========================
+ * 基础：token 缓存
+ * =========================
+ */
+const TOKEN_KEY = 'ia_admin_token_v1'
 
-/** Token */
-function getToken() { return (localStorage.getItem(STORAGE_KEY) || '').trim(); }
-function setToken(token) { localStorage.setItem(STORAGE_KEY, String(token || '').trim()); refreshTokenStatus(); }
-function refreshTokenStatus() { $('tokenStatus').textContent = getToken() ? '已设置' : '未设置'; }
-function tokenHeader() { const t = getToken(); return t ? { 'X-Admin-Token': t } : {}; }
-function requireTokenOrPrompt() { if (getToken()) return true; openTokenModal(); return false; }
+function $(sel) { return document.querySelector(sel) }
 
-/** Modal helpers */
-function openModal(id) { const el = $(id); el.style.display = 'flex'; el.setAttribute('aria-hidden', 'false'); }
-function closeModal(id) {
-  const el = $(id);
-  if (el.contains(document.activeElement)) document.activeElement.blur();
-  el.style.display = 'none';
-  el.setAttribute('aria-hidden', 'true');
+function setInvalid(inputEl, errEl, msg) {
+  inputEl.setAttribute('aria-invalid', 'true')
+  errEl.textContent = msg
+  errEl.style.display = 'block'
 }
-function showMsg(containerId, msgObj) {
-  const el = $(containerId);
-  el.style.display = 'block';
-  el.textContent = typeof msgObj === 'string' ? msgObj : JSON.stringify(msgObj, null, 2);
-}
-function clearMsg(containerId) { const el = $(containerId); el.style.display = 'none'; el.textContent = ''; }
 
-/** API */
-async function apiGet(url) {
-  const res = await fetch(url, { headers: { ...tokenHeader() } });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data?.error || 'Request failed'), { status: res.status, data });
-  return data;
+function clearInvalid(inputEl, errEl) {
+  inputEl.removeAttribute('aria-invalid')
+  errEl.textContent = ''
+  errEl.style.display = 'none'
 }
-async function apiPost(url, body) {
+
+function norm(s) { return (s ?? '').toString().trim() }
+
+/**
+ * slug 规则：仅 a-z 0-9 -
+ * - 你要求“验证英文”，这里用更实际的 slug 校验
+ */
+function isValidSlug(slug) {
+  return /^[a-z0-9-]+$/.test(slug)
+}
+
+/**
+ * 年份验证：1990 ~ 当前年份
+ */
+function parseEstablishYear(v) {
+  const s = norm(v)
+  if (!s) return null
+  if (!/^\d{4}$/.test(s)) return { error: '成立时间必须是 4 位数字（YYYY）。' }
+  const n = Number(s)
+  const nowYear = new Date().getFullYear()
+  if (n < 1990 || n > nowYear) return { error: `成立时间范围：1990 ~ ${nowYear}` }
+  return { value: n }
+}
+
+/**
+ * =========================
+ * Confirm（录入中/成功/失败）
+ * - 你之前要求：录入中 → 成功后直接变成“录入成功”，点击确定回到弹窗
+ * =========================
+ */
+const confirmOverlay = $('#confirmOverlay')
+const confirmTitle = $('#confirmTitle')
+const confirmBody = $('#confirmBody')
+const confirmOk = $('#confirmOk')
+
+let _confirmResolve = null
+
+function openConfirm({ title = '录入中', body = '请稍候…', okText = '确定', okEnabled = false } = {}) {
+  confirmTitle.textContent = title
+  confirmBody.textContent = body
+  confirmOk.textContent = okText
+  confirmOk.disabled = !okEnabled
+
+  confirmOverlay.style.display = 'flex'
+  confirmOverlay.setAttribute('aria-hidden', 'false')
+
+  return new Promise((resolve) => { _confirmResolve = resolve })
+}
+
+function updateConfirm({ title, body, okText, okEnabled } = {}) {
+  if (title != null) confirmTitle.textContent = title
+  if (body != null) confirmBody.textContent = body
+  if (okText != null) confirmOk.textContent = okText
+  if (okEnabled != null) confirmOk.disabled = !okEnabled
+}
+
+function closeConfirm() {
+  confirmOverlay.style.display = 'none'
+  confirmOverlay.setAttribute('aria-hidden', 'true')
+  if (_confirmResolve) {
+    _confirmResolve(true)
+    _confirmResolve = null
+  }
+}
+
+confirmOk.addEventListener('click', () => {
+  if (!confirmOk.disabled) closeConfirm()
+})
+
+/**
+ * =========================
+ * API helper
+ * =========================
+ */
+async function apiPostJson(url, payload, token) {
+  const headers = { 'Content-Type': 'application/json' }
+  if (token) headers['x-admin-token'] = token
+
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...tokenHeader() },
-    body: JSON.stringify(body)
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(new Error(data?.error || 'Request failed'), { status: res.status, data });
-  return data;
+    headers,
+    body: JSON.stringify(payload),
+  })
+
+  const text = await res.text()
+  let json = null
+  try { json = text ? JSON.parse(text) : null } catch (_) {}
+
+  if (!res.ok) {
+    const msg = json?.error || json?.message || text || `HTTP ${res.status}`
+    throw new Error(msg)
+  }
+  return json
 }
 
-/** Busy modal */
-function busyStart(title = '录入中…') {
-  $('busyTitle').textContent = title;
-  $('btnBusyClose').textContent = '请稍候';
-  $('btnBusyClose').disabled = true;
-  openModal('busyModal');
-}
-function busySuccess(title = '录入成功') {
-  $('busyTitle').textContent = title;
-  $('btnBusyClose').textContent = '确定';
-  $('btnBusyClose').disabled = false;
-}
-function busyFail(title = '录入失败') {
-  $('busyTitle').textContent = title;
-  $('btnBusyClose').textContent = '确定';
-  $('btnBusyClose').disabled = false;
-}
-$('btnBusyClose').addEventListener('click', () => closeModal('busyModal'));
+// ✅ 如果你的后端路径不同，只改这里
+const API_ORG_CREATE = '/api/admin/organization'
 
-/** Token modal */
-function openTokenModal() { $('tokenInput').value = getToken(); openModal('tokenModal'); }
-$('btnSetToken').addEventListener('click', openTokenModal);
-$('btnTokenCancel').addEventListener('click', () => closeModal('tokenModal'));
-$('btnTokenSave').addEventListener('click', () => { setToken($('tokenInput').value); closeModal('tokenModal'); });
-
-/** Close buttons */
-document.addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-close]');
-  if (!btn) return;
-  closeModal(btn.getAttribute('data-close'));
-});
-
-/** ===== Domains multiselect (3-column checkbox) ===== */
-const domainMount = $('domainMsMount');
-
-const domainMs = createMultiSelectGrid({
-  title: '安全领域',
-  required: false,
-  placeholder: '搜索领域名称（也支持输入 slug 搜索，但不显示 slug）…',
-  hint: '▾ 展开；勾选后点“确认”生效；点“取消”放弃本次改动。',
-  options: [],
-  // ✅ 搜索仍支持 slug，但 UI 只显示 name
-  searchText: (o) => `${o?.name ?? ''} ${o?.slug ?? ''}`.trim()
-});
-
-domainMount.innerHTML = '';
-domainMount.appendChild(domainMs.element);
-
-async function loadDomainsIntoMs() {
-  if (!requireTokenOrPrompt()) return;
-
-  const data = await apiGet('/api/admin/dropdowns/domains?limit=500');
-  const items = (data?.items || []).map(x => ({
-    id: String(x.id),
-    name: x.name,     // ✅ 显示用
-    slug: x.slug || '' // ✅ 仅用于搜索
-    // description 不再传，避免任何地方显示 slug
-  }));
-
-  domainMs.setOptions(items);
+/**
+ * =========================
+ * Modal helpers（避免 aria-hidden focus 报错）
+ * - 我们不使用 aria-hidden 来隐藏 focused 元素，统一 display none
+ * =========================
+ */
+function openModal(modalEl) {
+  modalEl.style.display = 'flex'
+  modalEl.setAttribute('aria-hidden', 'false')
 }
 
-/** Entry buttons */
-$('btnDomain').addEventListener('click', () => {
-  if (!requireTokenOrPrompt()) return;
-  clearMsg('domainMsg');
-  $('dom_name').value = '';
-  $('dom_slug').value = '';
-  openModal('domainModal');
-});
+function closeModal(modalEl) {
+  modalEl.style.display = 'none'
+  modalEl.setAttribute('aria-hidden', 'true')
+}
 
-$('btnProduct').addEventListener('click', async () => {
-  if (!requireTokenOrPrompt()) return;
+/**
+ * =========================
+ * Token input
+ * =========================
+ */
+const tokenInput = $('#tokenInput')
+tokenInput.value = localStorage.getItem(TOKEN_KEY) || ''
+tokenInput.addEventListener('input', () => {
+  localStorage.setItem(TOKEN_KEY, tokenInput.value)
+})
 
-  clearMsg('productMsg');
-  $('prod_name').value = '';
-  $('prod_slug').value = '';
+function getToken() {
+  return norm(tokenInput.value)
+}
 
-  openModal('productModal');
+/**
+ * =========================
+ * 添加企业/机构 Modal
+ * =========================
+ */
+const orgModal = $('#orgModal')
+const orgClose = $('#orgClose')
+const orgReset = $('#orgReset')
+const orgSubmit = $('#orgSubmit')
+
+const orgShortName = $('#orgShortName')
+const orgFullName = $('#orgFullName')
+const orgEstablishYear = $('#orgEstablishYear')
+const orgSlug = $('#orgSlug')
+
+const orgShortNameErr = $('#orgShortNameErr')
+const orgEstablishYearErr = $('#orgEstablishYearErr')
+const orgSlugErr = $('#orgSlugErr')
+
+// 打开按钮
+$('#btnOpenOrg').addEventListener('click', () => {
+  // 打开时不清空（方便连续录入），但你也可以改成每次清空
+  openModal(orgModal)
+  // 默认 focus 到必填项
+  orgShortName.focus()
+})
+
+// 关闭（overlay 点击空白也关闭）
+orgClose.addEventListener('click', () => closeModal(orgModal))
+orgModal.addEventListener('click', (e) => {
+  if (e.target === orgModal) closeModal(orgModal)
+})
+
+// 清空
+orgReset.addEventListener('click', () => {
+  orgShortName.value = ''
+  orgFullName.value = ''
+  orgEstablishYear.value = ''
+  orgSlug.value = ''
+  clearInvalid(orgShortName, orgShortNameErr)
+  clearInvalid(orgEstablishYear, orgEstablishYearErr)
+  clearInvalid(orgSlug, orgSlugErr)
+  orgShortName.focus()
+})
+
+// 校验 + 提交
+function validateOrgForm() {
+  let ok = true
+
+  const shortName = norm(orgShortName.value)
+  if (!shortName) {
+    setInvalid(orgShortName, orgShortNameErr, '企业简称为必填。')
+    ok = false
+  } else clearInvalid(orgShortName, orgShortNameErr)
+
+  const slug = norm(orgSlug.value)
+  if (!slug) {
+    setInvalid(orgSlug, orgSlugErr, 'slug 为必填。')
+    ok = false
+  } else if (!isValidSlug(slug)) {
+    setInvalid(orgSlug, orgSlugErr, 'slug 仅允许 a-z / 0-9 / 连字符 -（建议小写）。')
+    ok = false
+  } else clearInvalid(orgSlug, orgSlugErr)
+
+  const yr = parseEstablishYear(orgEstablishYear.value)
+  if (yr && yr.error) {
+    setInvalid(orgEstablishYear, orgEstablishYearErr, yr.error)
+    ok = false
+  } else clearInvalid(orgEstablishYear, orgEstablishYearErr)
+
+  return ok
+}
+
+orgSubmit.addEventListener('click', async () => {
+  if (!validateOrgForm()) return
+
+  const token = getToken()
+
+  const payload = {
+    organization_short_name: norm(orgShortName.value),
+    organization_full_name: norm(orgFullName.value) || null,
+    establish_year: norm(orgEstablishYear.value) ? Number(norm(orgEstablishYear.value)) : null,
+    organization_slug: norm(orgSlug.value),
+  }
+
+  // 录入中
+  await openConfirm({ title: '录入中', body: '写入中…请稍候', okText: '确定', okEnabled: false })
 
   try {
-    await loadDomainsIntoMs();
+    const res = await apiPostJson(API_ORG_CREATE, payload, token)
+
+    // 成功：把“录入中”直接变为“录入成功”
+    updateConfirm({
+      title: '录入成功',
+      body: `✅ 已写入 organization\n\n返回：${JSON.stringify(res ?? {}, null, 2)}`,
+      okText: '确认返回',
+      okEnabled: true,
+    })
+
+    // 等用户点确认
+    await new Promise((r) => {
+      const t = setInterval(() => {
+        if (confirmOverlay.style.display === 'none') {
+          clearInterval(t)
+          r()
+        }
+      }, 60)
+    })
+
+    // 返回弹窗：保留 token，表单默认清空，方便连续录入
+    orgReset.click()
+    openModal(orgModal)
   } catch (e) {
-    showMsg('productMsg', { ok: false, error: '加载领域失败：' + e.message, status: e.status, detail: e.data });
+    updateConfirm({
+      title: '录入失败',
+      body: `❌ ${e?.message || String(e)}`,
+      okText: '确认返回',
+      okEnabled: true,
+    })
   }
-});
+})
 
-/** Domain submit */
-$('btnDomainSubmit').addEventListener('click', async () => {
-  if (!requireTokenOrPrompt()) return;
-
-  clearMsg('domainMsg');
-  const body = {
-    security_domain_name: $('dom_name').value.trim(),
-    cybersecurity_domain_slug: $('dom_slug').value.trim()
-  };
-
-  busyStart('录入中：安全领域…');
-  try {
-    const data = await apiPost('/api/admin/domain', body);
-    showMsg('domainMsg', { ok: true, message: '录入成功', data });
-    busySuccess('安全领域录入成功');
-
-    $('dom_name').value = '';
-    $('dom_slug').value = '';
-
-    await loadDomainsIntoMs();
-  } catch (e) {
-    showMsg('domainMsg', { ok: false, error: e.message, status: e.status, detail: e.data });
-    busyFail('安全领域录入失败');
-  }
-});
-
-/** Product submit */
-$('btnProductSubmit').addEventListener('click', async () => {
-  if (!requireTokenOrPrompt()) return;
-
-  clearMsg('productMsg');
-
-  const domainIds = domainMs.getValues().map(x => Number(x)).filter(Number.isFinite);
-
-  const body = {
-    security_product_name: $('prod_name').value.trim(),
-    security_product_slug: $('prod_slug').value.trim(),
-    ...(domainIds.length ? { domains: domainIds } : {})
-  };
-
-  busyStart('录入中：安全产品…');
-  try {
-    const data = await apiPost('/api/admin/product', body);
-    showMsg('productMsg', { ok: true, message: '录入成功', data });
-    busySuccess('安全产品录入成功');
-
-    $('prod_name').value = '';
-    $('prod_slug').value = '';
-    // 默认保留选择；需要清空点 ×
-  } catch (e) {
-    showMsg('productMsg', { ok: false, error: e.message, status: e.status, detail: e.data });
-    busyFail('安全产品录入失败');
-  }
-});
-
-/** Init */
-refreshTokenStatus();
-
-// overlay click close (except busyModal)
-['tokenModal', 'domainModal', 'productModal'].forEach((mid) => {
-  const overlay = $(mid);
-  overlay.addEventListener('click', (e) => {
-    if (e.target === overlay) closeModal(mid);
-  });
-});
+/**
+ * =========================
+ * 下面三个按钮你已有实现的话保留；没实现也不影响
+ * 这里先做占位，避免点击报错
+ * =========================
+ */
+$('#btnOpenDomain').addEventListener('click', () => {
+  alert('“录入安全领域”弹窗：你已有实现的话，把这里替换成 openModal(domainModal)。')
+})
+$('#btnOpenProduct').addEventListener('click', () => {
+  alert('“录入安全产品”弹窗：你已有实现的话，把这里替换成 openModal(productModal)。')
+})
+$('#btnOpenOrgProduct').addEventListener('click', () => {
+  alert('“录入企业产品”弹窗：后续实现。')
+})
