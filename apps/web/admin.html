@@ -46,9 +46,6 @@
     .err { display:none; margin-top: 6px; color: #b00020; font-size: 12px; }
     [aria-invalid="true"] { border-color: #b00020 !important; }
 
-    /* ✅ features mount zone (hidden) */
-    .feature-mounts { display: none; }
-
     /* modal */
     .modal-overlay {
       position: fixed;
@@ -116,22 +113,11 @@
       <input id="tokenInput" class="input" type="password" placeholder="输入 token（留空则按匿名/默认策略）" />
       <div class="hint">token 会被缓存到 localStorage（仅本浏览器）。</div>
     </div>
-
-    <!-- ✅ 给各 feature 的挂载点（即使不用，也保证不报 missing） -->
-    <div class="feature-mounts">
-      <div id="domainMount"></div>
-      <div id="productMount"></div>
-
-      <!-- ⭐ 你报错缺的就是这个 -->
-      <div id="productDomainMount"></div>
-
-      <div id="orgMount"></div>
-      <div id="orgEditMount"></div>
-      <div id="orgProductMount"></div>
-    </div>
   </div>
 
-  <!-- 添加企业/机构 Modal（你现有的） -->
+  <!-- =========================
+       添加企业/机构 Modal
+       ========================= -->
   <div id="orgModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="添加企业/机构">
       <div class="modal-head">
@@ -179,7 +165,86 @@
     </div>
   </div>
 
-  <!-- 录入状态 Confirm -->
+  <!-- =========================
+       录入安全领域 Modal（✅补齐 domain-admin 需要的 DOM）
+       ========================= -->
+  <div id="domainModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="录入安全领域">
+      <div class="modal-head">
+        <div class="modal-title">录入安全领域</div>
+        <button id="domainClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div class="row">
+        <div class="label">安全领域名称 *</div>
+        <div>
+          <input id="domainName" class="input" type="text" placeholder="必填：security_domain_name" />
+          <div id="domainNameErr" class="err"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">slug *</div>
+        <div>
+          <input id="domainSlug" class="input" type="text" placeholder="必填：cybersecurity_domain_slug（英文/数字/连字符）" />
+          <div id="domainSlugErr" class="err"></div>
+          <div class="hint">规则：仅允许 a-z / 0-9 / 连字符 -（建议小写）。</div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="domainReset" class="btn" type="button">清空</button>
+        <button id="domainSubmit" class="btn btn-primary" type="button">录入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================
+       录入安全产品 Modal（✅补齐 product-admin 需要的 DOM）
+       ========================= -->
+  <div id="productModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="录入安全产品">
+      <div class="modal-head">
+        <div class="modal-title">录入安全产品</div>
+        <button id="productClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div class="row">
+        <div class="label">安全产品名称 *</div>
+        <div>
+          <input id="productName" class="input" type="text" placeholder="必填：security_product_name" />
+          <div id="productNameErr" class="err"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">slug *</div>
+        <div>
+          <input id="productSlug" class="input" type="text" placeholder="必填：security_product_slug（英文/数字/连字符）" />
+          <div id="productSlugErr" class="err"></div>
+          <div class="hint">规则：仅允许 a-z / 0-9 / 连字符 -（建议小写）。</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">对应安全领域</div>
+        <div>
+          <!-- ⭐ 你之前缺的就是这个 -->
+          <div id="productDomainMount"></div>
+          <div class="hint">点击下拉展开；搜索 + 三列勾选；点“确定”才生效。</div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="productReset" class="btn" type="button">清空</button>
+        <button id="productSubmit" class="btn btn-primary" type="button">录入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================
+       录入状态 Confirm
+       ========================= -->
   <div id="confirmOverlay" class="confirm-overlay" aria-hidden="true">
     <div class="confirm" role="dialog" aria-modal="true" aria-label="状态">
       <div id="confirmTitle" class="confirm-title">录入中</div>
