@@ -1,4 +1,4 @@
-// apps/web/src/admin.js
+// apps/web/src/admin.js 
 // Admin entry: 负责基础设施（token、modal、confirm、HTTP）+ 挂载各个 feature
 
 import { mountDomainAdmin } from './features/domain-admin.js'
