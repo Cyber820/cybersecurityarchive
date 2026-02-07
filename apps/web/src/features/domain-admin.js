@@ -1,4 +1,4 @@
-// apps/web/src/features/domain-admin.js 
+// apps/web/src/features/domain-admin.js
 
 /**
  * Domain Feature（录入安全领域）
