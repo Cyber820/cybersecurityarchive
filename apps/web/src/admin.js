@@ -67,14 +67,12 @@ function createConfirm() {
   const bodyEl = $('confirmBody')
   const okBtn = $('confirmOk')
 
-  let mode = 'idle' // idle | loading | done
   let resolver = null
 
   function open() { openModal(overlay) }
   function close() { closeModal(overlay) }
 
   function setLoading(title = '录入中', body = '请稍候…') {
-    mode = 'loading'
     titleEl.textContent = title
     bodyEl.textContent = body
     okBtn.disabled = true
@@ -82,7 +80,6 @@ function createConfirm() {
   }
 
   function setResult(ok, message) {
-    mode = 'done'
     titleEl.textContent = ok ? '完成' : '失败'
     bodyEl.textContent = message || ''
     okBtn.disabled = false
@@ -294,7 +291,6 @@ orgSubmit.addEventListener('click', async () => {
     bodyLoading: '写入企业/机构中…',
     action: async () => {
       const res = await apiFetch('/api/admin/organization', { method: 'POST', token, body: payload })
-      // 成功后关闭表单
       closeModal(orgModal)
       orgResetToEmpty()
       return `✅ 写入成功：organization_id = ${res?.organization?.organization_id}`
@@ -356,33 +352,55 @@ const orgInfoCancel = $('orgInfoCancel')
 const orgInfoEdit = $('orgInfoEdit')
 const orgInfoBody = $('orgInfoBody')
 
+// ✅ admin.html 里 orgInfoModal 的标题 div 没有 id，这里用更稳的选择器
+const orgInfoTitleEl = orgInfoModal.querySelector('.modal-title')
+
 let currentOrgDetail = null
 
 orgSearchClose.addEventListener('click', () => closeModal(orgSearchModal))
 orgInfoClose.addEventListener('click', () => closeModal(orgInfoModal))
 orgInfoCancel.addEventListener('click', () => closeModal(orgInfoModal))
 
+function orgDisplayName(org) {
+  const full = norm(org?.organization_full_name)
+  const short = norm(org?.organization_short_name)
+  return full || short || '（未命名企业/机构）'
+}
+
+/**
+ * ✅ 企业详情弹窗：用中文字段名显示
+ * - 显示规则：full_name 优先用于标题
+ * - 行内容仍来自同一条 organization 记录
+ */
 function renderOrgInfo(org) {
   function kv(k, v) {
     const row = document.createElement('div')
     row.className = 'kv'
+
     const kk = document.createElement('div')
     kk.className = 'kv-k'
     kk.textContent = k
+
     const vv = document.createElement('div')
     vv.className = 'kv-v'
     vv.textContent = (v === null || v === undefined || v === '') ? '—' : String(v)
+
     row.appendChild(kk)
     row.appendChild(vv)
     return row
   }
 
+  // 标题：企业名
+  if (orgInfoTitleEl) {
+    orgInfoTitleEl.textContent = `企业/机构信息：${orgDisplayName(org)}`
+  }
+
   orgInfoBody.innerHTML = ''
-  orgInfoBody.appendChild(kv('organization_id', org.organization_id))
-  orgInfoBody.appendChild(kv('organization_short_name', org.organization_short_name))
-  orgInfoBody.appendChild(kv('organization_full_name', org.organization_full_name))
-  orgInfoBody.appendChild(kv('establish_year', org.establish_year))
-  orgInfoBody.appendChild(kv('organization_slug', org.organization_slug))
+  orgInfoBody.appendChild(kv('企业简称', org.organization_short_name))
+  orgInfoBody.appendChild(kv('企业全称', org.organization_full_name))
+  orgInfoBody.appendChild(kv('成立时间', org.establish_year))
+  orgInfoBody.appendChild(kv('Slug', org.organization_slug))
+  orgInfoBody.appendChild(kv('ID', org.organization_id))
 }
 
 const orgSearch = createEntitySearch({
@@ -396,13 +414,12 @@ const orgSearch = createEntitySearch({
   renderItem: (it) => ({
     title: it.display_name || it.organization_short_name || '（未命名）',
     subtitle: [
-      it.organization_full_name ? `full: ${it.organization_full_name}` : null,
-      it.organization_short_name ? `short: ${it.organization_short_name}` : null,
-      it.organization_slug ? `slug: ${it.organization_slug}` : null,
+      it.organization_full_name ? `全称：${it.organization_full_name}` : null,
+      it.organization_short_name ? `简称：${it.organization_short_name}` : null,
+      it.organization_slug ? `slug：${it.organization_slug}` : null,
     ].filter(Boolean).join(' · ')
   }),
   onPick: async (it) => {
-    // open detail modal
     const token = getToken()
     try {
       orgSearchStatus.textContent = '读取详情中…'
@@ -433,7 +450,6 @@ btnOpenOrg.addEventListener('click', () => {
 })
 
 btnOpenOrgEdit.addEventListener('click', () => {
-  // open search modal
   openModal(orgSearchModal)
   orgSearch.clear()
   orgSearch.focus()
@@ -465,10 +481,8 @@ const productNameErr = $('productNameErr')
 const productSlugErr = $('productSlugErr')
 const productDomainsErr = $('productDomainsErr')
 
-// product domains multiselect container
 const productDomainsHost = $('productDomains')
 
-// bind open/close
 btnOpenDomain.addEventListener('click', () => openModal(domainModal))
 btnOpenProduct.addEventListener('click', () => openModal(productModal))
 domainClose.addEventListener('click', () => closeModal(domainModal))
@@ -548,15 +562,13 @@ function productValidate(selectedDomainIds) {
   return ok
 }
 
-// domains lookup + multiselect init
 let domainGrid = null
 async function refreshDomainGrid() {
   const token = getToken()
   const res = await apiFetch('/api/admin/dropdowns/domains', { token })
   const rows = (res?.items || []).map(x => ({
     id: x.security_domain_id,
-    name: x.security_domain_name, // ✅ 只显示 name，不显示 slug
-    // searchable still supports slug on backend? we keep a hidden field:
+    name: x.security_domain_name,
     _search: `${x.security_domain_name} ${x.cybersecurity_domain_slug || ''}`.trim()
   }))
 
@@ -566,7 +578,6 @@ async function refreshDomainGrid() {
       host: productDomainsHost,
       placeholder: '搜索领域名称（也支持输入 slug 搜索，但不显示 slug）…',
       columns: 3,
-      // 让组件搜索时用 _search（如果组件不支持，我们在 options 中把 slug 合并到 name 的搜索字段）
       options: rows.map(r => ({ id: r.id, name: r.name, searchText: r._search })),
     })
   } else {
@@ -583,7 +594,7 @@ productReset.addEventListener('click', () => {
 
 productSubmit.addEventListener('click', async () => {
   const token = getToken()
-  await refreshDomainGrid() // ensure latest
+  await refreshDomainGrid()
   const selected = domainGrid?.getSelectedIds?.() || []
 
   if (!productValidate(selected)) return
@@ -614,13 +625,11 @@ productSubmit.addEventListener('click', async () => {
   productReset.disabled = false
 })
 
-// open product modal should refresh domains
 btnOpenProduct.addEventListener('click', async () => {
   openModal(productModal)
   try { await refreshDomainGrid() } catch (e) { console.error(e) }
 })
 
 /* =========================
- * Notes:
- * - 企业产品（organization_product）按钮暂时不处理（你说后面做）
+ * 企业产品（organization_product）按钮暂时不处理（后面做）
  * ========================= */
