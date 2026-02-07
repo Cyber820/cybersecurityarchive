@@ -46,6 +46,9 @@
     .err { display:none; margin-top: 6px; color: #b00020; font-size: 12px; }
     [aria-invalid="true"] { border-color: #b00020 !important; }
 
+    /* ✅ features mount zone (hidden) */
+    .feature-mounts { display: none; }
+
     /* modal */
     .modal-overlay {
       position: fixed;
@@ -71,7 +74,7 @@
     .modal-title { font-size: 16px; font-weight: 800; }
     .modal-actions { display:flex; justify-content:flex-end; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
 
-    /* confirm modal */
+    /* confirm modal (loading/success/fail) */
     .confirm-overlay {
       position: fixed;
       inset: 0;
@@ -93,39 +96,6 @@
     .confirm-title { font-size: 15px; font-weight: 800; margin-bottom: 8px; }
     .confirm-body { font-size: 13px; color: var(--txt); white-space: pre-wrap; }
     .confirm-actions { display:flex; justify-content:flex-end; gap: 10px; margin-top: 12px; }
-
-    /* ===== multi-select panel (kept, used by product domains) ===== */
-    .ia-ms { border: 1px solid var(--bd); border-radius: 12px; padding: 10px; }
-    .ia-ms-head { display:flex; align-items:center; justify-content:space-between; gap: 10px; }
-    .ia-ms-title { font-size: 13px; font-weight: 800; }
-    .ia-ms-actions { display:flex; gap: 8px; align-items:center; }
-    .ia-ms-iconbtn{
-      border: 1px solid var(--bd2);
-      background:#fff;
-      border-radius:999px;
-      width:30px;height:30px;
-      cursor:pointer;
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      font-size:14px;
-      line-height:1;
-    }
-    .ia-ms-iconbtn:disabled{opacity:.6;cursor:not-allowed;}
-    .ia-ms-summary{ margin-top:8px; font-size:12px; color: var(--muted); white-space:pre-wrap; }
-
-    .ia-ms-panel{
-      margin-top:10px;
-      border:1px solid var(--bd);
-      border-radius:12px;
-      padding:10px;
-      display:none;
-    }
-
-    /* simple KV in info modal */
-    .kv { display:flex; gap:10px; padding:6px 0; border-bottom:1px solid rgba(0,0,0,0.08); }
-    .kv-k { width:160px; flex:0 0 160px; font-weight:700; font-size:13px; color:rgba(0,0,0,.75); }
-    .kv-v { flex:1 1 auto; min-width:0; font-size:13px; white-space:pre-wrap; word-break:break-word; }
   </style>
 </head>
 
@@ -136,7 +106,6 @@
     <div class="toolbar">
       <button id="btnOpenOrg" class="btn btn-primary" type="button">添加企业/机构</button>
       <button id="btnOpenOrgEdit" class="btn" type="button">编辑企业/机构</button>
-
       <button id="btnOpenDomain" class="btn" type="button">录入安全领域</button>
       <button id="btnOpenProduct" class="btn" type="button">录入安全产品</button>
       <button id="btnOpenOrgProduct" class="btn" type="button">录入企业产品</button>
@@ -147,13 +116,26 @@
       <input id="tokenInput" class="input" type="password" placeholder="输入 token（留空则按匿名/默认策略）" />
       <div class="hint">token 会被缓存到 localStorage（仅本浏览器）。</div>
     </div>
+
+    <!-- ✅ 给各 feature 的挂载点（即使不用，也保证不报 missing） -->
+    <div class="feature-mounts">
+      <div id="domainMount"></div>
+      <div id="productMount"></div>
+
+      <!-- ⭐ 你报错缺的就是这个 -->
+      <div id="productDomainMount"></div>
+
+      <div id="orgMount"></div>
+      <div id="orgEditMount"></div>
+      <div id="orgProductMount"></div>
+    </div>
   </div>
 
-  <!-- 添加/编辑企业/机构 Modal（同一个表单，admin.js 控制 mode） -->
+  <!-- 添加企业/机构 Modal（你现有的） -->
   <div id="orgModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="企业/机构">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="添加企业/机构">
       <div class="modal-head">
-        <div id="orgModalTitle" class="modal-title">添加企业/机构</div>
+        <div class="modal-title">添加企业/机构</div>
         <button id="orgClose" class="btn" type="button">关闭</button>
       </div>
 
@@ -190,128 +172,9 @@
         </div>
       </div>
 
-      <div class="modal-actions" id="orgActionsCreate">
+      <div class="modal-actions">
         <button id="orgReset" class="btn" type="button">清空</button>
         <button id="orgSubmit" class="btn btn-primary" type="button">录入</button>
-      </div>
-
-      <div class="modal-actions" id="orgActionsEdit" style="display:none;">
-        <button id="orgEditReset" class="btn" type="button">重置</button>
-        <button id="orgEditCancel" class="btn" type="button">取消</button>
-        <button id="orgEditSubmit" class="btn btn-primary" type="button">确定更新</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 编辑：搜索企业/机构 Modal -->
-  <div id="orgSearchModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="搜索企业/机构">
-      <div class="modal-head">
-        <div class="modal-title">编辑企业/机构（搜索）</div>
-        <button id="orgSearchClose" class="btn" type="button">关闭</button>
-      </div>
-
-      <div class="row" style="grid-template-columns: 1fr;">
-        <div>
-          <input id="orgSearchInput" class="input" type="text" placeholder="搜索 short_name / full_name / slug ..." />
-          <div class="hint">点击结果进入详情；同企业不会重复返回。</div>
-        </div>
-      </div>
-
-      <div class="card" style="margin-top:12px;">
-        <div class="label">搜索结果</div>
-        <div id="orgSearchStatus" class="hint" style="margin-top:6px;">请输入关键字开始搜索。</div>
-        <div id="orgSearchList" style="margin-top:10px;"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 编辑：企业详情（只读）Modal -->
-  <div id="orgInfoModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="企业信息">
-      <div class="modal-head">
-        <div class="modal-title">企业/机构信息</div>
-        <button id="orgInfoClose" class="btn" type="button">关闭</button>
-      </div>
-
-      <div id="orgInfoBody"></div>
-
-      <div class="modal-actions">
-        <button id="orgInfoCancel" class="btn" type="button">取消</button>
-        <button id="orgInfoEdit" class="btn btn-primary" type="button">编辑</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 录入安全领域 Modal（保留你现有的，admin.js 会继续绑定） -->
-  <div id="domainModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="录入安全领域">
-      <div class="modal-head">
-        <div class="modal-title">录入安全领域</div>
-        <button id="domainClose" class="btn" type="button">关闭</button>
-      </div>
-
-      <div class="row">
-        <div class="label">安全领域名称 *</div>
-        <div>
-          <input id="domainName" class="input" type="text" placeholder="必填：security_domain_name" />
-          <div id="domainNameErr" class="err"></div>
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="label">安全领域 slug *</div>
-        <div>
-          <input id="domainSlug" class="input" type="text" placeholder="必填：cybersecurity_domain_slug（英文/数字/连字符）" />
-          <div id="domainSlugErr" class="err"></div>
-          <div class="hint">规则：仅允许 a-z / 0-9 / 连字符 -（建议小写）。</div>
-        </div>
-      </div>
-
-      <div class="modal-actions">
-        <button id="domainReset" class="btn" type="button">清空</button>
-        <button id="domainSubmit" class="btn btn-primary" type="button">录入</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 录入安全产品 Modal（保留你现有的，admin.js 会继续绑定） -->
-  <div id="productModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="录入安全产品">
-      <div class="modal-head">
-        <div class="modal-title">录入安全产品</div>
-        <button id="productClose" class="btn" type="button">关闭</button>
-      </div>
-
-      <div class="row">
-        <div class="label">安全产品名称 *</div>
-        <div>
-          <input id="productName" class="input" type="text" placeholder="必填：security_product_name" />
-          <div id="productNameErr" class="err"></div>
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="label">安全产品 slug *</div>
-        <div>
-          <input id="productSlug" class="input" type="text" placeholder="必填：security_product_slug（英文/数字/连字符）" />
-          <div id="productSlugErr" class="err"></div>
-          <div class="hint">规则：仅允许 a-z / 0-9 / 连字符 -（建议小写）。</div>
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="label">对应安全领域 *</div>
-        <div>
-          <div id="productDomains" class="ia-ms"></div>
-          <div id="productDomainsErr" class="err"></div>
-          <div class="hint">点击 ▾ 展开，搜索 + 三列勾选；点“确认”才生效；点 × 清空。</div>
-        </div>
-      </div>
-
-      <div class="modal-actions">
-        <button id="productReset" class="btn" type="button">清空</button>
-        <button id="productSubmit" class="btn btn-primary" type="button">录入</button>
       </div>
     </div>
   </div>
