@@ -329,7 +329,6 @@ const orgInfoCancel = $('orgInfoCancel')
 const orgInfoEdit = $('orgInfoEdit')
 const orgInfoBody = $('orgInfoBody')
 
-// admin.html 里 orgInfoModal 的标题 div 没有 id，这里用更稳的选择器
 const orgInfoTitleEl = orgInfoModal.querySelector('.modal-title')
 
 let currentOrgDetail = null
@@ -546,11 +545,11 @@ async function refreshDomainGrid() {
   const token = getToken()
   const res = await apiFetch('/api/admin/dropdowns/domains', { token })
 
+  // ✅ 关键修复：后端返回 items: [{ id, name, slug }]
   const options = (res?.items || []).map(x => ({
-    id: x.security_domain_id,
-    name: x.security_domain_name,
-    // 关键：让 slug 也能被搜索，但 UI 不显示 slug
-    slug: x.cybersecurity_domain_slug || null,
+    id: x.id,
+    name: x.name,
+    slug: x.slug ?? null,
     description: null,
   }))
 
@@ -561,11 +560,9 @@ async function refreshDomainGrid() {
       placeholder: '搜索领域名称（也支持输入 slug 搜索，但不显示 slug）…',
       columns: 3,
       options,
-      // 用 name + slug 做搜索文本
       searchText: (o) => `${o?.name ?? ''} ${o?.slug ?? ''}`.trim(),
     })
 
-    // ✅ 关键修复：把组件 element 挂到 productDomainsHost
     productDomainsHost.innerHTML = ''
     productDomainsHost.appendChild(domainGrid.element)
   } else {
@@ -582,21 +579,15 @@ productReset.addEventListener('click', () => {
 
 productSubmit.addEventListener('click', async () => {
   const token = getToken()
-
-  // 确保 domains 列表是最新的（也确保 domainGrid 已挂载）
   await refreshDomainGrid()
 
-  // ✅ 关键修复：multiselect-grid 的取值方法是 getValues()
   const selectedRaw = domainGrid?.getValues?.() || []
-
-  // 后端支持 number[] 或 string[]；这里统一转为 number[]
   const selected = selectedRaw
     .map(x => Number(x))
     .filter(n => Number.isFinite(n))
 
   if (!productValidate(selected)) return
 
-  // ✅ 关键修复：后端字段名为 domains
   const payload = {
     security_product_name: norm(productName.value),
     security_product_slug: norm(productSlug.value),
