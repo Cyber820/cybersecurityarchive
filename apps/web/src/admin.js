@@ -11,30 +11,7 @@ import {
   norm,
   isSlug,
 } from './core/dom.js'
-
-async function apiFetch(path, { method = 'GET', token = '', body = null } = {}) {
-  const headers = { 'Content-Type': 'application/json' }
-  if (token) headers['x-admin-token'] = token
-
-  const res = await fetch(path, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined
-  })
-
-  const text = await res.text()
-  let data = null
-  try { data = text ? JSON.parse(text) : null } catch { data = { raw: text } }
-
-  if (!res.ok) {
-    const msg = data?.error || data?.message || `HTTP ${res.status}`
-    const err = new Error(msg)
-    err.status = res.status
-    err.detail = data
-    throw err
-  }
-  return data
-}
+import { apiFetch, initAdminTokenInput } from './core/api.js'
 
 /* =========================
  * Confirm (loading -> result -> ack)
@@ -94,15 +71,9 @@ async function showConfirmFlow({ titleLoading, bodyLoading, action }) {
 }
 
 /* =========================
- * Token cache
+ * Admin token (input + localStorage)
  * ========================= */
-const tokenInput = $('tokenInput')
-const TOKEN_KEY = 'ia_admin_token'
-tokenInput.value = localStorage.getItem(TOKEN_KEY) || ''
-tokenInput.addEventListener('input', () => {
-  localStorage.setItem(TOKEN_KEY, tokenInput.value || '')
-})
-function getToken() { return tokenInput.value || '' }
+const { getToken } = initAdminTokenInput($('tokenInput'), { storageKey: 'ia_admin_token' })
 
 /* =========================
  * Organization: Create + Edit shared form
@@ -545,7 +516,7 @@ async function refreshDomainGrid() {
   const token = getToken()
   const res = await apiFetch('/api/admin/dropdowns/domains', { token })
 
-  // ✅ 关键修复：后端返回 items: [{ id, name, slug }]
+  // 后端返回 items: [{ id, name, slug }]
   const options = (res?.items || []).map(x => ({
     id: x.id,
     name: x.name,
