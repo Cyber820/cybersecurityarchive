@@ -82,6 +82,17 @@ function createConfirm() {
 
 const confirm = createConfirm()
 
+async function showConfirmFlow({ titleLoading, bodyLoading, action }) {
+  confirm.setLoading(titleLoading || '录入中', bodyLoading || '请稍候…')
+  try {
+    const msg = await action()
+    confirm.setResult(true, msg || '✅ 成功')
+  } catch (e) {
+    confirm.setResult(false, `❌ 失败：${e?.message || String(e)}`)
+  }
+  await confirm.waitAck()
+}
+
 /* =========================
  * Token cache
  * ========================= */
@@ -213,7 +224,6 @@ function setOrgModeEdit({ organization }) {
   orgActionsCreate.style.display = 'none'
   orgActionsEdit.style.display = ''
 
-  // prefill into form
   applyPrefill(orgSetters(), {
     organization_short_name: organization.organization_short_name ?? '',
     organization_full_name: organization.organization_full_name ?? '',
@@ -230,17 +240,6 @@ function orgResetToEmpty() {
     establish_year: '',
     organization_slug: '',
   })
-}
-
-async function showConfirmFlow({ titleLoading, bodyLoading, action }) {
-  confirm.setLoading(titleLoading || '录入中', bodyLoading || '请稍候…')
-  try {
-    const msg = await action()
-    confirm.setResult(true, msg || '✅ 成功')
-  } catch (e) {
-    confirm.setResult(false, `❌ 失败：${e?.message || String(e)}`)
-  }
-  await confirm.waitAck()
 }
 
 orgClose.addEventListener('click', () => closeModal(orgModal))
@@ -330,7 +329,7 @@ const orgInfoCancel = $('orgInfoCancel')
 const orgInfoEdit = $('orgInfoEdit')
 const orgInfoBody = $('orgInfoBody')
 
-// ✅ admin.html 里 orgInfoModal 的标题 div 没有 id，这里用更稳的选择器
+// admin.html 里 orgInfoModal 的标题 div 没有 id，这里用更稳的选择器
 const orgInfoTitleEl = orgInfoModal.querySelector('.modal-title')
 
 let currentOrgDetail = null
@@ -345,11 +344,6 @@ function orgDisplayName(org) {
   return full || short || '（未命名企业/机构）'
 }
 
-/**
- * ✅ 企业详情弹窗：用中文字段名显示
- * - 显示规则：full_name 优先用于标题
- * - 行内容仍来自同一条 organization 记录
- */
 function renderOrgInfo(org) {
   function kv(k, v) {
     const row = document.createElement('div')
@@ -368,7 +362,6 @@ function renderOrgInfo(org) {
     return row
   }
 
-  // 标题：企业名
   if (orgInfoTitleEl) {
     orgInfoTitleEl.textContent = `企业/机构信息：${orgDisplayName(org)}`
   }
@@ -413,8 +406,6 @@ const orgSearch = createEntitySearch({
 
 orgInfoEdit.addEventListener('click', () => {
   if (!currentOrgDetail) return
-
-  // ✅ 关键修复：进入编辑时，关掉“详情弹窗 + 搜索弹窗”
   closeModal(orgInfoModal)
   closeModal(orgSearchModal)
 
@@ -437,7 +428,7 @@ btnOpenOrgEdit.addEventListener('click', () => {
 })
 
 /* =========================
- * Domain/Product Admin (keep your existing behavior)
+ * Domain/Product Admin
  * ========================= */
 const domainModal = $('domainModal')
 const productModal = $('productModal')
@@ -465,9 +456,7 @@ const productDomainsErr = $('productDomainsErr')
 const productDomainsHost = $('productDomains')
 
 btnOpenDomain.addEventListener('click', () => openModal(domainModal))
-btnOpenProduct.addEventListener('click', () => openModal(productModal))
 domainClose.addEventListener('click', () => closeModal(domainModal))
-productClose.addEventListener('click', () => closeModal(productModal))
 
 function domainClearErrors() {
   clearInvalid(domainName, domainNameErr)
@@ -518,6 +507,13 @@ domainSubmit.addEventListener('click', async () => {
   domainReset.disabled = false
 })
 
+/* ---------- Product ---------- */
+btnOpenProduct.addEventListener('click', async () => {
+  openModal(productModal)
+  try { await refreshDomainGrid() } catch (e) { console.error(e) }
+})
+productClose.addEventListener('click', () => closeModal(productModal))
+
 function productClearErrors() {
   clearInvalid(productName, productNameErr)
   clearInvalid(productSlug, productSlugErr)
@@ -531,6 +527,7 @@ function setProductDomainsErr(msg) {
 function productValidate(selectedDomainIds) {
   productClearErrors()
   let ok = true
+
   if (!norm(productName.value)) { setInvalid(productName, productNameErr, '安全产品名称为必填。'); ok = false }
   const slug = norm(productSlug.value)
   if (!slug) { setInvalid(productSlug, productSlugErr, 'slug 为必填。'); ok = false }
@@ -544,25 +541,35 @@ function productValidate(selectedDomainIds) {
 }
 
 let domainGrid = null
+
 async function refreshDomainGrid() {
   const token = getToken()
   const res = await apiFetch('/api/admin/dropdowns/domains', { token })
-  const rows = (res?.items || []).map(x => ({
+
+  const options = (res?.items || []).map(x => ({
     id: x.security_domain_id,
     name: x.security_domain_name,
-    _search: `${x.security_domain_name} ${x.cybersecurity_domain_slug || ''}`.trim()
+    // 关键：让 slug 也能被搜索，但 UI 不显示 slug
+    slug: x.cybersecurity_domain_slug || null,
+    description: null,
   }))
 
   if (!domainGrid) {
     domainGrid = createMultiSelectGrid({
       title: '安全领域',
-      host: productDomainsHost,
+      required: true,
       placeholder: '搜索领域名称（也支持输入 slug 搜索，但不显示 slug）…',
       columns: 3,
-      options: rows.map(r => ({ id: r.id, name: r.name, searchText: r._search })),
+      options,
+      // 用 name + slug 做搜索文本
+      searchText: (o) => `${o?.name ?? ''} ${o?.slug ?? ''}`.trim(),
     })
+
+    // ✅ 关键修复：把组件 element 挂到 productDomainsHost
+    productDomainsHost.innerHTML = ''
+    productDomainsHost.appendChild(domainGrid.element)
   } else {
-    domainGrid.setOptions(rows.map(r => ({ id: r.id, name: r.name, searchText: r._search })))
+    domainGrid.setOptions(options)
   }
 }
 
@@ -575,15 +582,25 @@ productReset.addEventListener('click', () => {
 
 productSubmit.addEventListener('click', async () => {
   const token = getToken()
+
+  // 确保 domains 列表是最新的（也确保 domainGrid 已挂载）
   await refreshDomainGrid()
-  const selected = domainGrid?.getSelectedIds?.() || []
+
+  // ✅ 关键修复：multiselect-grid 的取值方法是 getValues()
+  const selectedRaw = domainGrid?.getValues?.() || []
+
+  // 后端支持 number[] 或 string[]；这里统一转为 number[]
+  const selected = selectedRaw
+    .map(x => Number(x))
+    .filter(n => Number.isFinite(n))
 
   if (!productValidate(selected)) return
 
+  // ✅ 关键修复：后端字段名为 domains
   const payload = {
     security_product_name: norm(productName.value),
     security_product_slug: norm(productSlug.value),
-    domain_ids: selected
+    domains: selected,
   }
 
   productSubmit.disabled = true
@@ -606,11 +623,6 @@ productSubmit.addEventListener('click', async () => {
   productReset.disabled = false
 })
 
-btnOpenProduct.addEventListener('click', async () => {
-  openModal(productModal)
-  try { await refreshDomainGrid() } catch (e) { console.error(e) }
-})
-
 /* =========================
- * 企业产品（organization_product）按钮暂时不处理（后面做）
+ * 企业产品（organization_product）后续拆分后再做
  * ========================= */
