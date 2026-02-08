@@ -2,7 +2,15 @@
 import { createMultiSelectGrid } from './ui/multiselect-grid.js'
 import { createEntitySearch } from './ui/entity-search.js'
 import { capturePrefill, applyPrefill } from './ui/prefill.js'
-import { $, openModal, closeModal, setInvalid, clearInvalid, norm, isSlug } from './core/dom.js'
+import {
+  $,
+  openModal,
+  closeModal,
+  setInvalid,
+  clearInvalid,
+  norm,
+  isSlug,
+} from './core/dom.js'
 
 async function apiFetch(path, { method = 'GET', token = '', body = null } = {}) {
   const headers = { 'Content-Type': 'application/json' }
@@ -118,448 +126,491 @@ let orgPrefillSnap = null
 function orgGetters() {
   return {
     organization_short_name: () => norm(orgShortName.value),
-    organization_full_name: () => norm(orgFullName.value),
-    establish_year: () => norm(orgEstablishYear.value),
-    organization_slug: () => norm(orgSlug.value)
+    organization_full_name: () => norm(orgFullName.value) || '',
+    establish_year: () => norm(orgEstablishYear.value) || '',
+    organization_slug: () => norm(orgSlug.value),
+  }
+}
+function orgSetters() {
+  return {
+    organization_short_name: (v) => { orgShortName.value = v ?? '' },
+    organization_full_name: (v) => { orgFullName.value = v ?? '' },
+    establish_year: (v) => { orgEstablishYear.value = v ?? '' },
+    organization_slug: (v) => { orgSlug.value = v ?? '' },
   }
 }
 
-function orgSetMode(mode) {
-  orgMode = mode
-  if (mode === 'create') {
-    orgModalTitle.textContent = '添加企业/机构'
-    orgActionsCreate.style.display = 'flex'
-    orgActionsEdit.style.display = 'none'
-    editingOrgId = null
-  } else {
-    orgModalTitle.textContent = '编辑企业/机构'
-    orgActionsCreate.style.display = 'none'
-    orgActionsEdit.style.display = 'flex'
-  }
-}
-
-function orgClearInvalidAll() {
+function orgClearErrors() {
   clearInvalid(orgShortName, orgShortNameErr)
   clearInvalid(orgEstablishYear, orgEstablishYearErr)
   clearInvalid(orgSlug, orgSlugErr)
 }
 
 function orgValidate() {
-  orgClearInvalidAll()
+  orgClearErrors()
 
   const shortName = norm(orgShortName.value)
-  const establishYear = norm(orgEstablishYear.value)
   const slug = norm(orgSlug.value)
+  const yearStr = norm(orgEstablishYear.value)
 
   let ok = true
-
   if (!shortName) {
-    setInvalid(orgShortName, orgShortNameErr, '必须填写企业简称')
+    setInvalid(orgShortName, orgShortNameErr, '企业简称为必填。')
+    ok = false
+  }
+  if (!slug) {
+    setInvalid(orgSlug, orgSlugErr, 'slug 为必填。')
+    ok = false
+  } else if (!isSlug(slug)) {
+    setInvalid(orgSlug, orgSlugErr, 'slug 仅允许 a-z / 0-9 / 连字符 -（建议小写）。')
     ok = false
   }
 
-  if (establishYear && !/^\d{4}$/.test(establishYear)) {
-    setInvalid(orgEstablishYear, orgEstablishYearErr, '成立年份应为4位数字（可留空）')
-    ok = false
-  }
-
-  if (slug && !isSlug(slug)) {
-    setInvalid(orgSlug, orgSlugErr, 'Slug 仅允许小写字母/数字/连字符（如 example-company）')
-    ok = false
+  if (yearStr) {
+    const y = Number(yearStr)
+    const now = new Date().getFullYear()
+    if (!Number.isFinite(y) || !Number.isInteger(y)) {
+      setInvalid(orgEstablishYear, orgEstablishYearErr, '成立时间必须为整数年份。')
+      ok = false
+    } else if (y < 1990 || y > now) {
+      setInvalid(orgEstablishYear, orgEstablishYearErr, `成立时间范围：1990 ~ ${now}。`)
+      ok = false
+    }
   }
 
   return ok
 }
 
 function orgCollectPayload() {
-  const g = orgGetters()
-  const payload = {
-    organization_short_name: g.organization_short_name(),
-    organization_full_name: g.organization_full_name() || null,
-    establish_year: g.establish_year() ? Number(g.establish_year()) : null,
-    organization_slug: g.organization_slug() || null
+  const shortName = norm(orgShortName.value)
+  const fullName = norm(orgFullName.value)
+  const slug = norm(orgSlug.value)
+  const yearStr = norm(orgEstablishYear.value)
+
+  return {
+    organization_short_name: shortName,
+    organization_full_name: fullName || null,
+    establish_year: yearStr ? Number(yearStr) : null,
+    organization_slug: slug,
   }
-  return payload
 }
 
-function orgFillForm(data) {
-  orgShortName.value = data.organization_short_name || ''
-  orgFullName.value = data.organization_full_name || ''
-  orgEstablishYear.value = data.establish_year ?? ''
-  orgSlug.value = data.organization_slug || ''
-  orgClearInvalidAll()
+function setOrgModeCreate() {
+  orgMode = 'create'
+  editingOrgId = null
+  orgPrefillSnap = null
 
-  // snapshot prefill
-  orgPrefillSnap = capturePrefill({
-    orgShortName,
-    orgFullName,
-    orgEstablishYear,
-    orgSlug
+  orgModalTitle.textContent = '添加企业/机构'
+  orgActionsCreate.style.display = ''
+  orgActionsEdit.style.display = 'none'
+}
+
+function setOrgModeEdit({ organization }) {
+  orgMode = 'edit'
+  editingOrgId = organization.organization_id
+
+  orgModalTitle.textContent = '编辑企业/机构（基础信息）'
+  orgActionsCreate.style.display = 'none'
+  orgActionsEdit.style.display = ''
+
+  // prefill into form
+  applyPrefill(orgSetters(), {
+    organization_short_name: organization.organization_short_name ?? '',
+    organization_full_name: organization.organization_full_name ?? '',
+    establish_year: organization.establish_year ?? '',
+    organization_slug: organization.organization_slug ?? '',
   })
+  orgPrefillSnap = capturePrefill(orgGetters())
 }
 
-function orgResetToPrefill() {
-  if (!orgPrefillSnap) return
-  applyPrefill(orgPrefillSnap)
-  orgClearInvalidAll()
-}
-
-async function orgSubmitCreate() {
-  if (!orgValidate()) return
-
-  const token = getToken()
-  const payload = orgCollectPayload()
-
-  confirm.setLoading('录入中', '正在写入企业/机构…')
-  try {
-    const out = await apiFetch('/api/admin/organization', {
-      method: 'POST',
-      token,
-      body: payload
-    })
-    confirm.setResult(true, `已创建：${out?.organization_short_name || payload.organization_short_name}`)
-  } catch (e) {
-    confirm.setResult(false, e.message || '创建失败')
-  }
-  await confirm.waitAck()
-}
-
-async function orgSubmitEdit() {
-  if (!editingOrgId) return
-  if (!orgValidate()) return
-
-  const token = getToken()
-  const payload = orgCollectPayload()
-
-  confirm.setLoading('保存中', '正在更新企业/机构…')
-  try {
-    const out = await apiFetch(`/api/admin/organization/${editingOrgId}`, {
-      method: 'PUT',
-      token,
-      body: payload
-    })
-    confirm.setResult(true, `已更新：${out?.organization_short_name || payload.organization_short_name}`)
-  } catch (e) {
-    confirm.setResult(false, e.message || '更新失败')
-  }
-  await confirm.waitAck()
-}
-
-/* ----- open/close org modal ----- */
-function orgOpenCreate() {
-  orgSetMode('create')
-  orgFillForm({
+function orgResetToEmpty() {
+  applyPrefill(orgSetters(), {
     organization_short_name: '',
     organization_full_name: '',
     establish_year: '',
-    organization_slug: ''
+    organization_slug: '',
   })
-  openModal(orgModal)
 }
 
-function orgOpenEdit(orgId, data) {
-  editingOrgId = orgId
-  orgSetMode('edit')
-  orgFillForm(data || {})
-  openModal(orgModal)
+async function showConfirmFlow({ titleLoading, bodyLoading, action }) {
+  confirm.setLoading(titleLoading || '录入中', bodyLoading || '请稍候…')
+  try {
+    const msg = await action()
+    confirm.setResult(true, msg || '✅ 成功')
+  } catch (e) {
+    confirm.setResult(false, `❌ 失败：${e?.message || String(e)}`)
+  }
+  await confirm.waitAck()
 }
 
-function orgCloseModal() {
-  closeModal(orgModal)
-}
+orgClose.addEventListener('click', () => closeModal(orgModal))
+orgEditCancel.addEventListener('click', () => closeModal(orgModal))
 
-orgClose.addEventListener('click', orgCloseModal)
 orgReset.addEventListener('click', () => {
-  orgFillForm({
-    organization_short_name: '',
-    organization_full_name: '',
-    establish_year: '',
-    organization_slug: ''
-  })
+  orgClearErrors()
+  orgResetToEmpty()
 })
-orgSubmit.addEventListener('click', orgSubmitCreate)
+orgEditReset.addEventListener('click', () => {
+  orgClearErrors()
+  if (orgPrefillSnap) applyPrefill(orgSetters(), orgPrefillSnap)
+})
 
-orgEditReset.addEventListener('click', orgResetToPrefill)
-orgEditCancel.addEventListener('click', orgCloseModal)
-orgEditSubmit.addEventListener('click', orgSubmitEdit)
+orgSubmit.addEventListener('click', async () => {
+  if (!orgValidate()) return
+
+  const payload = orgCollectPayload()
+  const token = getToken()
+
+  orgSubmit.disabled = true
+  orgReset.disabled = true
+
+  await showConfirmFlow({
+    titleLoading: '录入中',
+    bodyLoading: '写入企业/机构中…',
+    action: async () => {
+      const res = await apiFetch('/api/admin/organization', { method: 'POST', token, body: payload })
+      closeModal(orgModal)
+      orgResetToEmpty()
+      return `✅ 写入成功：organization_id = ${res?.organization?.organization_id}`
+    }
+  })
+
+  orgSubmit.disabled = false
+  orgReset.disabled = false
+})
+
+orgEditSubmit.addEventListener('click', async () => {
+  if (!orgValidate()) return
+  if (!editingOrgId) {
+    await showConfirmFlow({
+      titleLoading: '更新中',
+      bodyLoading: '缺少 organization_id（无法更新）',
+      action: async () => { throw new Error('Missing organization_id') }
+    })
+    return
+  }
+
+  const payload = orgCollectPayload()
+  const token = getToken()
+
+  orgEditSubmit.disabled = true
+  orgEditReset.disabled = true
+  orgEditCancel.disabled = true
+
+  await showConfirmFlow({
+    titleLoading: '更新中',
+    bodyLoading: '更新企业/机构中…',
+    action: async () => {
+      const res = await apiFetch(`/api/admin/organization/${editingOrgId}`, { method: 'PATCH', token, body: payload })
+      closeModal(orgModal)
+      return `✅ 更新成功：organization_id = ${res?.organization?.organization_id}`
+    }
+  })
+
+  orgEditSubmit.disabled = false
+  orgEditReset.disabled = false
+  orgEditCancel.disabled = false
+})
 
 /* =========================
- * Organization: Search -> Details -> Edit
+ * Organization Edit: Search + Info
  * ========================= */
+const btnOpenOrg = $('btnOpenOrg')
+const btnOpenOrgEdit = $('btnOpenOrgEdit')
+
 const orgSearchModal = $('orgSearchModal')
 const orgSearchClose = $('orgSearchClose')
-const orgSearchBox = $('orgSearchBox')
-const orgSearchBtn = $('orgSearchBtn')
-const orgSearchHint = $('orgSearchHint')
-const orgSearchResults = $('orgSearchResults')
+const orgSearchInput = $('orgSearchInput')
+const orgSearchList = $('orgSearchList')
+const orgSearchStatus = $('orgSearchStatus')
 
-const orgDetailsModal = $('orgDetailsModal')
-const orgDetailsClose = $('orgDetailsClose')
-const orgDetailsBody = $('orgDetailsBody')
-const orgDetailsEditBtn = $('orgDetailsEditBtn')
+const orgInfoModal = $('orgInfoModal')
+const orgInfoClose = $('orgInfoClose')
+const orgInfoCancel = $('orgInfoCancel')
+const orgInfoEdit = $('orgInfoEdit')
+const orgInfoBody = $('orgInfoBody')
 
-let selectedOrg = null // { id, record }
+// ✅ admin.html 里 orgInfoModal 的标题 div 没有 id，这里用更稳的选择器
+const orgInfoTitleEl = orgInfoModal.querySelector('.modal-title')
 
-const orgSearchUI = createEntitySearch({
-  inputEl: orgSearchBox,
-  buttonEl: orgSearchBtn,
-  hintEl: orgSearchHint,
-  resultsEl: orgSearchResults,
-  placeholder: '输入企业简称/全称/slug 关键词…',
-  onSearch: async (q) => {
+let currentOrgDetail = null
+
+orgSearchClose.addEventListener('click', () => closeModal(orgSearchModal))
+orgInfoClose.addEventListener('click', () => closeModal(orgInfoModal))
+orgInfoCancel.addEventListener('click', () => closeModal(orgInfoModal))
+
+function orgDisplayName(org) {
+  const full = norm(org?.organization_full_name)
+  const short = norm(org?.organization_short_name)
+  return full || short || '（未命名企业/机构）'
+}
+
+/**
+ * ✅ 企业详情弹窗：用中文字段名显示
+ * - 显示规则：full_name 优先用于标题
+ * - 行内容仍来自同一条 organization 记录
+ */
+function renderOrgInfo(org) {
+  function kv(k, v) {
+    const row = document.createElement('div')
+    row.className = 'kv'
+
+    const kk = document.createElement('div')
+    kk.className = 'kv-k'
+    kk.textContent = k
+
+    const vv = document.createElement('div')
+    vv.className = 'kv-v'
+    vv.textContent = (v === null || v === undefined || v === '') ? '—' : String(v)
+
+    row.appendChild(kk)
+    row.appendChild(vv)
+    return row
+  }
+
+  // 标题：企业名
+  if (orgInfoTitleEl) {
+    orgInfoTitleEl.textContent = `企业/机构信息：${orgDisplayName(org)}`
+  }
+
+  orgInfoBody.innerHTML = ''
+  orgInfoBody.appendChild(kv('企业简称', org.organization_short_name))
+  orgInfoBody.appendChild(kv('企业全称', org.organization_full_name))
+  orgInfoBody.appendChild(kv('成立时间', org.establish_year))
+  orgInfoBody.appendChild(kv('Slug', org.organization_slug))
+  orgInfoBody.appendChild(kv('ID', org.organization_id))
+}
+
+const orgSearch = createEntitySearch({
+  inputEl: orgSearchInput,
+  listEl: orgSearchList,
+  statusEl: orgSearchStatus,
+  searchFn: async (q) => {
     const token = getToken()
-    const data = await apiFetch('/api/admin/search/organizations', {
-      method: 'POST',
-      token,
-      body: { q }
-    })
-    return data?.items || []
+    return await apiFetch(`/api/admin/organization/search?q=${encodeURIComponent(q)}`, { token })
   },
-  renderItem: (item) => {
-    const short = item.organization_short_name || '(无简称)'
-    const full = item.organization_full_name ? ` / ${item.organization_full_name}` : ''
-    const slug = item.organization_slug ? ` (${item.organization_slug})` : ''
-    return `${short}${full}${slug}`
-  },
-  onPick: (item) => {
-    selectedOrg = { id: item.organization_id, record: item }
-    openModal(orgDetailsModal)
-    orgDetailsBody.textContent = JSON.stringify(item, null, 2)
+  renderItem: (it) => ({
+    title: it.display_name || it.organization_short_name || '（未命名）',
+    subtitle: [
+      it.organization_full_name ? `全称：${it.organization_full_name}` : null,
+      it.organization_short_name ? `简称：${it.organization_short_name}` : null,
+      it.organization_slug ? `slug：${it.organization_slug}` : null,
+    ].filter(Boolean).join(' · ')
+  }),
+  onPick: async (it) => {
+    const token = getToken()
+    try {
+      orgSearchStatus.textContent = '读取详情中…'
+      const res = await apiFetch(`/api/admin/organization/${it.organization_id}`, { token })
+      currentOrgDetail = res.organization
+      renderOrgInfo(currentOrgDetail)
+      openModal(orgInfoModal)
+    } catch (e) {
+      orgSearchStatus.textContent = `读取失败：${e?.message || String(e)}`
+    }
   }
 })
 
-function openOrgSearch() {
-  selectedOrg = null
-  openModal(orgSearchModal)
-  orgSearchUI.reset()
-}
+orgInfoEdit.addEventListener('click', () => {
+  if (!currentOrgDetail) return
 
-function closeOrgSearch() { closeModal(orgSearchModal) }
-orgSearchClose.addEventListener('click', closeOrgSearch)
-
-orgDetailsClose.addEventListener('click', () => closeModal(orgDetailsModal))
-orgDetailsEditBtn.addEventListener('click', () => {
-  if (!selectedOrg) return
-  closeModal(orgDetailsModal)
+  // ✅ 关键修复：进入编辑时，关掉“详情弹窗 + 搜索弹窗”
+  closeModal(orgInfoModal)
   closeModal(orgSearchModal)
-  orgOpenEdit(selectedOrg.id, selectedOrg.record)
+
+  setOrgModeEdit({ organization: currentOrgDetail })
+  orgClearErrors()
+  openModal(orgModal)
+})
+
+btnOpenOrg.addEventListener('click', () => {
+  setOrgModeCreate()
+  orgClearErrors()
+  orgResetToEmpty()
+  openModal(orgModal)
+})
+
+btnOpenOrgEdit.addEventListener('click', () => {
+  openModal(orgSearchModal)
+  orgSearch.clear()
+  orgSearch.focus()
 })
 
 /* =========================
- * Organization buttons
- * ========================= */
-$('btnOpenOrgCreate').addEventListener('click', orgOpenCreate)
-$('btnOpenOrgEdit').addEventListener('click', openOrgSearch)
-
-/* =========================
- * Domain: Create
+ * Domain/Product Admin (keep your existing behavior)
  * ========================= */
 const domainModal = $('domainModal')
-const domainClose = $('domainClose')
+const productModal = $('productModal')
 
+const btnOpenDomain = $('btnOpenDomain')
+const btnOpenProduct = $('btnOpenProduct')
+
+const domainClose = $('domainClose')
+const domainReset = $('domainReset')
+const domainSubmit = $('domainSubmit')
 const domainName = $('domainName')
 const domainSlug = $('domainSlug')
-
 const domainNameErr = $('domainNameErr')
 const domainSlugErr = $('domainSlugErr')
 
-const domainReset = $('domainReset')
-const domainSubmit = $('domainSubmit')
+const productClose = $('productClose')
+const productReset = $('productReset')
+const productSubmit = $('productSubmit')
+const productName = $('productName')
+const productSlug = $('productSlug')
+const productNameErr = $('productNameErr')
+const productSlugErr = $('productSlugErr')
+const productDomainsErr = $('productDomainsErr')
 
-function domainClearInvalidAll() {
+const productDomainsHost = $('productDomains')
+
+btnOpenDomain.addEventListener('click', () => openModal(domainModal))
+btnOpenProduct.addEventListener('click', () => openModal(productModal))
+domainClose.addEventListener('click', () => closeModal(domainModal))
+productClose.addEventListener('click', () => closeModal(productModal))
+
+function domainClearErrors() {
   clearInvalid(domainName, domainNameErr)
   clearInvalid(domainSlug, domainSlugErr)
 }
-
 function domainValidate() {
-  domainClearInvalidAll()
-
-  const name = norm(domainName.value)
-  const slug = norm(domainSlug.value)
-
+  domainClearErrors()
   let ok = true
-
-  if (!name) {
-    setInvalid(domainName, domainNameErr, '必须填写安全领域名称')
-    ok = false
+  if (!norm(domainName.value)) {
+    setInvalid(domainName, domainNameErr, '安全领域名称为必填。'); ok = false
   }
-
-  if (slug && !isSlug(slug)) {
-    setInvalid(domainSlug, domainSlugErr, 'Slug 仅允许小写字母/数字/连字符（如 endpoint-security）')
-    ok = false
-  }
-
+  const slug = norm(domainSlug.value)
+  if (!slug) { setInvalid(domainSlug, domainSlugErr, 'slug 为必填。'); ok = false }
+  else if (!isSlug(slug)) { setInvalid(domainSlug, domainSlugErr, 'slug 仅允许 a-z / 0-9 / 连字符 -'); ok = false }
   return ok
 }
-
-function domainCollectPayload() {
-  return {
-    security_domain_name: norm(domainName.value),
-    security_domain_slug: norm(domainSlug.value) || null
-  }
-}
-
-function domainOpenCreate() {
-  domainName.value = ''
-  domainSlug.value = ''
-  domainClearInvalidAll()
-  openModal(domainModal)
-}
-
-function domainCloseModal() { closeModal(domainModal) }
-domainClose.addEventListener('click', domainCloseModal)
 
 domainReset.addEventListener('click', () => {
+  domainClearErrors()
   domainName.value = ''
   domainSlug.value = ''
-  domainClearInvalidAll()
 })
-
 domainSubmit.addEventListener('click', async () => {
   if (!domainValidate()) return
-
   const token = getToken()
-  const payload = domainCollectPayload()
 
-  confirm.setLoading('录入中', '正在写入安全领域…')
-  try {
-    const out = await apiFetch('/api/admin/domain', {
-      method: 'POST',
-      token,
-      body: payload
-    })
-    confirm.setResult(true, `已创建：${out?.security_domain_name || payload.security_domain_name}`)
-  } catch (e) {
-    confirm.setResult(false, e.message || '创建失败')
+  const payload = {
+    security_domain_name: norm(domainName.value),
+    cybersecurity_domain_slug: norm(domainSlug.value),
   }
-  await confirm.waitAck()
+
+  domainSubmit.disabled = true
+  domainReset.disabled = true
+
+  await showConfirmFlow({
+    titleLoading: '录入中',
+    bodyLoading: '写入安全领域中…',
+    action: async () => {
+      const res = await apiFetch('/api/admin/domain', { method: 'POST', token, body: payload })
+      closeModal(domainModal)
+      domainName.value = ''
+      domainSlug.value = ''
+      return `✅ 写入成功：security_domain_id = ${res?.domain?.security_domain_id}`
+    }
+  })
+
+  domainSubmit.disabled = false
+  domainReset.disabled = false
 })
 
-$('btnOpenDomainCreate').addEventListener('click', domainOpenCreate)
-
-/* =========================
- * Product: Create + Domain link (grid)
- * ========================= */
-const productModal = $('productModal')
-const productClose = $('productClose')
-
-const productName = $('productName')
-const productSlug = $('productSlug')
-
-const productNameErr = $('productNameErr')
-const productSlugErr = $('productSlugErr')
-
-const productReset = $('productReset')
-const productSubmit = $('productSubmit')
-
-const domainGridMount = $('domainGridMount')
-const domainGridHint = $('domainGridHint')
-const domainGridRefresh = $('domainGridRefresh')
-
-const domainGrid = createMultiSelectGrid({
-  mountEl: domainGridMount,
-  hintEl: domainGridHint,
-  columns: 3,
-  rowGap: 8,
-  colGap: 10,
-  checkboxSize: 16
-})
-
-async function loadDomainsIntoGrid() {
-  const token = getToken()
-  const data = await apiFetch('/api/admin/dropdowns/domains', { token })
-  const items = (data?.items || []).map(d => ({
-    id: d.security_domain_id,
-    label: d.security_domain_name
-  }))
-  domainGrid.setItems(items)
-}
-
-domainGridRefresh.addEventListener('click', async () => {
-  confirm.setLoading('加载中', '正在刷新安全领域列表…')
-  try {
-    await loadDomainsIntoGrid()
-    confirm.setResult(true, '已刷新安全领域列表')
-  } catch (e) {
-    confirm.setResult(false, e.message || '刷新失败')
-  }
-  await confirm.waitAck()
-})
-
-function productClearInvalidAll() {
+function productClearErrors() {
   clearInvalid(productName, productNameErr)
   clearInvalid(productSlug, productSlugErr)
+  productDomainsErr.textContent = ''
+  productDomainsErr.style.display = 'none'
 }
-
-function productValidate() {
-  productClearInvalidAll()
-
-  const name = norm(productName.value)
-  const slug = norm(productSlug.value)
-
+function setProductDomainsErr(msg) {
+  productDomainsErr.textContent = msg
+  productDomainsErr.style.display = msg ? 'block' : 'none'
+}
+function productValidate(selectedDomainIds) {
+  productClearErrors()
   let ok = true
+  if (!norm(productName.value)) { setInvalid(productName, productNameErr, '安全产品名称为必填。'); ok = false }
+  const slug = norm(productSlug.value)
+  if (!slug) { setInvalid(productSlug, productSlugErr, 'slug 为必填。'); ok = false }
+  else if (!isSlug(slug)) { setInvalid(productSlug, productSlugErr, 'slug 仅允许 a-z / 0-9 / 连字符 -'); ok = false }
 
-  if (!name) {
-    setInvalid(productName, productNameErr, '必须填写安全产品名称')
+  if (!selectedDomainIds || selectedDomainIds.length === 0) {
+    setProductDomainsErr('至少选择一个安全领域。')
     ok = false
   }
-
-  if (slug && !isSlug(slug)) {
-    setInvalid(productSlug, productSlugErr, 'Slug 仅允许小写字母/数字/连字符（如 acme-av)）')
-    ok = false
-  }
-
   return ok
 }
 
-function productCollectPayload() {
-  const domainIds = domainGrid.getSelectedIds()
-  return {
-    security_product_name: norm(productName.value),
-    security_product_slug: norm(productSlug.value) || null,
-    security_domain_ids: domainIds
+let domainGrid = null
+async function refreshDomainGrid() {
+  const token = getToken()
+  const res = await apiFetch('/api/admin/dropdowns/domains', { token })
+  const rows = (res?.items || []).map(x => ({
+    id: x.security_domain_id,
+    name: x.security_domain_name,
+    _search: `${x.security_domain_name} ${x.cybersecurity_domain_slug || ''}`.trim()
+  }))
+
+  if (!domainGrid) {
+    domainGrid = createMultiSelectGrid({
+      title: '安全领域',
+      host: productDomainsHost,
+      placeholder: '搜索领域名称（也支持输入 slug 搜索，但不显示 slug）…',
+      columns: 3,
+      options: rows.map(r => ({ id: r.id, name: r.name, searchText: r._search })),
+    })
+  } else {
+    domainGrid.setOptions(rows.map(r => ({ id: r.id, name: r.name, searchText: r._search })))
   }
 }
 
-function productOpenCreate() {
-  productName.value = ''
-  productSlug.value = ''
-  productClearInvalidAll()
-  domainGrid.clearSelected()
-  openModal(productModal)
-
-  // lazy load domains
-  loadDomainsIntoGrid().catch(() => { /* silent */ })
-}
-
-function productCloseModal() { closeModal(productModal) }
-productClose.addEventListener('click', productCloseModal)
-
 productReset.addEventListener('click', () => {
+  productClearErrors()
   productName.value = ''
   productSlug.value = ''
-  productClearInvalidAll()
-  domainGrid.clearSelected()
+  domainGrid?.clear?.()
 })
 
 productSubmit.addEventListener('click', async () => {
-  if (!productValidate()) return
-
   const token = getToken()
-  const payload = productCollectPayload()
+  await refreshDomainGrid()
+  const selected = domainGrid?.getSelectedIds?.() || []
 
-  confirm.setLoading('录入中', '正在写入安全产品…')
-  try {
-    const out = await apiFetch('/api/admin/product', {
-      method: 'POST',
-      token,
-      body: payload
-    })
-    confirm.setResult(true, `已创建：${out?.security_product_name || payload.security_product_name}`)
-  } catch (e) {
-    confirm.setResult(false, e.message || '创建失败')
+  if (!productValidate(selected)) return
+
+  const payload = {
+    security_product_name: norm(productName.value),
+    security_product_slug: norm(productSlug.value),
+    domain_ids: selected
   }
-  await confirm.waitAck()
+
+  productSubmit.disabled = true
+  productReset.disabled = true
+
+  await showConfirmFlow({
+    titleLoading: '录入中',
+    bodyLoading: '写入安全产品中…',
+    action: async () => {
+      const res = await apiFetch('/api/admin/product', { method: 'POST', token, body: payload })
+      closeModal(productModal)
+      productName.value = ''
+      productSlug.value = ''
+      domainGrid?.clear?.()
+      return `✅ 写入成功：security_product_id = ${res?.product?.security_product_id}`
+    }
+  })
+
+  productSubmit.disabled = false
+  productReset.disabled = false
 })
 
-$('btnOpenProductCreate').addEventListener('click', productOpenCreate)
+btnOpenProduct.addEventListener('click', async () => {
+  openModal(productModal)
+  try { await refreshDomainGrid() } catch (e) { console.error(e) }
+})
+
+/* =========================
+ * 企业产品（organization_product）按钮暂时不处理（后面做）
+ * ========================= */
