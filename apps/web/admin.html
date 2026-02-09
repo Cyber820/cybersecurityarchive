@@ -10,7 +10,8 @@
     .wrap { max-width: 980px; margin: 0 auto; padding: 16px; }
     h1 { margin: 0 0 12px; font-size: 20px; }
 
-    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0 18px; }
+    .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0 0; }
+    .toolbar + .toolbar { margin-top: 10px; }
     .btn {
       border: 1px solid var(--bd2);
       background: #fff;
@@ -25,7 +26,7 @@
       border: 1px solid var(--bd);
       border-radius: 12px;
       padding: 12px;
-      margin-top: 10px;
+      margin-top: 14px;
       background: #fff;
     }
     .row { display: grid; grid-template-columns: 140px 1fr; gap: 10px; align-items: start; margin: 10px 0; }
@@ -46,7 +47,6 @@
     .err { display:none; margin-top: 6px; color: #b00020; font-size: 12px; }
     [aria-invalid="true"] { border-color: #b00020 !important; }
 
-    /* modal */
     .modal-overlay {
       position: fixed;
       inset: 0;
@@ -71,7 +71,6 @@
     .modal-title { font-size: 16px; font-weight: 800; }
     .modal-actions { display:flex; justify-content:flex-end; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
 
-    /* confirm modal */
     .confirm-overlay {
       position: fixed;
       inset: 0;
@@ -94,7 +93,6 @@
     .confirm-body { font-size: 13px; color: var(--txt); white-space: pre-wrap; }
     .confirm-actions { display:flex; justify-content:flex-end; gap: 10px; margin-top: 12px; }
 
-    /* ===== multi-select panel (used by product domains) ===== */
     .ia-ms { border: 1px solid var(--bd); border-radius: 12px; padding: 10px; }
     .ia-ms-head { display:flex; align-items:center; justify-content:space-between; gap: 10px; }
     .ia-ms-title { font-size: 13px; font-weight: 800; }
@@ -121,12 +119,10 @@
       display:none;
     }
 
-    /* simple KV in info modal */
     .kv { display:flex; gap:10px; padding:6px 0; border-bottom:1px solid rgba(0,0,0,0.08); }
     .kv-k { width:160px; flex:0 0 160px; font-weight:700; font-size:13px; color:rgba(0,0,0,.75); }
     .kv-v { flex:1 1 auto; min-width:0; font-size:13px; white-space:pre-wrap; word-break:break-word; }
 
-    /* search list items */
     .es-item{
       border:1px solid rgba(0,0,0,0.12);
       border-radius:12px;
@@ -145,13 +141,15 @@
   <div class="wrap">
     <h1>Industry Archive Admin</h1>
 
-    <div class="toolbar">
+    <div class="toolbar add-row">
       <button id="btnOpenOrg" class="btn btn-primary" type="button">添加企业/机构</button>
-      <button id="btnOpenOrgEdit" class="btn" type="button">编辑企业/机构</button>
+      <button id="btnOpenDomain" class="btn" type="button">添加安全领域</button>
+      <button id="btnOpenProduct" class="btn" type="button">添加安全产品</button>
+      <button id="btnOpenOrgProduct" class="btn" type="button">添加企业产品</button>
+    </div>
 
-      <button id="btnOpenDomain" class="btn" type="button">录入安全领域</button>
-      <button id="btnOpenProduct" class="btn" type="button">录入安全产品</button>
-      <button id="btnOpenOrgProduct" class="btn" type="button">录入企业产品</button>
+    <div class="toolbar edit-row">
+      <button id="btnOpenOrgEdit" class="btn" type="button">编辑企业/机构</button>
     </div>
 
     <div class="card">
@@ -201,9 +199,17 @@
         </div>
       </div>
 
+      <div class="row">
+        <div class="label">企业/机构描述</div>
+        <div>
+          <textarea id="orgDescription" class="textarea" rows="6" placeholder="选填：organization_description（可写简介、业务范围、备注等）"></textarea>
+          <div class="hint">可为空。</div>
+        </div>
+      </div>
+
       <div class="modal-actions" id="orgActionsCreate">
         <button id="orgReset" class="btn" type="button">清空</button>
-        <button id="orgSubmit" class="btn btn-primary" type="button">录入</button>
+        <button id="orgSubmit" class="btn btn-primary" type="button">添加</button>
       </div>
 
       <div class="modal-actions" id="orgActionsEdit" style="display:none;">
@@ -255,7 +261,7 @@
   <div id="domainModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="录入安全领域">
       <div class="modal-head">
-        <div class="modal-title">录入安全领域</div>
+        <div class="modal-title">添加安全领域</div>
         <button id="domainClose" class="btn" type="button">关闭</button>
       </div>
 
@@ -321,7 +327,7 @@
 
       <div class="modal-actions">
         <button id="domainReset" class="btn" type="button">清空</button>
-        <button id="domainSubmit" class="btn btn-primary" type="button">录入</button>
+        <button id="domainSubmit" class="btn btn-primary" type="button">添加</button>
       </div>
     </div>
   </div>
@@ -329,7 +335,7 @@
   <div id="productModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="录入安全产品">
       <div class="modal-head">
-        <div class="modal-title">录入安全产品</div>
+        <div class="modal-title">添加安全产品</div>
         <button id="productClose" class="btn" type="button">关闭</button>
       </div>
 
@@ -404,16 +410,15 @@
 
       <div class="modal-actions">
         <button id="productReset" class="btn" type="button">清空</button>
-        <button id="productSubmit" class="btn btn-primary" type="button">录入</button>
+        <button id="productSubmit" class="btn btn-primary" type="button">添加</button>
       </div>
     </div>
   </div>
 
-  <!-- NEW: Org Product Modal -->
   <div id="orgProductModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="录入企业产品">
       <div class="modal-head">
-        <div class="modal-title">录入企业产品</div>
+        <div class="modal-title">添加企业产品</div>
         <button id="orgProductClose" class="btn" type="button">关闭</button>
       </div>
 
@@ -479,14 +484,14 @@
 
       <div class="modal-actions">
         <button id="orgProductReset" class="btn" type="button">清空</button>
-        <button id="orgProductSubmit" class="btn btn-primary" type="button">录入</button>
+        <button id="orgProductSubmit" class="btn btn-primary" type="button">添加</button>
       </div>
     </div>
   </div>
 
   <div id="confirmOverlay" class="confirm-overlay" aria-hidden="true">
     <div class="confirm" role="dialog" aria-modal="true" aria-label="状态">
-      <div id="confirmTitle" class="confirm-title">录入中</div>
+      <div id="confirmTitle" class="confirm-title">处理中</div>
       <div id="confirmBody" class="confirm-body">请稍候…</div>
       <div class="confirm-actions">
         <button id="confirmOk" class="btn btn-primary" type="button">确定</button>
