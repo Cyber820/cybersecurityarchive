@@ -1,5 +1,4 @@
 // apps/web/src/admin.js
-import { createMultiSelectGrid } from './ui/multiselect-grid.js'
 import { createEntitySearch } from './ui/entity-search.js'
 import { capturePrefill, applyPrefill } from './ui/prefill.js'
 import {
@@ -14,6 +13,7 @@ import {
 import { apiFetch, initAdminTokenInput } from './core/api.js'
 import { initConfirm } from './core/confirm.js'
 import { mountDomainAdmin } from './features/domain.js'
+import { mountProductAdmin } from './features/product.js'
 
 /* =========================
  * Confirm (loading -> result -> ack)
@@ -26,7 +26,7 @@ const { showConfirmFlow } = initConfirm({ $, openModal, closeModal })
 const { getToken } = initAdminTokenInput($('tokenInput'), { storageKey: 'ia_admin_token' })
 
 /* =========================
- * Domain Admin (NEW: description + alias)
+ * Domain Admin（description + alias）
  * ========================= */
 mountDomainAdmin({
   $,
@@ -42,7 +42,24 @@ mountDomainAdmin({
 })
 
 /* =========================
+ * Product Admin（NEW: description + alias）
+ * ========================= */
+mountProductAdmin({
+  $,
+  openModal,
+  closeModal,
+  setInvalid,
+  clearInvalid,
+  norm,
+  isSlug,
+  apiFetch,
+  getToken,
+  showConfirmFlow,
+})
+
+/* =========================
  * Organization: Create + Edit shared form
+ * （保持你现有可用逻辑）
  * ========================= */
 const orgModal = $('orgModal')
 const orgModalTitle = $('orgModalTitle')
@@ -358,127 +375,4 @@ btnOpenOrgEdit.addEventListener('click', () => {
   openModal(orgSearchModal)
   orgSearch.clear()
   orgSearch.focus()
-})
-
-/* =========================
- * Product Admin（保持你现在这套可用逻辑）
- * ========================= */
-const productModal = $('productModal')
-const btnOpenProduct = $('btnOpenProduct')
-
-const productClose = $('productClose')
-const productReset = $('productReset')
-const productSubmit = $('productSubmit')
-const productName = $('productName')
-const productSlug = $('productSlug')
-const productNameErr = $('productNameErr')
-const productSlugErr = $('productSlugErr')
-const productDomainsErr = $('productDomainsErr')
-
-const productDomainsHost = $('productDomains')
-
-btnOpenProduct.addEventListener('click', async () => {
-  openModal(productModal)
-  try { await refreshDomainGrid() } catch (e) { console.error(e) }
-})
-productClose.addEventListener('click', () => closeModal(productModal))
-
-function productClearErrors() {
-  clearInvalid(productName, productNameErr)
-  clearInvalid(productSlug, productSlugErr)
-  productDomainsErr.textContent = ''
-  productDomainsErr.style.display = 'none'
-}
-function setProductDomainsErr(msg) {
-  productDomainsErr.textContent = msg
-  productDomainsErr.style.display = msg ? 'block' : 'none'
-}
-function productValidate(selectedDomainIds) {
-  productClearErrors()
-  let ok = true
-
-  if (!norm(productName.value)) { setInvalid(productName, productNameErr, '安全产品名称为必填。'); ok = false }
-  const slug = norm(productSlug.value)
-  if (!slug) { setInvalid(productSlug, productSlugErr, 'slug 为必填。'); ok = false }
-  else if (!isSlug(slug)) { setInvalid(productSlug, productSlugErr, 'slug 仅允许 a-z / 0-9 / 连字符 -'); ok = false }
-
-  if (!selectedDomainIds || selectedDomainIds.length === 0) {
-    setProductDomainsErr('至少选择一个安全领域。')
-    ok = false
-  }
-  return ok
-}
-
-let domainGrid = null
-
-async function refreshDomainGrid() {
-  const token = getToken()
-  const res = await apiFetch('/api/admin/dropdowns/domains', { token })
-
-  const options = (res?.items || []).map(x => ({
-    id: x.id,
-    name: x.name,
-    slug: x.slug ?? null,
-    description: null,
-  }))
-
-  if (!domainGrid) {
-    domainGrid = createMultiSelectGrid({
-      title: '安全领域',
-      required: true,
-      placeholder: '搜索领域名称（也支持输入 slug 搜索，但不显示 slug）…',
-      columns: 3,
-      options,
-      searchText: (o) => `${o?.name ?? ''} ${o?.slug ?? ''}`.trim(),
-    })
-
-    productDomainsHost.innerHTML = ''
-    productDomainsHost.appendChild(domainGrid.element)
-  } else {
-    domainGrid.setOptions(options)
-  }
-}
-
-productReset.addEventListener('click', () => {
-  productClearErrors()
-  productName.value = ''
-  productSlug.value = ''
-  domainGrid?.clear?.()
-})
-
-productSubmit.addEventListener('click', async () => {
-  const token = getToken()
-  await refreshDomainGrid()
-
-  const selectedRaw = domainGrid?.getValues?.() || []
-  const selected = selectedRaw
-    .map(x => Number(x))
-    .filter(n => Number.isFinite(n))
-
-  if (!productValidate(selected)) return
-
-  const payload = {
-    security_product_name: norm(productName.value),
-    security_product_slug: norm(productSlug.value),
-    domains: selected,
-  }
-
-  productSubmit.disabled = true
-  productReset.disabled = true
-
-  await showConfirmFlow({
-    titleLoading: '录入中',
-    bodyLoading: '写入安全产品中…',
-    action: async () => {
-      const res = await apiFetch('/api/admin/product', { method: 'POST', token, body: payload })
-      closeModal(productModal)
-      productName.value = ''
-      productSlug.value = ''
-      domainGrid?.clear?.()
-      return `✅ 写入成功：security_product_id = ${res?.product?.security_product_id ?? res?.security_product_id ?? '（未返回）'}`
-    }
-  })
-
-  productSubmit.disabled = false
-  productReset.disabled = false
 })
