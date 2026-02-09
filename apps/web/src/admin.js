@@ -12,63 +12,12 @@ import {
   isSlug,
 } from './core/dom.js'
 import { apiFetch, initAdminTokenInput } from './core/api.js'
+import { initConfirm } from './core/confirm.js'
 
 /* =========================
  * Confirm (loading -> result -> ack)
  * ========================= */
-function createConfirm() {
-  const overlay = $('confirmOverlay')
-  const titleEl = $('confirmTitle')
-  const bodyEl = $('confirmBody')
-  const okBtn = $('confirmOk')
-
-  let resolver = null
-
-  function open() { openModal(overlay) }
-  function close() { closeModal(overlay) }
-
-  function setLoading(title = '录入中', body = '请稍候…') {
-    titleEl.textContent = title
-    bodyEl.textContent = body
-    okBtn.disabled = true
-    open()
-  }
-
-  function setResult(ok, message) {
-    titleEl.textContent = ok ? '完成' : '失败'
-    bodyEl.textContent = message || ''
-    okBtn.disabled = false
-    open()
-  }
-
-  function waitAck() {
-    return new Promise((resolve) => {
-      resolver = resolve
-      const onClick = () => {
-        okBtn.removeEventListener('click', onClick)
-        close()
-        resolver && resolver(true)
-        resolver = null
-      }
-      okBtn.addEventListener('click', onClick)
-    })
-  }
-
-  return { setLoading, setResult, waitAck }
-}
-
-const confirm = createConfirm()
-
-async function showConfirmFlow({ titleLoading, bodyLoading, action }) {
-  confirm.setLoading(titleLoading || '录入中', bodyLoading || '请稍候…')
-  try {
-    const msg = await action()
-    confirm.setResult(true, msg || '✅ 成功')
-  } catch (e) {
-    confirm.setResult(false, `❌ 失败：${e?.message || String(e)}`)
-  }
-  await confirm.waitAck()
-}
+const { confirm, showConfirmFlow } = initConfirm({ $, openModal, closeModal })
 
 /* =========================
  * Admin token (input + localStorage)
