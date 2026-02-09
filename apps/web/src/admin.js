@@ -12,17 +12,18 @@ import {
 } from './core/dom.js'
 import { apiFetch, initAdminTokenInput } from './core/api.js'
 import { initConfirm } from './core/confirm.js'
+
 import { mountDomainAdmin } from './features/domain.js'
 import { mountProductAdmin } from './features/product.js'
 import { mountOrgProductAdmin } from './features/org-product.js'
 
 /* =========================
- * Confirm
+ * Confirm (loading -> result -> ack)
  * ========================= */
-const { showConfirmFlow } = initConfirm({ $, openModal, closeModal }),
+const { showConfirmFlow } = initConfirm({ $, openModal, closeModal })
 
 /* =========================
- * Admin token
+ * Admin token (input + localStorage)
  * ========================= */
 const { getToken } = initAdminTokenInput($('tokenInput'), { storageKey: 'ia_admin_token' })
 
@@ -59,7 +60,7 @@ mountProductAdmin({
 })
 
 /* =========================
- * Org-Product Admin (NEW)
+ * Organization Product Admin (NEW)
  * ========================= */
 mountOrgProductAdmin({
   $,
@@ -74,7 +75,7 @@ mountOrgProductAdmin({
 })
 
 /* =========================
- * Organization: Create + Edit
+ * Organization: Create + Edit shared form
  * ========================= */
 const orgModal = $('orgModal')
 const orgModalTitle = $('orgModalTitle')
@@ -306,12 +307,15 @@ function renderOrgInfo(org) {
   function kv(k, v) {
     const row = document.createElement('div')
     row.className = 'kv'
+
     const kk = document.createElement('div')
     kk.className = 'kv-k'
     kk.textContent = k
+
     const vv = document.createElement('div')
     vv.className = 'kv-v'
     vv.textContent = (v === null || v === undefined || v === '') ? '—' : String(v)
+
     row.appendChild(kk)
     row.appendChild(vv)
     return row
