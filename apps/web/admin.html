@@ -58,7 +58,7 @@
       padding: 16px;
     }
     .modal {
-      width: min(860px, 100%);
+      width: min(1040px, 100%); /* ✅ 加宽：减少多选弹层出现横向滚动 */
       max-height: 85vh;
       overflow: auto;
       border: 1px solid var(--bd);
@@ -113,7 +113,6 @@
     }
     .ia-ms-iconbtn:disabled{opacity:.6;cursor:not-allowed;}
     .ia-ms-summary{ margin-top:8px; font-size:12px; color: var(--muted); white-space:pre-wrap; }
-
     .ia-ms-panel{
       margin-top:10px;
       border:1px solid var(--bd);
@@ -127,7 +126,7 @@
     .kv-k { width:160px; flex:0 0 160px; font-weight:700; font-size:13px; color:rgba(0,0,0,.75); }
     .kv-v { flex:1 1 auto; min-width:0; font-size:13px; white-space:pre-wrap; word-break:break-word; }
 
-    /* search list items (entity-search uses inline cards) */
+    /* search list items */
     .es-item{
       border:1px solid rgba(0,0,0,0.12);
       border-radius:12px;
@@ -162,7 +161,7 @@
     </div>
   </div>
 
-  <!-- 添加/编辑企业/机构 Modal -->
+  <!-- 组织：添加/编辑 Modal -->
   <div id="orgModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="企业/机构">
       <div class="modal-head">
@@ -216,7 +215,7 @@
     </div>
   </div>
 
-  <!-- 编辑：搜索企业/机构 Modal -->
+  <!-- 组织：搜索 Modal -->
   <div id="orgSearchModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="搜索企业/机构">
       <div class="modal-head">
@@ -239,7 +238,7 @@
     </div>
   </div>
 
-  <!-- 编辑：企业详情（只读）Modal -->
+  <!-- 组织：详情 Modal -->
   <div id="orgInfoModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="企业信息">
       <div class="modal-head">
@@ -256,7 +255,7 @@
     </div>
   </div>
 
-  <!-- 录入安全领域 Modal（NEW: description + alias） -->
+  <!-- Domain Modal（保持你上一轮的结构） -->
   <div id="domainModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="录入安全领域">
       <div class="modal-head">
@@ -331,7 +330,7 @@
     </div>
   </div>
 
-  <!-- 录入安全产品 Modal -->
+  <!-- Product Modal（NEW: description + alias） -->
   <div id="productModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="录入安全产品">
       <div class="modal-head">
@@ -342,12 +341,24 @@
       <div class="row">
         <div class="label">安全产品名称 *</div>
         <div>
-          <input id="productName" class="input" type="text" placeholder="必填：security_product_name" />
+          <input id="productName" class="input" type="text" placeholder="必填：security_product_name / security_product_alias_name" />
           <div id="productNameErr" class="err"></div>
+          <div class="hint">当选择“是别名”时，此名称将写入别名表；当选择“否”时写入安全产品主表。</div>
         </div>
       </div>
 
       <div class="row">
+        <div class="label">是否是安全产品别名 *</div>
+        <div>
+          <select id="productIsAlias" class="input">
+            <option value="no">否（新增安全产品）</option>
+            <option value="yes">是（新增别名，归属已有产品）</option>
+          </select>
+          <div id="productIsAliasErr" class="err"></div>
+        </div>
+      </div>
+
+      <div id="productSlugRow" class="row">
         <div class="label">安全产品 slug *</div>
         <div>
           <input id="productSlug" class="input" type="text" placeholder="必填：security_product_slug（英文/数字/连字符）" />
@@ -356,12 +367,43 @@
         </div>
       </div>
 
-      <div class="row">
+      <div id="productDomainsRow" class="row">
         <div class="label">对应安全领域 *</div>
         <div>
           <div id="productDomains" class="ia-ms"></div>
           <div id="productDomainsErr" class="err"></div>
           <div class="hint">点击 ▾ 展开，搜索 + 三列勾选；点“确认”才生效；点 × 清空。</div>
+        </div>
+      </div>
+
+      <div id="productDescRow" class="row">
+        <div class="label">安全产品描述</div>
+        <div>
+          <textarea id="productDesc" class="textarea" rows="6" placeholder="选填：security_product_description（可写产品定位、功能、备注等）"></textarea>
+          <div class="hint">可为空。</div>
+        </div>
+      </div>
+
+      <div id="productAliasTargetRow" class="row" style="display:none;">
+        <div class="label">归属安全产品 *</div>
+        <div>
+          <div class="card" style="margin-top:0;">
+            <div class="label">选择归属产品（单选）</div>
+            <div class="hint" id="productAliasTargetPicked" style="margin-top:6px;">未选择（请在下方搜索并点击一个安全产品）</div>
+
+            <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
+              <button id="productAliasTargetClear" class="btn" type="button" style="display:none;">清除已选择</button>
+            </div>
+
+            <div style="margin-top:10px;">
+              <input id="productAliasTargetSearch" class="input" type="text" placeholder="搜索安全产品 name / slug ..." />
+              <div id="productAliasTargetStatus" class="hint" style="margin-top:6px;">输入关键字开始搜索。</div>
+              <div id="productAliasTargetList" style="margin-top:10px;"></div>
+              <div id="productAliasTargetErr" class="err"></div>
+            </div>
+          </div>
+
+          <div class="hint">别名表写入：security_product_alias_name（=上面的“安全产品名称”） + security_product_id（=这里选中的产品ID）。</div>
         </div>
       </div>
 
@@ -372,7 +414,7 @@
     </div>
   </div>
 
-  <!-- 录入状态 Confirm -->
+  <!-- Confirm -->
   <div id="confirmOverlay" class="confirm-overlay" aria-hidden="true">
     <div class="confirm" role="dialog" aria-modal="true" aria-label="状态">
       <div id="confirmTitle" class="confirm-title">录入中</div>
