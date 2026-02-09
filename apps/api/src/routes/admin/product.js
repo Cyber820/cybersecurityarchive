@@ -5,21 +5,19 @@ import { requireAdmin } from './auth.js'
 /**
  * POST /api/admin/product
  *
- * Body (示例):
+ * 1) 新增安全产品（非别名）：
  * {
- *   "security_product_name": "Acme WAF",
- *   "security_product_slug": "acme-waf",
- *   "domains": [1,2,3]
+ *   "security_product_name": "...",
+ *   "security_product_slug": "...",
+ *   "security_product_description": "..." | null,
+ *   "domains": [1,2,3] // number[] (security_domain_id) 或 string[] (domain slug)
  * }
  *
- * domains 支持两种形式：
- * - number[]: 直接传 security_domain_id
- * - string[]: 传 cybersecurity_domain_slug（会自动 lookup id）
- *
- * 返回：
+ * 2) 新增安全产品别名：
  * {
- *   product: {...},
- *   domains_bound: [{security_domain_id:..}, ...]
+ *   "is_alias": true,
+ *   "security_product_alias_name": "...",
+ *   "security_product_id": 123
  * }
  */
 export function registerProductAdmin(app) {
@@ -27,7 +25,47 @@ export function registerProductAdmin(app) {
     if (!requireAdmin(req, reply)) return
 
     const body = req.body || {}
-    const { domains, ...productPayload } = body
+    const isAlias = body.is_alias === true
+
+    if (isAlias) {
+      const aliasName = String(body.security_product_alias_name || '').trim()
+      const productId = Number(body.security_product_id)
+
+      if (!aliasName) return reply.code(400).send({ error: 'security_product_alias_name is required' })
+      if (!Number.isFinite(productId)) return reply.code(400).send({ error: 'security_product_id must be a number' })
+
+      const payload = {
+        security_product_alias_name: aliasName,
+        security_product_id: productId
+      }
+
+      const { data: alias, error } = await supabase
+        .from('cybersecurity_product_alias')
+        .insert(payload)
+        .select('*')
+        .single()
+
+      if (error) return reply.code(400).send({ error: error.message })
+      return reply.send({ alias })
+    }
+
+    // non-alias
+    const name = String(body.security_product_name || '').trim()
+    const slug = String(body.security_product_slug || '').trim()
+    const descRaw = body.security_product_description
+    const domains = body.domains
+
+    if (!name) return reply.code(400).send({ error: 'security_product_name is required' })
+    if (!slug) return reply.code(400).send({ error: 'security_product_slug is required' })
+
+    const productPayload = {
+      security_product_name: name,
+      security_product_slug: slug,
+      security_product_description:
+        (descRaw === null || descRaw === undefined || String(descRaw).trim() === '')
+          ? null
+          : String(descRaw)
+    }
 
     // 1) create product
     const { data: product, error: pErr } = await supabase
