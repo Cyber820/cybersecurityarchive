@@ -1,4 +1,4 @@
-// apps/web/src/admin.js
+// apps/web/src/admin.js 
 import { $ , openModal, closeModal, setInvalid, clearInvalid, norm, isSlug } from './core/dom.js'
 import { apiFetch, initAdminTokenInput } from './core/api.js'
 import { initConfirm } from './core/confirm.js'
