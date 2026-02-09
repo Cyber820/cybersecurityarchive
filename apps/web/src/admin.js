@@ -1,4 +1,4 @@
-// apps/web/src/admin.js
+// apps/web/src/admin.js 
 import { createEntitySearch } from './ui/entity-search.js'
 import { capturePrefill, applyPrefill } from './ui/prefill.js'
 import {
