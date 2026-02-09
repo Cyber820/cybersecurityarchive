@@ -1,4 +1,4 @@
-// apps/web/src/admin.js 
+// apps/web/src/admin.js
 import { createEntitySearch } from './ui/entity-search.js'
 import { capturePrefill, applyPrefill } from './ui/prefill.js'
 import {
@@ -20,12 +20,12 @@ import { mountOrgProductAdmin } from './features/org-product.js'
 /* =========================
  * Confirm (loading -> result -> ack)
  * ========================= */
-const { showConfirmFlow } = initConfirm({ $, openModal, closeModal })
+const { showConfirmFlow } = initConfirm({ $, openModal, closeModal });
 
 /* =========================
  * Admin token (input + localStorage)
  * ========================= */
-const { getToken } = initAdminTokenInput($('tokenInput'), { storageKey: 'ia_admin_token' })
+const { getToken } = initAdminTokenInput($('tokenInput'), { storageKey: 'ia_admin_token' });
 
 /* =========================
  * Domain Admin
@@ -41,7 +41,7 @@ mountDomainAdmin({
   apiFetch,
   getToken,
   showConfirmFlow,
-})
+});
 
 /* =========================
  * Product Admin
@@ -57,7 +57,7 @@ mountProductAdmin({
   apiFetch,
   getToken,
   showConfirmFlow,
-})
+});
 
 /* =========================
  * Organization Product Admin (NEW)
@@ -72,7 +72,7 @@ mountOrgProductAdmin({
   apiFetch,
   getToken,
   showConfirmFlow,
-})
+});
 
 /* =========================
  * Organization: Create + Edit shared form
