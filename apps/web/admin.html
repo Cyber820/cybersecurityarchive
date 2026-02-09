@@ -30,7 +30,7 @@
     }
     .row { display: grid; grid-template-columns: 140px 1fr; gap: 10px; align-items: start; margin: 10px 0; }
     .label { font-size: 13px; font-weight: 700; }
-    .input, .textarea {
+    .input, .textarea, select.input {
       width: 100%;
       box-sizing: border-box;
       border: 1px solid var(--bd2);
@@ -94,7 +94,7 @@
     .confirm-body { font-size: 13px; color: var(--txt); white-space: pre-wrap; }
     .confirm-actions { display:flex; justify-content:flex-end; gap: 10px; margin-top: 12px; }
 
-    /* ===== multi-select panel (kept, used by product domains) ===== */
+    /* ===== multi-select panel (used by product domains) ===== */
     .ia-ms { border: 1px solid var(--bd); border-radius: 12px; padding: 10px; }
     .ia-ms-head { display:flex; align-items:center; justify-content:space-between; gap: 10px; }
     .ia-ms-title { font-size: 13px; font-weight: 800; }
@@ -126,6 +126,19 @@
     .kv { display:flex; gap:10px; padding:6px 0; border-bottom:1px solid rgba(0,0,0,0.08); }
     .kv-k { width:160px; flex:0 0 160px; font-weight:700; font-size:13px; color:rgba(0,0,0,.75); }
     .kv-v { flex:1 1 auto; min-width:0; font-size:13px; white-space:pre-wrap; word-break:break-word; }
+
+    /* search list items (entity-search uses inline cards) */
+    .es-item{
+      border:1px solid rgba(0,0,0,0.12);
+      border-radius:12px;
+      padding:10px;
+      cursor:pointer;
+      background:#fff;
+      margin:8px 0;
+    }
+    .es-item:hover{ border-color: rgba(0,0,0,0.25); }
+    .es-title{ font-weight:800; font-size:14px; }
+    .es-subtitle{ margin-top:4px; font-size:12px; color: rgba(0,0,0,0.65); }
   </style>
 </head>
 
@@ -149,7 +162,7 @@
     </div>
   </div>
 
-  <!-- 添加/编辑企业/机构 Modal（同一个表单，admin.js 控制 mode） -->
+  <!-- 添加/编辑企业/机构 Modal -->
   <div id="orgModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="企业/机构">
       <div class="modal-head">
@@ -243,7 +256,7 @@
     </div>
   </div>
 
-  <!-- 录入安全领域 Modal（保留你现有的，admin.js 会继续绑定） -->
+  <!-- 录入安全领域 Modal（NEW: description + alias） -->
   <div id="domainModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="录入安全领域">
       <div class="modal-head">
@@ -254,17 +267,60 @@
       <div class="row">
         <div class="label">安全领域名称 *</div>
         <div>
-          <input id="domainName" class="input" type="text" placeholder="必填：security_domain_name" />
+          <input id="domainName" class="input" type="text" placeholder="必填：security_domain_name / security_domain_alias_name" />
           <div id="domainNameErr" class="err"></div>
+          <div class="hint">当选择“是别名”时，此名称将写入别名表；当选择“否”时写入安全领域主表。</div>
         </div>
       </div>
 
       <div class="row">
+        <div class="label">是否是安全领域别名 *</div>
+        <div>
+          <select id="domainIsAlias" class="input">
+            <option value="no">否（新增安全领域）</option>
+            <option value="yes">是（新增别名，归属已有领域）</option>
+          </select>
+          <div id="domainIsAliasErr" class="err"></div>
+        </div>
+      </div>
+
+      <div id="domainSlugRow" class="row">
         <div class="label">安全领域 slug *</div>
         <div>
           <input id="domainSlug" class="input" type="text" placeholder="必填：cybersecurity_domain_slug（英文/数字/连字符）" />
           <div id="domainSlugErr" class="err"></div>
           <div class="hint">规则：仅允许 a-z / 0-9 / 连字符 -（建议小写）。</div>
+        </div>
+      </div>
+
+      <div id="domainDescRow" class="row">
+        <div class="label">安全领域描述</div>
+        <div>
+          <textarea id="domainDesc" class="textarea" rows="6" placeholder="选填：security_domain_description（可写定义、范围、备注等）"></textarea>
+          <div class="hint">可为空。</div>
+        </div>
+      </div>
+
+      <div id="domainAliasTargetRow" class="row" style="display:none;">
+        <div class="label">归属安全领域 *</div>
+        <div>
+          <div class="card" style="margin-top:0;">
+            <div class="label">选择归属领域（单选）</div>
+            <div class="hint" id="domainAliasTargetPicked" style="margin-top:6px;">未选择（请在下方搜索并点击一个安全领域）</div>
+
+            <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
+              <button id="domainAliasTargetClear" class="btn" type="button" style="display:none;">清除已选择</button>
+            </div>
+
+            <div style="margin-top:10px;">
+              <input id="domainAliasTargetSearch" class="input" type="text" placeholder="搜索安全领域 name / slug ..." />
+              <div id="domainAliasTargetStatus" class="hint" style="margin-top:6px;">输入关键字开始搜索。</div>
+              <div id="domainAliasTargetList" style="margin-top:10px;"></div>
+              <div id="domainAliasTargetErr" class="err"></div>
+            </div>
+          </div>
+
+          <div class="hint">别名表写入：security_domain_alias_name（=上面的“安全领域名称”） + security_domain_id（=这里选中的领域ID）。</div>
         </div>
       </div>
 
@@ -275,7 +331,7 @@
     </div>
   </div>
 
-  <!-- 录入安全产品 Modal（保留你现有的，admin.js 会继续绑定） -->
+  <!-- 录入安全产品 Modal -->
   <div id="productModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="录入安全产品">
       <div class="modal-head">
