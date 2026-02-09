@@ -4,7 +4,7 @@ import { requireAdmin } from './auth.js'
 
 export function registerDropdownAdmin(app) {
   /**
-   * Base dropdowns (existing)
+   * Base dropdowns (existing / compatible)
    */
   app.get('/dropdowns/products', async (req, reply) => {
     if (!requireAdmin(req, reply)) return
@@ -68,16 +68,11 @@ export function registerDropdownAdmin(app) {
 
   /**
    * =========================
-   * UNION dropdowns (NEW)
-   * 目标：后续 organization_product 录入时，同时搜主表+别名表
-   *
-   * 约定返回：
-   * - id: "p:<product_id>" 或 "a:<alias_id>"（保证唯一且可区分来源）
-   * - kind: "product" | "alias"
-   * - product_id: 归一后的主产品ID（organization_product 最终要写的就是这个）
-   * - name: 显示名（alias 用 alias_name；product 用 product_name）
-   * - slug: 仅对 product 有；alias 为 null（必要时可扩展为关联 product slug）
-   * - extra: 方便 debug/展示（例如 alias->product_name）
+   * UNION dropdowns (FIXED)
+   * 关键修复：不在 .or() 里引用嵌套关系字段
+   * 改用两段式：
+   * - 先从主表拿匹配到的主表 IDs
+   * - alias 表：alias_name ilike + security_*_id in (主表 IDs)
    * =========================
    */
 
@@ -87,49 +82,75 @@ export function registerDropdownAdmin(app) {
 
     const q = String(req.query?.q || '').trim()
     const limit = clampInt(req.query?.limit, 200, 1, 500)
+    const like = escapeLike(q)
 
-    // 1) 主产品
-    let q1 = supabase
+    // 1) 主产品（可搜索 name/slug）
+    let qProd = supabase
       .from('cybersecurity_product')
       .select('security_product_id, security_product_name, security_product_slug')
       .order('security_product_name', { ascending: true })
       .limit(limit)
 
     if (q) {
-      q1 = q1.or(
-        `security_product_name.ilike.%${escapeLike(q)}%,security_product_slug.ilike.%${escapeLike(q)}%`
+      qProd = qProd.or(
+        `security_product_name.ilike.%${like}%,security_product_slug.ilike.%${like}%`
       )
     }
 
-    // 2) 别名（带上归属主产品信息，便于展示/校验）
-    // 表：cybersecurity_product_alias
-    // 字段：security_product_alias_id, security_product_alias_name, security_product_id
-    // 关联：cybersecurity_product(security_product_id)
-    let q2 = supabase
-      .from('cybersecurity_product_alias')
-      .select(
-        'security_product_alias_id, security_product_alias_name, security_product_id,' +
-          'cybersecurity_product:security_product_id (security_product_name, security_product_slug)'
-      )
-      .order('security_product_alias_name', { ascending: true })
-      .limit(limit)
+    const rProd = await qProd
+    if (rProd.error) return reply.code(400).send({ error: rProd.error.message })
 
+    const products = rProd.data || []
+    const matchedProductIds = products.map(x => x.security_product_id)
+
+    // 2) alias：两路合并
+    // 2.1 alias_name 命中
+    let aliasRows = []
     if (q) {
-      // alias name + 归属产品名/slug 都参与搜索
-      const like = escapeLike(q)
-      q2 = q2.or(
-        `security_product_alias_name.ilike.%${like}%,` +
-          `cybersecurity_product.security_product_name.ilike.%${like}%,` +
-          `cybersecurity_product.security_product_slug.ilike.%${like}%`
-      )
+      const rA1 = await supabase
+        .from('cybersecurity_product_alias')
+        .select('security_product_alias_id, security_product_alias_name, security_product_id')
+        .ilike('security_product_alias_name', `%${like}%`)
+        .order('security_product_alias_name', { ascending: true })
+        .limit(limit)
+
+      if (rA1.error) return reply.code(400).send({ error: rA1.error.message })
+      aliasRows = aliasRows.concat(rA1.data || [])
     }
 
-    const [r1, r2] = await Promise.all([q1, q2])
+    // 2.2 归属产品命中（name/slug 命中导致 productIds 命中）
+    if (q && matchedProductIds.length) {
+      const rA2 = await supabase
+        .from('cybersecurity_product_alias')
+        .select('security_product_alias_id, security_product_alias_name, security_product_id')
+        .in('security_product_id', matchedProductIds)
+        .order('security_product_alias_name', { ascending: true })
+        .limit(limit)
 
-    if (r1.error) return reply.code(400).send({ error: r1.error.message })
-    if (r2.error) return reply.code(400).send({ error: r2.error.message })
+      if (rA2.error) return reply.code(400).send({ error: rA2.error.message })
+      aliasRows = aliasRows.concat(rA2.data || [])
+    }
 
-    const itemsProduct = (r1.data || []).map((x) => ({
+    // q 为空：给一个默认 alias 列表（否则 union 下 alias 永远为空不利于选）
+    if (!q) {
+      const rA0 = await supabase
+        .from('cybersecurity_product_alias')
+        .select('security_product_alias_id, security_product_alias_name, security_product_id')
+        .order('security_product_alias_name', { ascending: true })
+        .limit(limit)
+
+      if (rA0.error) return reply.code(400).send({ error: rA0.error.message })
+      aliasRows = rA0.data || []
+    }
+
+    // 去重 alias（可能同时命中两路）
+    aliasRows = dedupeByKey(aliasRows, (x) => x.security_product_alias_id)
+
+    // 3) 为 alias 补充 extra（产品名/slug）——不做 join/or，改成批量查主表映射
+    const aliasProductIds = Array.from(new Set(aliasRows.map(x => x.security_product_id).filter(Boolean)))
+    const prodMap = await fetchProductMap(aliasProductIds)
+
+    const itemsProduct = products.map((x) => ({
       id: `p:${x.security_product_id}`,
       kind: 'product',
       product_id: x.security_product_id,
@@ -138,22 +159,20 @@ export function registerDropdownAdmin(app) {
       extra: null,
     }))
 
-    const itemsAlias = (r2.data || []).map((x) => ({
-      id: `a:${x.security_product_alias_id}`,
-      kind: 'alias',
-      product_id: x.security_product_id,
-      name: x.security_product_alias_name,
-      slug: null,
-      extra: {
-        product_name: x.cybersecurity_product?.security_product_name ?? null,
-        product_slug: x.cybersecurity_product?.security_product_slug ?? null,
+    const itemsAlias = aliasRows.map((x) => {
+      const p = prodMap.get(x.security_product_id) || null
+      return {
+        id: `a:${x.security_product_alias_id}`,
+        kind: 'alias',
+        product_id: x.security_product_id,
+        name: x.security_product_alias_name,
+        slug: null,
+        extra: p ? { product_name: p.name, product_slug: p.slug } : null
       }
-    }))
+    })
 
-    // 合并 + 去重（按 id 唯一）
     const merged = dedupeById([...itemsProduct, ...itemsAlias])
 
-    // 简单排序：优先 product，再 alias；同类按 name
     merged.sort((a, b) => {
       const ka = a.kind === 'product' ? 0 : 1
       const kb = b.kind === 'product' ? 0 : 1
@@ -164,50 +183,77 @@ export function registerDropdownAdmin(app) {
     return reply.send({ items: merged.slice(0, limit), count: Math.min(merged.length, limit), q })
   })
 
-  // 领域 union：cybersecurity_domain + cybersecurity_domain_alias（为将来 domain union 做铺垫）
+  // 领域 union：cybersecurity_domain + cybersecurity_domain_alias
   app.get('/dropdowns/domain_union', async (req, reply) => {
     if (!requireAdmin(req, reply)) return
 
     const q = String(req.query?.q || '').trim()
     const limit = clampInt(req.query?.limit, 200, 1, 500)
+    const like = escapeLike(q)
 
-    let q1 = supabase
+    // 1) 主领域（可搜索 name/slug）
+    let qDom = supabase
       .from('cybersecurity_domain')
       .select('security_domain_id, security_domain_name, cybersecurity_domain_slug')
       .order('security_domain_name', { ascending: true })
       .limit(limit)
 
     if (q) {
-      const like = escapeLike(q)
-      q1 = q1.or(
+      qDom = qDom.or(
         `security_domain_name.ilike.%${like}%,cybersecurity_domain_slug.ilike.%${like}%`
       )
     }
 
-    let q2 = supabase
-      .from('cybersecurity_domain_alias')
-      .select(
-        'security_domain_alias_id, security_domain_alias_name, security_domain_id,' +
-          'cybersecurity_domain:security_domain_id (security_domain_name, cybersecurity_domain_slug)'
-      )
-      .order('security_domain_alias_name', { ascending: true })
-      .limit(limit)
+    const rDom = await qDom
+    if (rDom.error) return reply.code(400).send({ error: rDom.error.message })
 
+    const domains = rDom.data || []
+    const matchedDomainIds = domains.map(x => x.security_domain_id)
+
+    // 2) alias：两路合并
+    let aliasRows = []
     if (q) {
-      const like = escapeLike(q)
-      q2 = q2.or(
-        `security_domain_alias_name.ilike.%${like}%,` +
-          `cybersecurity_domain.security_domain_name.ilike.%${like}%,` +
-          `cybersecurity_domain.cybersecurity_domain_slug.ilike.%${like}%`
-      )
+      const rA1 = await supabase
+        .from('cybersecurity_domain_alias')
+        .select('security_domain_alias_id, security_domain_alias_name, security_domain_id')
+        .ilike('security_domain_alias_name', `%${like}%`)
+        .order('security_domain_alias_name', { ascending: true })
+        .limit(limit)
+
+      if (rA1.error) return reply.code(400).send({ error: rA1.error.message })
+      aliasRows = aliasRows.concat(rA1.data || [])
     }
 
-    const [r1, r2] = await Promise.all([q1, q2])
+    if (q && matchedDomainIds.length) {
+      const rA2 = await supabase
+        .from('cybersecurity_domain_alias')
+        .select('security_domain_alias_id, security_domain_alias_name, security_domain_id')
+        .in('security_domain_id', matchedDomainIds)
+        .order('security_domain_alias_name', { ascending: true })
+        .limit(limit)
 
-    if (r1.error) return reply.code(400).send({ error: r1.error.message })
-    if (r2.error) return reply.code(400).send({ error: r2.error.message })
+      if (rA2.error) return reply.code(400).send({ error: rA2.error.message })
+      aliasRows = aliasRows.concat(rA2.data || [])
+    }
 
-    const itemsDomain = (r1.data || []).map((x) => ({
+    if (!q) {
+      const rA0 = await supabase
+        .from('cybersecurity_domain_alias')
+        .select('security_domain_alias_id, security_domain_alias_name, security_domain_id')
+        .order('security_domain_alias_name', { ascending: true })
+        .limit(limit)
+
+      if (rA0.error) return reply.code(400).send({ error: rA0.error.message })
+      aliasRows = rA0.data || []
+    }
+
+    aliasRows = dedupeByKey(aliasRows, (x) => x.security_domain_alias_id)
+
+    // 3) 给 alias 补充 extra（domain_name/slug）
+    const aliasDomainIds = Array.from(new Set(aliasRows.map(x => x.security_domain_id).filter(Boolean)))
+    const domMap = await fetchDomainMap(aliasDomainIds)
+
+    const itemsDomain = domains.map((x) => ({
       id: `d:${x.security_domain_id}`,
       kind: 'domain',
       domain_id: x.security_domain_id,
@@ -216,17 +262,17 @@ export function registerDropdownAdmin(app) {
       extra: null,
     }))
 
-    const itemsAlias = (r2.data || []).map((x) => ({
-      id: `da:${x.security_domain_alias_id}`,
-      kind: 'alias',
-      domain_id: x.security_domain_id,
-      name: x.security_domain_alias_name,
-      slug: null,
-      extra: {
-        domain_name: x.cybersecurity_domain?.security_domain_name ?? null,
-        domain_slug: x.cybersecurity_domain?.cybersecurity_domain_slug ?? null,
+    const itemsAlias = aliasRows.map((x) => {
+      const d = domMap.get(x.security_domain_id) || null
+      return {
+        id: `da:${x.security_domain_alias_id}`,
+        kind: 'alias',
+        domain_id: x.security_domain_id,
+        name: x.security_domain_alias_name,
+        slug: null,
+        extra: d ? { domain_name: d.name, domain_slug: d.slug } : null
       }
-    }))
+    })
 
     const merged = dedupeById([...itemsDomain, ...itemsAlias])
 
@@ -240,6 +286,8 @@ export function registerDropdownAdmin(app) {
     return reply.send({ items: merged.slice(0, limit), count: Math.min(merged.length, limit), q })
   })
 }
+
+/* ---------------- helpers ---------------- */
 
 function clampInt(v, dflt, min, max) {
   const n = Number(v)
@@ -258,4 +306,50 @@ function dedupeById(items) {
     if (!m.has(it.id)) m.set(it.id, it)
   }
   return Array.from(m.values())
+}
+
+function dedupeByKey(items, keyFn) {
+  const m = new Map()
+  for (const it of items || []) {
+    const k = keyFn(it)
+    if (k === null || k === undefined) continue
+    if (!m.has(k)) m.set(k, it)
+  }
+  return Array.from(m.values())
+}
+
+async function fetchProductMap(productIds) {
+  const ids = (productIds || []).filter((x) => Number.isFinite(Number(x))).map(Number)
+  const uniq = Array.from(new Set(ids))
+  if (!uniq.length) return new Map()
+
+  const { data, error } = await supabase
+    .from('cybersecurity_product')
+    .select('security_product_id, security_product_name, security_product_slug')
+    .in('security_product_id', uniq)
+
+  if (error) return new Map()
+
+  return new Map((data || []).map((x) => [
+    x.security_product_id,
+    { name: x.security_product_name, slug: x.security_product_slug }
+  ]))
+}
+
+async function fetchDomainMap(domainIds) {
+  const ids = (domainIds || []).filter((x) => Number.isFinite(Number(x))).map(Number)
+  const uniq = Array.from(new Set(ids))
+  if (!uniq.length) return new Map()
+
+  const { data, error } = await supabase
+    .from('cybersecurity_domain')
+    .select('security_domain_id, security_domain_name, cybersecurity_domain_slug')
+    .in('security_domain_id', uniq)
+
+  if (error) return new Map()
+
+  return new Map((data || []).map((x) => [
+    x.security_domain_id,
+    { name: x.security_domain_name, slug: x.cybersecurity_domain_slug }
+  ]))
 }
