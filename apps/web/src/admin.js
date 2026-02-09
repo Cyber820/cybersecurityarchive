@@ -14,19 +14,20 @@ import { apiFetch, initAdminTokenInput } from './core/api.js'
 import { initConfirm } from './core/confirm.js'
 import { mountDomainAdmin } from './features/domain.js'
 import { mountProductAdmin } from './features/product.js'
+import { mountOrgProductAdmin } from './features/org-product.js'
 
 /* =========================
- * Confirm (loading -> result -> ack)
+ * Confirm
  * ========================= */
-const { showConfirmFlow } = initConfirm({ $, openModal, closeModal })
+const { showConfirmFlow } = initConfirm({ $, openModal, closeModal }),
 
 /* =========================
- * Admin token (input + localStorage)
+ * Admin token
  * ========================= */
 const { getToken } = initAdminTokenInput($('tokenInput'), { storageKey: 'ia_admin_token' })
 
 /* =========================
- * Domain Admin（description + alias）
+ * Domain Admin
  * ========================= */
 mountDomainAdmin({
   $,
@@ -42,7 +43,7 @@ mountDomainAdmin({
 })
 
 /* =========================
- * Product Admin（NEW: description + alias）
+ * Product Admin
  * ========================= */
 mountProductAdmin({
   $,
@@ -58,8 +59,22 @@ mountProductAdmin({
 })
 
 /* =========================
- * Organization: Create + Edit shared form
- * （保持你现有可用逻辑）
+ * Org-Product Admin (NEW)
+ * ========================= */
+mountOrgProductAdmin({
+  $,
+  openModal,
+  closeModal,
+  setInvalid,
+  clearInvalid,
+  norm,
+  apiFetch,
+  getToken,
+  showConfirmFlow,
+})
+
+/* =========================
+ * Organization: Create + Edit
  * ========================= */
 const orgModal = $('orgModal')
 const orgModalTitle = $('orgModalTitle')
@@ -231,14 +246,7 @@ orgSubmit.addEventListener('click', async () => {
 
 orgEditSubmit.addEventListener('click', async () => {
   if (!orgValidate()) return
-  if (!editingOrgId) {
-    await showConfirmFlow({
-      titleLoading: '更新中',
-      bodyLoading: '缺少 organization_id（无法更新）',
-      action: async () => { throw new Error('Missing organization_id') }
-    })
-    return
-  }
+  if (!editingOrgId) throw new Error('Missing organization_id')
 
   const payload = orgCollectPayload()
   const token = getToken()
@@ -298,15 +306,12 @@ function renderOrgInfo(org) {
   function kv(k, v) {
     const row = document.createElement('div')
     row.className = 'kv'
-
     const kk = document.createElement('div')
     kk.className = 'kv-k'
     kk.textContent = k
-
     const vv = document.createElement('div')
     vv.className = 'kv-v'
     vv.textContent = (v === null || v === undefined || v === '') ? '—' : String(v)
-
     row.appendChild(kk)
     row.appendChild(vv)
     return row
