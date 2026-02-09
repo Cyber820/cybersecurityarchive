@@ -13,16 +13,33 @@ import {
 } from './core/dom.js'
 import { apiFetch, initAdminTokenInput } from './core/api.js'
 import { initConfirm } from './core/confirm.js'
+import { mountDomainAdmin } from './features/domain.js'
 
 /* =========================
  * Confirm (loading -> result -> ack)
  * ========================= */
-const { confirm, showConfirmFlow } = initConfirm({ $, openModal, closeModal })
+const { showConfirmFlow } = initConfirm({ $, openModal, closeModal })
 
 /* =========================
  * Admin token (input + localStorage)
  * ========================= */
 const { getToken } = initAdminTokenInput($('tokenInput'), { storageKey: 'ia_admin_token' })
+
+/* =========================
+ * Domain Admin (NEW: description + alias)
+ * ========================= */
+mountDomainAdmin({
+  $,
+  openModal,
+  closeModal,
+  setInvalid,
+  clearInvalid,
+  norm,
+  isSlug,
+  apiFetch,
+  getToken,
+  showConfirmFlow,
+})
 
 /* =========================
  * Organization: Create + Edit shared form
@@ -50,7 +67,6 @@ const orgEditReset = $('orgEditReset')
 const orgEditCancel = $('orgEditCancel')
 const orgEditSubmit = $('orgEditSubmit')
 
-let orgMode = 'create' // create | edit
 let editingOrgId = null
 let orgPrefillSnap = null
 
@@ -127,7 +143,6 @@ function orgCollectPayload() {
 }
 
 function setOrgModeCreate() {
-  orgMode = 'create'
   editingOrgId = null
   orgPrefillSnap = null
 
@@ -137,7 +152,6 @@ function setOrgModeCreate() {
 }
 
 function setOrgModeEdit({ organization }) {
-  orgMode = 'edit'
   editingOrgId = organization.organization_id
 
   orgModalTitle.textContent = '编辑企业/机构（基础信息）'
@@ -190,7 +204,7 @@ orgSubmit.addEventListener('click', async () => {
       const res = await apiFetch('/api/admin/organization', { method: 'POST', token, body: payload })
       closeModal(orgModal)
       orgResetToEmpty()
-      return `✅ 写入成功：organization_id = ${res?.organization?.organization_id}`
+      return `✅ 写入成功：organization_id = ${res?.organization?.organization_id ?? res?.organization_id ?? '（未返回）'}`
     }
   })
 
@@ -222,7 +236,7 @@ orgEditSubmit.addEventListener('click', async () => {
     action: async () => {
       const res = await apiFetch(`/api/admin/organization/${editingOrgId}`, { method: 'PATCH', token, body: payload })
       closeModal(orgModal)
-      return `✅ 更新成功：organization_id = ${res?.organization?.organization_id}`
+      return `✅ 更新成功：organization_id = ${res?.organization?.organization_id ?? res?.organization_id ?? '（未返回）'}`
     }
   })
 
@@ -314,7 +328,7 @@ const orgSearch = createEntitySearch({
     try {
       orgSearchStatus.textContent = '读取详情中…'
       const res = await apiFetch(`/api/admin/organization/${it.organization_id}`, { token })
-      currentOrgDetail = res.organization
+      currentOrgDetail = res.organization ?? res
       renderOrgInfo(currentOrgDetail)
       openModal(orgInfoModal)
     } catch (e) {
@@ -347,21 +361,10 @@ btnOpenOrgEdit.addEventListener('click', () => {
 })
 
 /* =========================
- * Domain/Product Admin
+ * Product Admin（保持你现在这套可用逻辑）
  * ========================= */
-const domainModal = $('domainModal')
 const productModal = $('productModal')
-
-const btnOpenDomain = $('btnOpenDomain')
 const btnOpenProduct = $('btnOpenProduct')
-
-const domainClose = $('domainClose')
-const domainReset = $('domainReset')
-const domainSubmit = $('domainSubmit')
-const domainName = $('domainName')
-const domainSlug = $('domainSlug')
-const domainNameErr = $('domainNameErr')
-const domainSlugErr = $('domainSlugErr')
 
 const productClose = $('productClose')
 const productReset = $('productReset')
@@ -374,59 +377,6 @@ const productDomainsErr = $('productDomainsErr')
 
 const productDomainsHost = $('productDomains')
 
-btnOpenDomain.addEventListener('click', () => openModal(domainModal))
-domainClose.addEventListener('click', () => closeModal(domainModal))
-
-function domainClearErrors() {
-  clearInvalid(domainName, domainNameErr)
-  clearInvalid(domainSlug, domainSlugErr)
-}
-function domainValidate() {
-  domainClearErrors()
-  let ok = true
-  if (!norm(domainName.value)) {
-    setInvalid(domainName, domainNameErr, '安全领域名称为必填。'); ok = false
-  }
-  const slug = norm(domainSlug.value)
-  if (!slug) { setInvalid(domainSlug, domainSlugErr, 'slug 为必填。'); ok = false }
-  else if (!isSlug(slug)) { setInvalid(domainSlug, domainSlugErr, 'slug 仅允许 a-z / 0-9 / 连字符 -'); ok = false }
-  return ok
-}
-
-domainReset.addEventListener('click', () => {
-  domainClearErrors()
-  domainName.value = ''
-  domainSlug.value = ''
-})
-domainSubmit.addEventListener('click', async () => {
-  if (!domainValidate()) return
-  const token = getToken()
-
-  const payload = {
-    security_domain_name: norm(domainName.value),
-    cybersecurity_domain_slug: norm(domainSlug.value),
-  }
-
-  domainSubmit.disabled = true
-  domainReset.disabled = true
-
-  await showConfirmFlow({
-    titleLoading: '录入中',
-    bodyLoading: '写入安全领域中…',
-    action: async () => {
-      const res = await apiFetch('/api/admin/domain', { method: 'POST', token, body: payload })
-      closeModal(domainModal)
-      domainName.value = ''
-      domainSlug.value = ''
-      return `✅ 写入成功：security_domain_id = ${res?.domain?.security_domain_id}`
-    }
-  })
-
-  domainSubmit.disabled = false
-  domainReset.disabled = false
-})
-
-/* ---------- Product ---------- */
 btnOpenProduct.addEventListener('click', async () => {
   openModal(productModal)
   try { await refreshDomainGrid() } catch (e) { console.error(e) }
@@ -465,7 +415,6 @@ async function refreshDomainGrid() {
   const token = getToken()
   const res = await apiFetch('/api/admin/dropdowns/domains', { token })
 
-  // 后端返回 items: [{ id, name, slug }]
   const options = (res?.items || []).map(x => ({
     id: x.id,
     name: x.name,
@@ -526,14 +475,10 @@ productSubmit.addEventListener('click', async () => {
       productName.value = ''
       productSlug.value = ''
       domainGrid?.clear?.()
-      return `✅ 写入成功：security_product_id = ${res?.product?.security_product_id}`
+      return `✅ 写入成功：security_product_id = ${res?.product?.security_product_id ?? res?.security_product_id ?? '（未返回）'}`
     }
   })
 
   productSubmit.disabled = false
   productReset.disabled = false
 })
-
-/* =========================
- * 企业产品（organization_product）后续拆分后再做
- * ========================= */
