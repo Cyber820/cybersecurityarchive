@@ -58,7 +58,7 @@
       padding: 16px;
     }
     .modal {
-      width: min(1040px, 100%); /* ✅ 加宽：减少多选弹层出现横向滚动 */
+      width: min(1040px, 100%);
       max-height: 85vh;
       overflow: auto;
       border: 1px solid var(--bd);
@@ -161,7 +161,6 @@
     </div>
   </div>
 
-  <!-- 组织：添加/编辑 Modal -->
   <div id="orgModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="企业/机构">
       <div class="modal-head">
@@ -215,7 +214,6 @@
     </div>
   </div>
 
-  <!-- 组织：搜索 Modal -->
   <div id="orgSearchModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="搜索企业/机构">
       <div class="modal-head">
@@ -238,7 +236,6 @@
     </div>
   </div>
 
-  <!-- 组织：详情 Modal -->
   <div id="orgInfoModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="企业信息">
       <div class="modal-head">
@@ -255,7 +252,6 @@
     </div>
   </div>
 
-  <!-- Domain Modal（保持你上一轮的结构） -->
   <div id="domainModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="录入安全领域">
       <div class="modal-head">
@@ -330,7 +326,6 @@
     </div>
   </div>
 
-  <!-- Product Modal（NEW: description + alias） -->
   <div id="productModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="录入安全产品">
       <div class="modal-head">
@@ -414,7 +409,81 @@
     </div>
   </div>
 
-  <!-- Confirm -->
+  <!-- NEW: Org Product Modal -->
+  <div id="orgProductModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="录入企业产品">
+      <div class="modal-head">
+        <div class="modal-title">录入企业产品</div>
+        <button id="orgProductClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div class="row">
+        <div class="label">企业名称 *</div>
+        <div>
+          <div class="card" style="margin-top:0;">
+            <div class="label">选择企业/机构（单选）</div>
+            <div class="hint" id="orgProductOrgPicked" style="margin-top:6px;">未选择（请在下方搜索并点击一个企业/机构）</div>
+
+            <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
+              <button id="orgProductOrgClear" class="btn" type="button" style="display:none;">清除已选择</button>
+            </div>
+
+            <div style="margin-top:10px;">
+              <input id="orgProductOrgSearch" class="input" type="text" placeholder="搜索 short_name / full_name / slug ..." />
+              <div id="orgProductOrgStatus" class="hint" style="margin-top:6px;">输入关键字开始搜索。</div>
+              <div id="orgProductOrgList" style="margin-top:10px;"></div>
+              <div id="orgProductOrgErr" class="err"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">产品名称 *</div>
+        <div>
+          <div class="card" style="margin-top:0;">
+            <div class="label">选择安全产品 / 别名（单选）</div>
+            <div class="hint" id="orgProductProdPicked" style="margin-top:6px;">未选择（请在下方搜索并点击一个安全产品/别名）</div>
+
+            <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
+              <button id="orgProductProdClear" class="btn" type="button" style="display:none;">清除已选择</button>
+            </div>
+
+            <div style="margin-top:10px;">
+              <input id="orgProductProdSearch" class="input" type="text" placeholder="搜索产品名 / 别名 / slug ..." />
+              <div id="orgProductProdStatus" class="hint" style="margin-top:6px;">输入关键字开始搜索。</div>
+              <div id="orgProductProdList" style="margin-top:10px;"></div>
+              <div id="orgProductProdErr" class="err"></div>
+            </div>
+
+            <div class="hint">搜索覆盖：cybersecurity_product + cybersecurity_product_alias；写入时仅保存归一后的主产品 ID（security_product_id）。</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">产品发布年份</div>
+        <div>
+          <input id="orgProductReleaseYear" class="input" type="text" inputmode="numeric" placeholder="选填：1990 ~ 当前年份" />
+          <div id="orgProductReleaseYearErr" class="err"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">产品终止年份</div>
+        <div>
+          <input id="orgProductEndYear" class="input" type="text" inputmode="numeric" placeholder="选填：1990 ~ 当前年份" />
+          <div id="orgProductEndYearErr" class="err"></div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="orgProductReset" class="btn" type="button">清空</button>
+        <button id="orgProductSubmit" class="btn btn-primary" type="button">录入</button>
+      </div>
+    </div>
+  </div>
+
   <div id="confirmOverlay" class="confirm-overlay" aria-hidden="true">
     <div class="confirm" role="dialog" aria-modal="true" aria-label="状态">
       <div id="confirmTitle" class="confirm-title">录入中</div>
