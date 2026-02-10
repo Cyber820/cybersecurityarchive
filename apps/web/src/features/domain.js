@@ -16,74 +16,73 @@ export function mountDomainAdmin(ctx) {
     showConfirmFlow,
   } = ctx
 
-  const req = (id) => {
-    const el = $(id)
-    if (!el) console.warn(`[domain] missing element #${id}`)
-    return el
-  }
+  const btnOpen = $('btnOpenDomain')
+  const modal = $('domainModal')
+  const closeBtn = $('domainClose')
 
-  const btnOpen = req('btnOpenDomain')
+  const nameEl = $('domainName')
+  const nameErr = $('domainNameErr')
 
-  const modal = req('domainModal')
-  const closeBtn = req('domainClose')
+  const isAliasEl = $('domainIsAlias')
+  const isAliasErr = $('domainIsAliasErr')
 
-  const nameEl = req('domainName')
-  const nameErr = req('domainNameErr')
+  const slugRow = $('domainSlugRow')
+  const slugEl = $('domainSlug')
+  const slugErr = $('domainSlugErr')
 
-  const isAliasEl = req('domainIsAlias')
-  const isAliasErr = req('domainIsAliasErr')
+  const descRow = $('domainDescRow')
+  const descEl = $('domainDesc')
 
-  const slugRow = req('domainSlugRow')
-  const slugEl = req('domainSlug')
-  const slugErr = req('domainSlugErr')
+  const aliasTargetRow = $('domainAliasTargetRow')
+  const pickedEl = $('domainAliasTargetPicked')
+  const clearBtn = $('domainAliasTargetClear')
+  const searchInput = $('domainAliasTargetSearch')
+  const statusEl = $('domainAliasTargetStatus')
+  const listEl = $('domainAliasTargetList')
+  const targetErr = $('domainAliasTargetErr')
 
-  const descRow = req('domainDescRow')
-  const descEl = req('domainDesc')
+  const resetBtn = $('domainReset')
+  const submitBtn = $('domainSubmit')
 
-  // alias target picker elements
-  const aliasTargetRow = req('domainAliasTargetRow')
-  const pickedEl = req('domainAliasTargetPicked')
-  const clearBtn = req('domainAliasTargetClear')
-  const searchInput = req('domainAliasTargetSearch')
-  const statusEl = req('domainAliasTargetStatus')
-  const listEl = req('domainAliasTargetList')
-  const targetErr = req('domainAliasTargetErr')
-
-  const resetBtn = req('domainReset')
-  const submitBtn = req('domainSubmit')
-
-  if (
-    !btnOpen || !modal || !closeBtn ||
-    !nameEl || !nameErr ||
-    !isAliasEl || !isAliasErr ||
-    !slugRow || !slugEl || !slugErr ||
-    !descRow || !descEl ||
-    !aliasTargetRow || !pickedEl || !clearBtn || !searchInput || !statusEl || !listEl || !targetErr ||
-    !resetBtn || !submitBtn
-  ) {
-    console.warn('[domain] mountDomainAdmin skipped due to missing DOM nodes.')
-    return
+  // ---- 基础 DOM 防御：缺节点就直接不挂载，避免整页炸 ----
+  const required = [
+    ['btnOpenDomain', btnOpen],
+    ['domainModal', modal],
+    ['domainClose', closeBtn],
+    ['domainName', nameEl],
+    ['domainNameErr', nameErr],
+    ['domainIsAlias', isAliasEl],
+    ['domainIsAliasErr', isAliasErr],
+    ['domainSlugRow', slugRow],
+    ['domainSlug', slugEl],
+    ['domainSlugErr', slugErr],
+    ['domainReset', resetBtn],
+    ['domainSubmit', submitBtn],
+  ]
+  for (const [id, el] of required) {
+    if (!el) {
+      console.warn(`[domain] missing element #${id}`)
+      return
+    }
   }
 
   closeBtn.addEventListener('click', () => closeModal(modal))
+
+  function showErr(errEl, msg) {
+    if (!errEl) return
+    errEl.textContent = msg || ''
+    errEl.style.display = msg ? 'block' : 'none'
+  }
 
   function clearAllErrors() {
     clearInvalid(nameEl, nameErr)
     clearInvalid(isAliasEl, isAliasErr)
     clearInvalid(slugEl, slugErr)
-    if (targetErr) {
-      targetErr.textContent = ''
-      targetErr.style.display = 'none'
-    }
+    showErr(targetErr, '')
   }
 
-  function setTargetErr(msg) {
-    if (!targetErr) return
-    targetErr.textContent = msg || ''
-    targetErr.style.display = msg ? '' : 'none'
-  }
-
-  const targetPicker = createSingleSelectPicker({
+  // 单选：选择“同等安全领域”
+  const aliasPicker = createSingleSelectPicker({
     pickedEl,
     clearBtn,
     inputEl: searchInput,
@@ -93,88 +92,101 @@ export function mountDomainAdmin(ctx) {
     emptyText: '未选择（请在下方搜索并点击一个安全领域）',
     searchFn: async (q) => {
       const token = getToken()
-      const res = await apiFetch(`/api/admin/dropdowns/domain_union?q=${encodeURIComponent(q)}`, { token })
-      return res?.items || []
+      return await apiFetch(`/api/admin/dropdowns/domains?q=${encodeURIComponent(q)}`, { token })
     },
-    renderItem: (it) => {
-      const isAlias = it.type === 'alias'
-      return {
-        title: it.name || '（未命名）',
-        subtitle: isAlias ? 'alias' : (it.slug ? `slug：${it.slug}` : ''),
-      }
-    },
-    getId: (it) => it.id,
-    getLabel: (it) => it?.name || String(it?.id),
+    renderItem: (it) => ({
+      title: it.security_domain_name || it.domain_name || it.name || '（未命名领域）',
+      subtitle: [
+        it.cybersecurity_domain_slug ? `slug：${it.cybersecurity_domain_slug}` : null,
+        it.security_domain_id ? `ID：${it.security_domain_id}` : null,
+      ].filter(Boolean).join(' · ')
+    }),
+    getId: (it) => it.security_domain_id ?? it.id,
+    getLabel: (it, rendered) => rendered?.title ?? String(it.security_domain_id ?? it.id ?? ''),
   })
 
   const aliasSwitch = createAliasSwitch({
     selectEl: isAliasEl,
-    rows: {
-      main: [slugRow, descRow],
-      alias: [aliasTargetRow],
-    },
-    onChange: () => {
+    rowsWhenMain: [slugRow, descRow],
+    rowsWhenAlias: [aliasTargetRow],
+    onModeChange: (mode) => {
       clearAllErrors()
-      if (isAliasEl.value === 'yes') {
-        // alias mode: hide slug/desc, show picker
-        if (slugEl) slugEl.value = ''
+      if (mode === 'yes') {
+        // 切 alias：清空 main 字段
+        slugEl.value = ''
         if (descEl) descEl.value = ''
       } else {
-        // main mode: clear target selection
-        targetPicker.clear()
+        // 切 main：清空 alias 选择
+        aliasPicker.clear()
       }
     }
   })
 
+  function resetForm() {
+    nameEl.value = ''
+    isAliasEl.value = 'no'
+    slugEl.value = ''
+    if (descEl) descEl.value = ''
+    aliasPicker.clear()
+    clearAllErrors()
+
+    // 关键：这里不调用任何 sync()，只用 applyMode
+    aliasSwitch.applyMode('no', { emit: false })
+  }
+
   function validate() {
     clearAllErrors()
-    setTargetErr('')
-
-    const name = norm(nameEl.value)
-    const isAlias = isAliasEl.value === 'yes'
-    const slug = norm(slugEl.value)
 
     let ok = true
-
+    const name = norm(nameEl.value)
     if (!name) {
       setInvalid(nameEl, nameErr, '安全领域名称为必填。')
       ok = false
     }
 
-    if (isAlias) {
-      const picked = targetPicker.getSelected()
-      if (!picked) {
-        setTargetErr('请选择同等安全领域（归属领域）。')
-        ok = false
-      }
-    } else {
+    const mode = aliasSwitch.getMode()
+    if (mode === 'no') {
+      const slug = norm(slugEl.value)
       if (!slug) {
-        setInvalid(slugEl, slugErr, 'slug 为必填。')
+        setInvalid(slugEl, slugErr, '安全领域 slug 为必填。')
         ok = false
       } else if (!isSlug(slug)) {
         setInvalid(slugEl, slugErr, 'slug 仅允许 a-z / 0-9 / 连字符 -（建议小写）。')
         ok = false
       }
+    } else {
+      if (!aliasPicker.validateRequired('请选择“同等安全领域”。')) ok = false
     }
 
     return ok
   }
 
-  function resetForm() {
-    nameEl.value = ''
-    isAliasEl.value = 'no'
-    if (slugEl) slugEl.value = ''
-    if (descEl) descEl.value = ''
-    targetPicker.clear()
-    aliasSwitch.sync()
-    clearAllErrors()
-    setTargetErr('')
-  }
+  function collectPayload() {
+    const name = norm(nameEl.value)
+    const mode = aliasSwitch.getMode()
+    const desc = norm(descEl?.value)
 
-  btnOpen.addEventListener('click', () => {
-    resetForm()
-    openModal(modal)
-  })
+    if (mode === 'no') {
+      const slug = norm(slugEl.value)
+      return {
+        mode: 'main',
+        payload: {
+          security_domain_name: name,
+          cybersecurity_domain_slug: slug,
+          security_domain_description: desc || null,
+        }
+      }
+    }
+
+    const sel = aliasPicker.getSelected()
+    return {
+      mode: 'alias',
+      payload: {
+        security_domain_alias_name: name,
+        security_domain_id: sel?.id,
+      }
+    }
+  }
 
   resetBtn.addEventListener('click', () => resetForm())
 
@@ -182,42 +194,30 @@ export function mountDomainAdmin(ctx) {
     if (!validate()) return
 
     const token = getToken()
-    const name = norm(nameEl.value)
-    const isAlias = isAliasEl.value === 'yes'
+    const { mode, payload } = collectPayload()
 
     submitBtn.disabled = true
     resetBtn.disabled = true
 
     await showConfirmFlow({
-      titleLoading: '添加中',
-      bodyLoading: isAlias ? '写入安全领域别名中…' : '写入安全领域中…',
+      titleLoading: mode === 'main' ? '添加中' : '添加别名中',
+      bodyLoading: mode === 'main' ? '写入安全领域中…' : '写入安全领域别名中…',
       action: async () => {
-        if (isAlias) {
-          const picked = targetPicker.getSelected()
-          const payload = {
-            security_domain_alias_name: name,
-            security_domain_id: picked.id,
-          }
-          const res = await apiFetch('/api/admin/domain-alias', { method: 'POST', token, body: payload })
-          closeModal(modal)
-          resetForm()
-          return `✅ 添加成功：security_domain_alias_id = ${res?.security_domain_alias?.security_domain_alias_id ?? res?.security_domain_alias_id ?? '（未返回）'}`
-        } else {
-          const desc = norm(descEl?.value)
-          const payload = {
-            security_domain_name: name,
-            cybersecurity_domain_slug: norm(slugEl.value),
-            security_domain_description: desc ? desc : null,
-          }
-          const res = await apiFetch('/api/admin/domain', { method: 'POST', token, body: payload })
-          closeModal(modal)
-          resetForm()
-          return `✅ 添加成功：security_domain_id = ${res?.security_domain?.security_domain_id ?? res?.security_domain_id ?? '（未返回）'}`
-        }
+        const url = mode === 'main' ? '/api/admin/domain' : '/api/admin/domain/alias'
+        const res = await apiFetch(url, { method: 'POST', token, body: payload })
+        closeModal(modal)
+        resetForm()
+        return `✅ 添加成功：${res?.id ?? res?.security_domain_id ?? res?.security_domain_alias_id ?? '（未返回）'}`
       }
     })
 
     submitBtn.disabled = false
     resetBtn.disabled = false
+  })
+
+  btnOpen.addEventListener('click', () => {
+    resetForm()
+    openModal(modal)
+    nameEl.focus()
   })
 }
