@@ -4,10 +4,13 @@ import { createSingleSelectPicker } from '../ui/single-select-picker.js'
 import { makeDomainUnionSearch } from '../core/dropdowns.js'
 
 /**
- * 一个“尽量不依赖你旧实现”的简易 domains 多选面板：
+ * 一个“尽量不依赖你旧实现”的 domains 多选面板：
  * - 使用 productDomains 容器（#productDomains）
  * - 内部自己渲染：展开/清空/确认、搜索框、结果 checkbox 列表
  * - 搜索接口用 /api/admin/dropdowns/domain_union?q=
+ *
+ * ✅ 注意：这里做了“软失败”：
+ * - rootEl 不存在时不会 throw，返回一个 no-op 对象，避免整页 JS 崩溃
  */
 function mountDomainMultiSelect({
   rootEl,
@@ -15,8 +18,15 @@ function mountDomainMultiSelect({
   getId = (it) => it.security_domain_id ?? it.domain_id ?? it.id,
   getLabel = (it) => it.security_domain_name ?? it.domain_name ?? it.name ?? `ID ${getId(it)}`,
   onChangeSummary = null // (confirmedIds, confirmedItems)=>void
-}) {
-  if (!rootEl) throw new Error('mountDomainMultiSelect: missing rootEl')
+} = {}) {
+  if (!rootEl) {
+    console.warn('[product] mountDomainMultiSelect skipped: missing rootEl')
+    return {
+      getConfirmedIds: () => [],
+      clear: () => {},
+      focus: () => {},
+    }
+  }
 
   let confirmed = new Map() // id -> item
   let pending = new Map()   // id -> item
@@ -105,8 +115,8 @@ function mountDomainMultiSelect({
 
   function setOpen(v) {
     open = !!v
-    // ✅ 关键修复：admin.html 里 .ia-ms-panel 默认 display:none
-    // 若这里只写 ''，CSS 仍会把它隐藏；必须显式写成 block
+    // ✅ 关键修复：如果 CSS 里 ia-ms-panel 默认 display:none
+    // 这里必须显式写 block，否则写 '' 仍会被 CSS 覆盖隐藏
     panel.style.display = open ? 'block' : 'none'
     btnToggle.textContent = open ? '▴' : '▾'
     if (open) searchBox.focus()
@@ -240,39 +250,60 @@ export function mountProductAdmin(ctx) {
     showConfirmFlow,
   } = ctx
 
-  const btnOpen = $('btnOpenProduct')
+  const req = (id) => {
+    const el = $(id)
+    if (!el) console.warn(`[product] missing element #${id}`)
+    return el
+  }
 
-  const modal = $('productModal')
-  const closeBtn = $('productClose')
+  const btnOpen = req('btnOpenProduct')
 
-  const nameEl = $('productName')
-  const nameErr = $('productNameErr')
+  const modal = req('productModal')
+  const closeBtn = req('productClose')
 
-  const isAliasEl = $('productIsAlias')
-  const isAliasErr = $('productIsAliasErr')
+  const nameEl = req('productName')
+  const nameErr = req('productNameErr')
 
-  const slugRow = $('productSlugRow')
-  const slugEl = $('productSlug')
-  const slugErr = $('productSlugErr')
+  const isAliasEl = req('productIsAlias')
+  const isAliasErr = req('productIsAliasErr')
 
-  const domainsRow = $('productDomainsRow')
-  const domainsRoot = $('productDomains')
-  const domainsErr = $('productDomainsErr')
+  const slugRow = req('productSlugRow')
+  const slugEl = req('productSlug')
+  const slugErr = req('productSlugErr')
 
-  const descRow = $('productDescRow')
-  const descEl = $('productDesc')
+  const domainsRow = req('productDomainsRow')
+  const domainsRoot = req('productDomains')
+  const domainsErr = req('productDomainsErr')
+
+  const descRow = req('productDescRow')
+  const descEl = req('productDesc')
 
   // alias target picker elements
-  const aliasTargetRow = $('productAliasTargetRow')
-  const pickedEl = $('productAliasTargetPicked')
-  const clearBtn = $('productAliasTargetClear')
-  const searchInput = $('productAliasTargetSearch')
-  const statusEl = $('productAliasTargetStatus')
-  const listEl = $('productAliasTargetList')
-  const targetErr = $('productAliasTargetErr')
+  const aliasTargetRow = req('productAliasTargetRow')
+  const pickedEl = req('productAliasTargetPicked')
+  const clearBtn = req('productAliasTargetClear')
+  const searchInput = req('productAliasTargetSearch')
+  const statusEl = req('productAliasTargetStatus')
+  const listEl = req('productAliasTargetList')
+  const targetErr = req('productAliasTargetErr')
 
-  const resetBtn = $('productReset')
-  const submitBtn = $('productSubmit')
+  const resetBtn = req('productReset')
+  const submitBtn = req('productSubmit')
+
+  // 缺关键节点就跳过挂载（避免整页 JS 崩溃）
+  if (
+    !btnOpen || !modal || !closeBtn ||
+    !nameEl || !nameErr ||
+    !isAliasEl || !isAliasErr ||
+    !slugRow || !slugEl || !slugErr ||
+    !domainsRow || !domainsRoot || !domainsErr ||
+    !descRow || !descEl ||
+    !aliasTargetRow || !pickedEl || !clearBtn || !searchInput || !statusEl || !listEl || !targetErr ||
+    !resetBtn || !submitBtn
+  ) {
+    console.warn('[product] mountProductAdmin skipped due to missing DOM nodes.')
+    return
+  }
 
   closeBtn.addEventListener('click', () => closeModal(modal))
 
@@ -280,6 +311,7 @@ export function mountProductAdmin(ctx) {
     clearInvalid(nameEl, nameErr)
     clearInvalid(isAliasEl, isAliasErr)
     clearInvalid(slugEl, slugErr)
+
     if (domainsErr) {
       domainsErr.textContent = ''
       domainsErr.style.display = 'none'
@@ -334,12 +366,15 @@ export function mountProductAdmin(ctx) {
     rowsWhenAlias: [aliasTargetRow],
     onModeChange: (mode) => {
       clearAllErrors()
+
       if (mode === 'yes') {
+        // alias mode
         slugEl.value = ''
         if (descEl) descEl.value = ''
         domainMulti.clear()
         showDomainsErr('')
       } else {
+        // main mode
         aliasPicker.clear()
       }
     }
@@ -350,8 +385,10 @@ export function mountProductAdmin(ctx) {
     isAliasEl.value = 'no'
     slugEl.value = ''
     if (descEl) descEl.value = ''
+
     domainMulti.clear()
     aliasPicker.clear()
+
     clearAllErrors()
     aliasSwitch.applyMode('no', { emit: false })
   }
