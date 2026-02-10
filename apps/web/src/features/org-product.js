@@ -1,176 +1,65 @@
 // apps/web/src/features/org-product.js
-import { createEntitySearch } from '../ui/entity-search.js'
+import { createSingleSelectPicker } from '../ui/single-select-picker.js'
 
-export function mountOrgProductAdmin({
-  $,
-  openModal,
-  closeModal,
-  setInvalid,
-  clearInvalid,
-  norm,
-  apiFetch,
-  getToken,
-  showConfirmFlow,
-}) {
-  const modal = $('orgProductModal')
+function validateYearRange(val, { min = 1990, max = new Date().getFullYear() } = {}) {
+  const s = String(val || '').trim()
+  if (!s) return { ok: true, value: null }
+  const n = Number(s)
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return { ok: false, msg: '必须为整数年份。' }
+  if (n < min || n > max) return { ok: false, msg: `年份范围：${min} ~ ${max}。` }
+  return { ok: true, value: n }
+}
+
+export function mountOrgProductAdmin(ctx) {
+  const {
+    $,
+    openModal,
+    closeModal,
+    norm,
+    apiFetch,
+    getToken,
+    showConfirmFlow,
+  } = ctx
+
   const btnOpen = $('btnOpenOrgProduct')
+  const modal = $('orgProductModal')
   const closeBtn = $('orgProductClose')
 
-  // organization selector (single)
-  const orgPicked = $('orgProductOrgPicked')
-  const orgClear = $('orgProductOrgClear')
-  const orgSearchInput = $('orgProductOrgSearch')
-  const orgSearchStatus = $('orgProductOrgStatus')
-  const orgSearchList = $('orgProductOrgList')
   const orgErr = $('orgProductOrgErr')
-
-  // product selector (single, union)
-  const prodPicked = $('orgProductProdPicked')
-  const prodClear = $('orgProductProdClear')
-  const prodSearchInput = $('orgProductProdSearch')
-  const prodSearchStatus = $('orgProductProdStatus')
-  const prodSearchList = $('orgProductProdList')
   const prodErr = $('orgProductProdErr')
 
-  // years
-  const releaseYear = $('orgProductReleaseYear')
+  const releaseYearEl = $('orgProductReleaseYear')
   const releaseYearErr = $('orgProductReleaseYearErr')
-  const endYear = $('orgProductEndYear')
+
+  const endYearEl = $('orgProductEndYear')
   const endYearErr = $('orgProductEndYearErr')
 
-  // actions
   const resetBtn = $('orgProductReset')
   const submitBtn = $('orgProductSubmit')
 
-  const nowYear = new Date().getFullYear()
+  closeBtn.addEventListener('click', () => closeModal(modal))
 
-  let pickedOrg = null // { organization_id, display_name, slug? }
-  let pickedProduct = null // { product_id, kind, name, extra? }
-
-  function setText(el, s) { el.textContent = s || '' }
   function showErr(el, msg) {
+    if (!el) return
     el.textContent = msg || ''
-    el.style.display = msg ? 'block' : 'none'
+    el.style.display = msg ? '' : 'none'
   }
 
   function clearErrors() {
     showErr(orgErr, '')
     showErr(prodErr, '')
-
-    clearInvalid(releaseYear, releaseYearErr)
-    clearInvalid(endYear, endYearErr)
+    showErr(releaseYearErr, '')
+    showErr(endYearErr, '')
   }
 
-  function renderPickedOrg() {
-    if (!pickedOrg) {
-      setText(orgPicked, '未选择（请在下方搜索并点击一个企业/机构）')
-      orgClear.style.display = 'none'
-      return
-    }
-    const suffix = pickedOrg.organization_slug ? `（slug: ${pickedOrg.organization_slug}）` : ''
-    setText(orgPicked, `已选择：${pickedOrg.display_name} ${suffix} [ID=${pickedOrg.organization_id}]`)
-    orgClear.style.display = ''
-  }
-
-  function renderPickedProduct() {
-    if (!pickedProduct) {
-      setText(prodPicked, '未选择（请在下方搜索并点击一个安全产品/别名）')
-      prodClear.style.display = 'none'
-      return
-    }
-
-    if (pickedProduct.kind === 'alias') {
-      const ex = pickedProduct.extra || {}
-      const exText = ex.product_name
-        ? ` → 归属产品：${ex.product_name}${ex.product_slug ? `（slug: ${ex.product_slug}）` : ''}`
-        : ''
-      setText(prodPicked, `已选择：${pickedProduct.name} [别名] ${exText} [product_id=${pickedProduct.product_id}]`)
-    } else {
-      const slug = pickedProduct.slug ? `（slug: ${pickedProduct.slug}）` : ''
-      setText(prodPicked, `已选择：${pickedProduct.name} ${slug} [product_id=${pickedProduct.product_id}]`)
-    }
-    prodClear.style.display = ''
-  }
-
-  function validateYear(inputEl, errEl) {
-    const v = norm(inputEl.value)
-    if (!v) return null
-
-    const n = Number(v)
-    if (!Number.isFinite(n) || !Number.isInteger(n)) {
-      setInvalid(inputEl, errEl, '必须为整数年份。')
-      return '__invalid__'
-    }
-    if (n < 1990 || n > nowYear) {
-      setInvalid(inputEl, errEl, `年份范围：1990 ~ ${nowYear}。`)
-      return '__invalid__'
-    }
-    return n
-  }
-
-  function validate() {
-    clearErrors()
-    let ok = true
-
-    if (!pickedOrg?.organization_id) {
-      showErr(orgErr, '企业名称为必填，请先选择一个企业/机构。')
-      ok = false
-    }
-
-    if (!pickedProduct?.product_id) {
-      showErr(prodErr, '产品名称为必填，请先选择一个安全产品/别名。')
-      ok = false
-    }
-
-    const ry = validateYear(releaseYear, releaseYearErr)
-    if (ry === '__invalid__') ok = false
-
-    const ey = validateYear(endYear, endYearErr)
-    if (ey === '__invalid__') ok = false
-
-    return ok
-  }
-
-  function buildPayload() {
-    const ry = norm(releaseYear.value) ? Number(norm(releaseYear.value)) : null
-    const ey = norm(endYear.value) ? Number(norm(endYear.value)) : null
-
-    return {
-      organization_id: Number(pickedOrg.organization_id),
-      security_product_id: Number(pickedProduct.product_id), // ✅ 注意：写归一后的主产品ID
-      product_release_year: ry,
-      product_end_year: ey
-    }
-  }
-
-  async function resetForm() {
-    clearErrors()
-
-    pickedOrg = null
-    pickedProduct = null
-
-    releaseYear.value = ''
-    endYear.value = ''
-
-    orgSearch.clear()
-    prodSearch.clear()
-
-    orgSearchList.innerHTML = ''
-    prodSearchList.innerHTML = ''
-
-    orgSearchStatus.textContent = '输入关键字开始搜索。'
-    prodSearchStatus.textContent = '输入关键字开始搜索。'
-
-    renderPickedOrg()
-    renderPickedProduct()
-  }
-
-  // --- search controls ---
-
-  const orgSearch = createEntitySearch({
-    inputEl: orgSearchInput,
-    listEl: orgSearchList,
-    statusEl: orgSearchStatus,
+  const orgPicker = createSingleSelectPicker({
+    pickedEl: $('orgProductOrgPicked'),
+    clearBtn: $('orgProductOrgClear'),
+    inputEl: $('orgProductOrgSearch'),
+    statusEl: $('orgProductOrgStatus'),
+    listEl: $('orgProductOrgList'),
+    errEl: orgErr,
+    emptyText: '未选择（请在下方搜索并点击一个企业/机构）',
     searchFn: async (q) => {
       const token = getToken()
       return await apiFetch(`/api/admin/organization/search?q=${encodeURIComponent(q)}`, { token })
@@ -181,98 +70,105 @@ export function mountOrgProductAdmin({
         it.organization_full_name ? `全称：${it.organization_full_name}` : null,
         it.organization_short_name ? `简称：${it.organization_short_name}` : null,
         it.organization_slug ? `slug：${it.organization_slug}` : null,
-        it.establish_year ? `成立：${it.establish_year}` : null,
       ].filter(Boolean).join(' · ')
     }),
-    onPick: async (it) => {
-      pickedOrg = {
-        organization_id: it.organization_id,
-        display_name: it.display_name || it.organization_short_name || '',
-        organization_slug: it.organization_slug || ''
-      }
-      showErr(orgErr, '')
-      renderPickedOrg()
-      orgSearchStatus.textContent = '已选择（可继续搜索并点击新的结果进行更换）'
-      orgSearchList.innerHTML = ''
-    }
+    getId: (it) => it.organization_id,
+    getLabel: (it, rendered) => rendered?.title ?? String(it.organization_id),
   })
 
-  const prodSearch = createEntitySearch({
-    inputEl: prodSearchInput,
-    listEl: prodSearchList,
-    statusEl: prodSearchStatus,
+  const productPicker = createSingleSelectPicker({
+    pickedEl: $('orgProductProdPicked'),
+    clearBtn: $('orgProductProdClear'),
+    inputEl: $('orgProductProdSearch'),
+    statusEl: $('orgProductProdStatus'),
+    listEl: $('orgProductProdList'),
+    errEl: prodErr,
+    emptyText: '未选择（请在下方搜索并点击一个安全产品/别名）',
     searchFn: async (q) => {
       const token = getToken()
+      // union：产品 + 产品别名
       return await apiFetch(`/api/admin/dropdowns/product_union?q=${encodeURIComponent(q)}`, { token })
     },
-    renderItem: (it) => {
-      const kind = it.kind === 'alias' ? '别名' : '产品'
-      const extra = it.kind === 'alias'
-        ? (it.extra?.product_name ? `→ ${it.extra.product_name}` : '')
-        : (it.slug ? `slug：${it.slug}` : '')
-      return {
-        title: `${it.name || '（未命名）'}（${kind}）`,
-        subtitle: [
-          `product_id：${it.product_id}`,
-          extra || null,
-        ].filter(Boolean).join(' · ')
-      }
-    },
-    onPick: async (it) => {
-      pickedProduct = {
-        product_id: it.product_id, // ✅ 归一主ID
-        kind: it.kind,
-        name: it.name,
-        slug: it.slug || null,
-        extra: it.extra || null
-      }
-      showErr(prodErr, '')
-      renderPickedProduct()
-      prodSearchStatus.textContent = '已选择（可继续搜索并点击新的结果进行更换）'
-      prodSearchList.innerHTML = ''
+    renderItem: (it) => ({
+      title: it.name || it.security_product_name || it.security_product_alias_name || '（未命名产品）',
+      subtitle: [
+        it.type ? `类型：${it.type}` : null,
+        it.security_product_slug ? `slug：${it.security_product_slug}` : null,
+        it.security_product_id ? `ID：${it.security_product_id}` : (it.id ? `ID：${it.id}` : null),
+      ].filter(Boolean).join(' · ')
+    }),
+    // union 返回时，尽量取“归一后的主产品 id”
+    getId: (it) =>
+      it.security_product_id ??
+      it.normalized_id ??
+      it.normalized_security_product_id ??
+      it.id,
+    getLabel: (it, rendered) => rendered?.title ?? String(it.security_product_id ?? it.id ?? ''),
+  })
+
+  function resetForm() {
+    orgPicker.clear()
+    productPicker.clear()
+    releaseYearEl.value = ''
+    endYearEl.value = ''
+    clearErrors()
+  }
+
+  function validate() {
+    clearErrors()
+    let ok = true
+
+    if (!orgPicker.validateRequired('请选择企业/机构。')) ok = false
+    if (!productPicker.validateRequired('请选择安全产品/别名。')) ok = false
+
+    const now = new Date().getFullYear()
+
+    const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
+    if (!r.ok) { showErr(releaseYearErr, r.msg); ok = false }
+
+    const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
+    if (!e.ok) { showErr(endYearErr, e.msg); ok = false }
+
+    return ok
+  }
+
+  function collectPayload() {
+    const orgSel = orgPicker.getSelected()
+    const prodSel = productPicker.getSelected()
+    const now = new Date().getFullYear()
+
+    const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
+    const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
+
+    return {
+      organization_id: orgSel?.id,
+      security_product_id: prodSel?.id,
+      product_release_year: r.value,
+      product_end_year: e.value,
     }
-  })
+  }
 
-  orgClear.addEventListener('click', () => {
-    pickedOrg = null
-    renderPickedOrg()
-  })
-  prodClear.addEventListener('click', () => {
-    pickedProduct = null
-    renderPickedProduct()
-  })
-
-  // --- open/close/reset/submit ---
-
-  btnOpen.addEventListener('click', async () => {
-    openModal(modal)
-    await resetForm()
-  })
-
-  closeBtn.addEventListener('click', () => closeModal(modal))
-
-  resetBtn.addEventListener('click', async () => {
-    await resetForm()
-  })
+  resetBtn.addEventListener('click', () => resetForm())
 
   submitBtn.addEventListener('click', async () => {
     if (!validate()) return
 
     const token = getToken()
-    const payload = buildPayload()
+    const payload = collectPayload()
 
     submitBtn.disabled = true
     resetBtn.disabled = true
 
     await showConfirmFlow({
-      titleLoading: '录入中',
-      bodyLoading: '写入企业产品关系中…',
+      titleLoading: '添加中',
+      bodyLoading: '写入企业产品中…',
       action: async () => {
-        const res = await apiFetch('/api/admin/org_product', { method: 'POST', token, body: payload })
-        await resetForm()
+        // 你当前后端应已支持：POST /api/admin/organization_product
+        // 如果你实际实现的是 /api/admin/org-product，请把这里改成对应路径
+        const res = await apiFetch('/api/admin/organization_product', { method: 'POST', token, body: payload })
         closeModal(modal)
-        const id = res?.organization_product?.organization_product_id ?? res?.organization_product_id ?? '（未返回）'
-        return `✅ 写入成功：organization_product_id = ${id}`
+        resetForm()
+        return `✅ 添加成功：${res?.id ?? res?.organization_product_id ?? '（未返回）'}`
       }
     })
 
@@ -280,7 +176,9 @@ export function mountOrgProductAdmin({
     resetBtn.disabled = false
   })
 
-  // init display
-  renderPickedOrg()
-  renderPickedProduct()
+  btnOpen.addEventListener('click', () => {
+    resetForm()
+    openModal(modal)
+    orgPicker.focus()
+  })
 }
