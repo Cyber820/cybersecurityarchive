@@ -3,20 +3,11 @@ import { createAliasSwitch } from '../ui/alias-switch.js'
 import { createSingleSelectPicker } from '../ui/single-select-picker.js'
 import { makeDomainUnionSearch } from '../core/dropdowns.js'
 
-function clampInt(v, min, max) {
-  const n = Number(v)
-  if (!Number.isFinite(n)) return null
-  const i = Math.trunc(n)
-  if (i < min || i > max) return null
-  return i
-}
-
 /**
  * 一个“尽量不依赖你旧实现”的简易 domains 多选面板：
  * - 使用 productDomains 容器（#productDomains）
  * - 内部自己渲染：展开/清空/确认、搜索框、结果 checkbox 列表
- * - 搜索接口默认用 /api/admin/dropdowns/domain_union?q=
- *  （若你后端是 /dropdowns/domains，请改下面的 searchUrlBuilder）
+ * - 搜索接口用 /api/admin/dropdowns/domain_union?q=
  */
 function mountDomainMultiSelect({
   rootEl,
@@ -114,7 +105,9 @@ function mountDomainMultiSelect({
 
   function setOpen(v) {
     open = !!v
-    panel.style.display = open ? '' : 'none'
+    // ✅ 关键修复：admin.html 里 .ia-ms-panel 默认 display:none
+    // 若这里只写 ''，CSS 仍会把它隐藏；必须显式写成 block
+    panel.style.display = open ? 'block' : 'none'
     btnToggle.textContent = open ? '▴' : '▾'
     if (open) searchBox.focus()
   }
@@ -322,7 +315,6 @@ export function mountProductAdmin(ctx) {
     emptyText: '未选择（请在下方搜索并点击一个安全产品）',
     searchFn: async (q) => {
       const token = getToken()
-      // 主产品检索（不走 union，别名归属应指向主产品）
       return await apiFetch(`/api/admin/dropdowns/products?q=${encodeURIComponent(q)}`, { token })
     },
     renderItem: (it) => ({
@@ -343,13 +335,11 @@ export function mountProductAdmin(ctx) {
     onModeChange: (mode) => {
       clearAllErrors()
       if (mode === 'yes') {
-        // 别名模式：清掉主模式输入
         slugEl.value = ''
         if (descEl) descEl.value = ''
         domainMulti.clear()
         showDomainsErr('')
       } else {
-        // 主模式：清掉别名选择
         aliasPicker.clear()
       }
     }
@@ -443,9 +433,6 @@ export function mountProductAdmin(ctx) {
       titleLoading: mode === 'main' ? '添加中' : '添加别名中',
       bodyLoading: mode === 'main' ? '写入安全产品中…' : '写入安全产品别名中…',
       action: async () => {
-        // 你当前后端应已支持：
-        // - 主产品：POST /api/admin/product
-        // - 别名：  POST /api/admin/product/alias
         const url = mode === 'main' ? '/api/admin/product' : '/api/admin/product/alias'
         const res = await apiFetch(url, { method: 'POST', token, body: payload })
         closeModal(modal)
