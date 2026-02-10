@@ -107,6 +107,41 @@ export function registerProductAdmin(app) {
       return reply.code(400).send({ error: e?.message || String(e) })
     }
   })
+
+  /**
+   * POST /api/admin/product/alias
+   *
+   * Back-compat route for the web UI.
+   * Body:
+   * {
+   *   "security_product_alias_name": "...",
+   *   "security_product_id": 123
+   * }
+   */
+  app.post('/product/alias', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return
+
+    const body = req.body || {}
+    const aliasName = String(body.security_product_alias_name || '').trim()
+    const productId = Number(body.security_product_id)
+
+    if (!aliasName) return reply.code(400).send({ error: 'security_product_alias_name is required' })
+    if (!Number.isFinite(productId)) return reply.code(400).send({ error: 'security_product_id must be a number' })
+
+    const payload = {
+      security_product_alias_name: aliasName,
+      security_product_id: productId
+    }
+
+    const { data: alias, error } = await supabase
+      .from('cybersecurity_product_alias')
+      .insert(payload)
+      .select('*')
+      .single()
+
+    if (error) return reply.code(400).send({ error: error.message })
+    return reply.send({ alias })
+  })
 }
 
 async function normalizeDomainIds(domains) {
