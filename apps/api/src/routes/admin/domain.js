@@ -73,4 +73,39 @@ export function registerDomainAdmin(app) {
     if (error) return reply.code(400).send({ error: error.message })
     return reply.send({ domain })
   })
+
+  /**
+   * POST /api/admin/domain/alias
+   *
+   * Back-compat route for the web UI.
+   * Body:
+   * {
+   *   "security_domain_alias_name": "...",
+   *   "security_domain_id": 123
+   * }
+   */
+  app.post('/domain/alias', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return
+
+    const body = req.body || {}
+    const aliasName = String(body.security_domain_alias_name || '').trim()
+    const domainId = Number(body.security_domain_id)
+
+    if (!aliasName) return reply.code(400).send({ error: 'security_domain_alias_name is required' })
+    if (!Number.isFinite(domainId)) return reply.code(400).send({ error: 'security_domain_id must be a number' })
+
+    const payload = {
+      security_domain_alias_name: aliasName,
+      security_domain_id: domainId
+    }
+
+    const { data: alias, error } = await supabase
+      .from('cybersecurity_domain_alias')
+      .insert(payload)
+      .select('*')
+      .single()
+
+    if (error) return reply.code(400).send({ error: error.message })
+    return reply.send({ alias })
+  })
 }
