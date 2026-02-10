@@ -52,7 +52,6 @@ export function mountDomainAdmin(ctx) {
     clearInvalid(nameEl, nameErr)
     clearInvalid(isAliasEl, isAliasErr)
     clearInvalid(slugEl, slugErr)
-    // targetErr 由 picker 自己管理 display
     if (targetErr) {
       targetErr.textContent = ''
       targetErr.style.display = 'none'
@@ -69,7 +68,7 @@ export function mountDomainAdmin(ctx) {
     aliasSwitch.applyMode('no', { emit: false })
   }
 
-  // 单选：选择“归属安全领域”
+  // 单选：选择“同等安全领域”
   const aliasPicker = createSingleSelectPicker({
     pickedEl,
     clearBtn,
@@ -80,8 +79,6 @@ export function mountDomainAdmin(ctx) {
     emptyText: '未选择（请在下方搜索并点击一个安全领域）',
     searchFn: async (q) => {
       const token = getToken()
-      // 这里用“主领域下拉”接口（你当前后端实现应返回主领域列表）
-      // 若你后端用的是 /dropdowns/domains，请把这里改成对应路径
       return await apiFetch(`/api/admin/dropdowns/domains?q=${encodeURIComponent(q)}`, { token })
     },
     renderItem: (it) => ({
@@ -95,13 +92,11 @@ export function mountDomainAdmin(ctx) {
     getLabel: (it, rendered) => rendered?.title ?? String(it.security_domain_id ?? it.id ?? ''),
   })
 
-  // 模式切换：主领域 vs 别名
   const aliasSwitch = createAliasSwitch({
     selectEl: isAliasEl,
     rowsWhenMain: [slugRow, descRow],
     rowsWhenAlias: [aliasTargetRow],
     onModeChange: (mode) => {
-      // 切换时做最小清理，避免旧状态干扰
       clearAllErrors()
       if (mode === 'yes') {
         slugEl.value = ''
@@ -133,7 +128,7 @@ export function mountDomainAdmin(ctx) {
         ok = false
       }
     } else {
-      if (!aliasPicker.validateRequired('请选择“归属安全领域”。')) ok = false
+      if (!aliasPicker.validateRequired('请选择“同等安全领域”。')) ok = false
     }
 
     return ok
@@ -180,12 +175,9 @@ export function mountDomainAdmin(ctx) {
     resetBtn.disabled = true
 
     await showConfirmFlow({
-      titleLoading: mode === 'no' ? '添加中' : '添加别名中',
-      bodyLoading: mode === 'no' ? '写入安全领域中…' : '写入安全领域别名中…',
+      titleLoading: mode === 'main' ? '添加中' : '添加别名中',
+      bodyLoading: mode === 'main' ? '写入安全领域中…' : '写入安全领域别名中…',
       action: async () => {
-        // 你当前后端应已支持：
-        // - 主领域：POST /api/admin/domain
-        // - 别名：  POST /api/admin/domain/alias
         const url = mode === 'main' ? '/api/admin/domain' : '/api/admin/domain/alias'
         const res = await apiFetch(url, { method: 'POST', token, body: payload })
         closeModal(modal)
