@@ -22,50 +22,25 @@ export function mountOrgProductAdmin(ctx) {
     showConfirmFlow,
   } = ctx
 
-  const req = (id) => {
-    const el = $(id)
-    if (!el) console.warn(`[orgProduct] missing element #${id}`)
-    return el
-  }
+  const btnOpen = $('btnOpenOrgProduct')
+  const modal = $('orgProductModal')
+  const closeBtn = $('orgProductClose')
 
-  const btnOpen = req('btnOpenOrgProduct')
-  const modal = req('orgProductModal')
-  const closeBtn = req('orgProductClose')
+  const orgErr = $('orgProductOrgErr')
+  const prodErr = $('orgProductProdErr')
 
-  const orgErr = req('orgProductOrgErr')
-  const prodErr = req('orgProductProdErr')
+  const releaseYearEl = $('orgProductReleaseYear')
+  const releaseYearErr = $('orgProductReleaseYearErr')
 
-  const releaseYearEl = req('orgProductReleaseYear')
-  const releaseYearErr = req('orgProductReleaseYearErr')
+  const endYearEl = $('orgProductEndYear')
+  const endYearErr = $('orgProductEndYearErr')
 
-  const endYearEl = req('orgProductEndYear')
-  const endYearErr = req('orgProductEndYearErr')
+  const resetBtn = $('orgProductReset')
+  const submitBtn = $('orgProductSubmit')
 
-  const resetBtn = req('orgProductReset')
-  const submitBtn = req('orgProductSubmit')
-
-  const orgPickedEl = req('orgProductOrgPicked')
-  const orgClearBtn = req('orgProductOrgClear')
-  const orgSearchInput = req('orgProductOrgSearch')
-  const orgStatusEl = req('orgProductOrgStatus')
-  const orgListEl = req('orgProductOrgList')
-
-  const prodPickedEl = req('orgProductProdPicked')
-  const prodClearBtn = req('orgProductProdClear')
-  const prodSearchInput = req('orgProductProdSearch')
-  const prodStatusEl = req('orgProductProdStatus')
-  const prodListEl = req('orgProductProdList')
-
-  if (
-    !btnOpen || !modal || !closeBtn ||
-    !orgErr || !prodErr ||
-    !releaseYearEl || !releaseYearErr ||
-    !endYearEl || !endYearErr ||
-    !resetBtn || !submitBtn ||
-    !orgPickedEl || !orgClearBtn || !orgSearchInput || !orgStatusEl || !orgListEl ||
-    !prodPickedEl || !prodClearBtn || !prodSearchInput || !prodStatusEl || !prodListEl
-  ) {
-    console.warn('[orgProduct] mountOrgProductAdmin skipped due to missing DOM nodes.')
+  // ===== guard =====
+  if (!btnOpen || !modal || !closeBtn || !releaseYearEl || !endYearEl || !resetBtn || !submitBtn) {
+    console.warn('[orgProduct] mountOrgProductAdmin skipped: missing required DOM nodes.')
     return
   }
 
@@ -85,11 +60,11 @@ export function mountOrgProductAdmin(ctx) {
   }
 
   const orgPicker = createSingleSelectPicker({
-    pickedEl: orgPickedEl,
-    clearBtn: orgClearBtn,
-    inputEl: orgSearchInput,
-    statusEl: orgStatusEl,
-    listEl: orgListEl,
+    pickedEl: $('orgProductOrgPicked'),
+    clearBtn: $('orgProductOrgClear'),
+    inputEl: $('orgProductOrgSearch'),
+    statusEl: $('orgProductOrgStatus'),
+    listEl: $('orgProductOrgList'),
     errEl: orgErr,
     emptyText: '未选择（请在下方搜索并点击一个企业/机构）',
     searchFn: async (q) => {
@@ -109,11 +84,11 @@ export function mountOrgProductAdmin(ctx) {
   })
 
   const productPicker = createSingleSelectPicker({
-    pickedEl: prodPickedEl,
-    clearBtn: prodClearBtn,
-    inputEl: prodSearchInput,
-    statusEl: prodStatusEl,
-    listEl: prodListEl,
+    pickedEl: $('orgProductProdPicked'),
+    clearBtn: $('orgProductProdClear'),
+    inputEl: $('orgProductProdSearch'),
+    statusEl: $('orgProductProdStatus'),
+    listEl: $('orgProductProdList'),
     errEl: prodErr,
     emptyText: '未选择（请在下方搜索并点击一个安全产品/别名）',
     searchFn: makeProductUnionSearch({ apiFetch, getToken }),
@@ -126,68 +101,63 @@ export function mountOrgProductAdmin(ctx) {
       ].filter(Boolean).join(' · ')
     }),
     // union 返回时，尽量取“归一后的主产品 id”
-    getId: (it) => it.security_product_id || it.id,
-    getLabel: (it, rendered) => rendered?.title ?? (it.name || String(it.security_product_id || it.id)),
+    getId: (it) =>
+      it.security_product_id ??
+      it.normalized_id ??
+      it.normalized_security_product_id ??
+      it.id,
+    getLabel: (it, rendered) => rendered?.title ?? String(it.security_product_id ?? it.id ?? ''),
   })
 
-  function validate() {
-    clearErrors()
-
-    const orgPicked = orgPicker.getSelected()
-    const prodPicked = productPicker.getSelected()
-
-    let ok = true
-    if (!orgPicked) {
-      showErr(orgErr, '请选择企业/机构。')
-      ok = false
-    }
-    if (!prodPicked) {
-      showErr(prodErr, '请选择产品。')
-      ok = false
-    }
-
-    const now = new Date().getFullYear()
-    const rel = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
-    if (!rel.ok) {
-      showErr(releaseYearErr, rel.msg)
-      ok = false
-    }
-
-    const end = validateYearRange(endYearEl.value, { min: 1990, max: now })
-    if (!end.ok) {
-      showErr(endYearErr, end.msg)
-      ok = false
-    }
-
-    return { ok, rel: rel.value, end: end.value }
-  }
-
   function resetForm() {
-    clearErrors()
     orgPicker.clear()
     productPicker.clear()
     releaseYearEl.value = ''
     endYearEl.value = ''
+    clearErrors()
   }
 
-  btnOpen.addEventListener('click', () => {
-    resetForm()
-    openModal(modal)
-  })
+  function validate() {
+    clearErrors()
+    let ok = true
+
+    if (!orgPicker.validateRequired('请选择企业/机构。')) ok = false
+    if (!productPicker.validateRequired('请选择安全产品/别名。')) ok = false
+
+    const now = new Date().getFullYear()
+
+    const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
+    if (!r.ok) { showErr(releaseYearErr, r.msg); ok = false }
+
+    const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
+    if (!e.ok) { showErr(endYearErr, e.msg); ok = false }
+
+    return ok
+  }
+
+  function collectPayload() {
+    const orgSel = orgPicker.getSelected()
+    const prodSel = productPicker.getSelected()
+    const now = new Date().getFullYear()
+
+    const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
+    const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
+
+    return {
+      organization_id: orgSel?.id,
+      security_product_id: prodSel?.id,
+      product_release_year: r.value,
+      product_end_year: e.value,
+    }
+  }
 
   resetBtn.addEventListener('click', () => resetForm())
 
   submitBtn.addEventListener('click', async () => {
-    const v = validate()
-    if (!v.ok) return
+    if (!validate()) return
 
     const token = getToken()
-    const orgPicked = orgPicker.getSelected()
-    const prodPicked = productPicker.getSelected()
-
-    // 归一后的主产品 id（union 的 alias 项也会带 security_product_id）
-    const security_product_id = prodPicked.security_product_id || prodPicked.id
-    const organization_id = orgPicked.organization_id || orgPicked.id
+    const payload = collectPayload()
 
     submitBtn.disabled = true
     resetBtn.disabled = true
@@ -196,20 +166,35 @@ export function mountOrgProductAdmin(ctx) {
       titleLoading: '添加中',
       bodyLoading: '写入企业产品中…',
       action: async () => {
-        const payload = {
-          organization_id,
-          security_product_id,
-          release_year: v.rel,
-          end_year: v.end,
-        }
-        const res = await apiFetch('/api/admin/organization-product', { method: 'POST', token, body: payload })
+        // ✅ 后端实际存在的路由：POST /api/admin/org_product
+        const res = await apiFetch('/api/admin/org_product', { method: 'POST', token, body: payload })
+
         closeModal(modal)
         resetForm()
-        return `✅ 添加成功：organization_product_id = ${res?.organization_product?.organization_product_id ?? res?.organization_product_id ?? '（未返回）'}`
+
+        const row = res?.organization_product ?? res
+        const orgId = row?.organization_id ?? payload.organization_id
+        const prodId = row?.security_product_id ?? payload.security_product_id
+        const ry = row?.product_release_year ?? payload.product_release_year
+        const ey = row?.product_end_year ?? payload.product_end_year
+
+        return [
+          '✅ 添加成功：organization_product',
+          `organization_id = ${orgId}`,
+          `security_product_id = ${prodId}`,
+          `product_release_year = ${ry ?? '—'}`,
+          `product_end_year = ${ey ?? '—'}`,
+        ].join('\n')
       }
     })
 
     submitBtn.disabled = false
     resetBtn.disabled = false
+  })
+
+  btnOpen.addEventListener('click', () => {
+    resetForm()
+    openModal(modal)
+    orgPicker.focus()
   })
 }
