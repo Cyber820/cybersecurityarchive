@@ -1,328 +1,471 @@
 // apps/web/src/features/product.js
-import { createMultiSelectGrid } from '../ui/multiselect-grid.js'
-import { createEntitySearch } from '../ui/entity-search.js'
+import { createAliasSwitch } from '../ui/alias-switch.js'
+import { createSingleSelectPicker } from '../ui/single-select-picker.js'
 
-export function mountProductAdmin({
-  $,
-  openModal,
-  closeModal,
-  setInvalid,
-  clearInvalid,
-  norm,
-  isSlug,
-  apiFetch,
-  getToken,
-  showConfirmFlow,
+function clampInt(v, min, max) {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return null
+  const i = Math.trunc(n)
+  if (i < min || i > max) return null
+  return i
+}
+
+/**
+ * 一个“尽量不依赖你旧实现”的简易 domains 多选面板：
+ * - 使用 productDomains 容器（#productDomains）
+ * - 内部自己渲染：展开/清空/确认、搜索框、结果 checkbox 列表
+ * - 搜索接口默认用 /api/admin/dropdowns/domain_union?q=
+ *  （若你后端是 /dropdowns/domains，请改下面的 searchUrlBuilder）
+ */
+function mountDomainMultiSelect({
+  rootEl,
+  fetchItems,            // async (q)=>{items:[]}
+  getId = (it) => it.security_domain_id ?? it.domain_id ?? it.id,
+  getLabel = (it) => it.security_domain_name ?? it.domain_name ?? it.name ?? `ID ${getId(it)}`,
+  onChangeSummary = null // (confirmedIds, confirmedItems)=>void
 }) {
-  // Modal
-  const productModal = $('productModal')
-  const btnOpenProduct = $('btnOpenProduct')
-  const productClose = $('productClose')
+  if (!rootEl) throw new Error('mountDomainMultiSelect: missing rootEl')
 
-  // Fields
-  const productName = $('productName')
-  const productNameErr = $('productNameErr')
+  let confirmed = new Map() // id -> item
+  let pending = new Map()   // id -> item
+  let open = false
 
-  const productIsAlias = $('productIsAlias')
-  const productIsAliasErr = $('productIsAliasErr')
+  rootEl.innerHTML = ''
 
-  const productSlugRow = $('productSlugRow')
-  const productSlug = $('productSlug')
-  const productSlugErr = $('productSlugErr')
+  const head = document.createElement('div')
+  head.className = 'ia-ms-head'
 
-  const productDomainsRow = $('productDomainsRow')
-  const productDomainsHost = $('productDomains')
-  const productDomainsErr = $('productDomainsErr')
+  const title = document.createElement('div')
+  title.className = 'ia-ms-title'
+  title.textContent = '已选择安全领域（多选）'
 
-  const productDescRow = $('productDescRow')
-  const productDesc = $('productDesc')
+  const actions = document.createElement('div')
+  actions.className = 'ia-ms-actions'
 
-  // Alias target selector
-  const productAliasTargetRow = $('productAliasTargetRow')
-  const productAliasTargetSearch = $('productAliasTargetSearch')
-  const productAliasTargetStatus = $('productAliasTargetStatus')
-  const productAliasTargetList = $('productAliasTargetList')
-  const productAliasTargetPicked = $('productAliasTargetPicked')
-  const productAliasTargetClear = $('productAliasTargetClear')
-  const productAliasTargetErr = $('productAliasTargetErr')
+  const btnToggle = document.createElement('button')
+  btnToggle.type = 'button'
+  btnToggle.className = 'ia-ms-iconbtn'
+  btnToggle.textContent = '▾'
 
-  // Actions
-  const productReset = $('productReset')
-  const productSubmit = $('productSubmit')
+  const btnClear = document.createElement('button')
+  btnClear.type = 'button'
+  btnClear.className = 'ia-ms-iconbtn'
+  btnClear.textContent = '×'
 
-  // State
-  let aliasTarget = null // { id, name, slug }
-  let domainGrid = null
+  actions.appendChild(btnToggle)
+  actions.appendChild(btnClear)
 
-  function isAliasMode() {
-    const v = String(productIsAlias.value || '').trim()
-    return v === 'yes'
-  }
+  head.appendChild(title)
+  head.appendChild(actions)
 
-  function setDomainsErr(msg) {
-    productDomainsErr.textContent = msg
-    productDomainsErr.style.display = msg ? 'block' : 'none'
-  }
+  const summary = document.createElement('div')
+  summary.className = 'ia-ms-summary'
+  summary.textContent = '未选择（点击 ▾ 展开后搜索并勾选，点“确认”生效）'
 
-  function setAliasTargetErr(msg) {
-    productAliasTargetErr.textContent = msg
-    productAliasTargetErr.style.display = msg ? 'block' : 'none'
-  }
+  const panel = document.createElement('div')
+  panel.className = 'ia-ms-panel'
 
-  function clearErrors() {
-    clearInvalid(productName, productNameErr)
-    clearInvalid(productIsAlias, productIsAliasErr)
-    clearInvalid(productSlug, productSlugErr)
+  const searchBox = document.createElement('input')
+  searchBox.className = 'input'
+  searchBox.type = 'text'
+  searchBox.placeholder = '搜索安全领域 name / alias / slug ...'
 
-    setDomainsErr('')
-    setAliasTargetErr('')
-  }
+  const status = document.createElement('div')
+  status.className = 'hint'
+  status.style.marginTop = '6px'
+  status.textContent = '输入关键字开始搜索。'
 
-  function renderPickedTarget() {
-    if (!isAliasMode()) {
-      productAliasTargetPicked.textContent = ''
-      productAliasTargetClear.style.display = 'none'
-      return
-    }
-    if (!aliasTarget) {
-      productAliasTargetPicked.textContent = '未选择（请在下方搜索并点击一个安全产品）'
-      productAliasTargetClear.style.display = 'none'
-      return
-    }
-    const suffix = aliasTarget.slug ? `（slug: ${aliasTarget.slug}）` : ''
-    productAliasTargetPicked.textContent = `已选择：${aliasTarget.name} ${suffix} [ID=${aliasTarget.id}]`
-    productAliasTargetClear.style.display = ''
-  }
+  const list = document.createElement('div')
+  list.style.marginTop = '10px'
 
-  async function refreshDomainGrid() {
-    const token = getToken()
-    const res = await apiFetch('/api/admin/dropdowns/domains', { token })
+  const panelActions = document.createElement('div')
+  panelActions.className = 'modal-actions'
+  panelActions.style.justifyContent = 'flex-start'
+  panelActions.style.marginTop = '10px'
 
-    // dropdowns/domains 返回 items: [{id,name,slug}]
-    const options = (res?.items || []).map(x => ({
-      id: x.id,
-      name: x.name,
-      slug: x.slug ?? null,
-      description: null,
-    }))
+  const btnConfirm = document.createElement('button')
+  btnConfirm.type = 'button'
+  btnConfirm.className = 'btn btn-primary'
+  btnConfirm.textContent = '确认'
 
-    if (!domainGrid) {
-      domainGrid = createMultiSelectGrid({
-        title: '安全领域',
-        required: true,
-        placeholder: '搜索领域名称（也支持输入 slug 搜索，但不显示 slug）…',
-        columns: 3,
-        options,
-        searchText: (o) => `${o?.name ?? ''} ${o?.slug ?? ''}`.trim(),
-      })
-      productDomainsHost.innerHTML = ''
-      productDomainsHost.appendChild(domainGrid.element)
+  panelActions.appendChild(btnConfirm)
+
+  panel.appendChild(searchBox)
+  panel.appendChild(status)
+  panel.appendChild(list)
+  panel.appendChild(panelActions)
+
+  rootEl.appendChild(head)
+  rootEl.appendChild(summary)
+  rootEl.appendChild(panel)
+
+  function refreshSummary() {
+    const items = Array.from(confirmed.values())
+    if (!items.length) {
+      summary.textContent = '未选择（点击 ▾ 展开后搜索并勾选，点“确认”生效）'
     } else {
-      domainGrid.setOptions(options)
+      summary.textContent = items.map(it => `• ${getLabel(it)}`).join('\n')
+    }
+    if (typeof onChangeSummary === 'function') {
+      onChangeSummary(Array.from(confirmed.keys()), items)
     }
   }
 
-  function syncProductModeUI() {
-    const alias = isAliasMode()
-
-    // 非别名：slug + domains + description
-    productSlugRow.style.display = alias ? 'none' : ''
-    productDomainsRow.style.display = alias ? 'none' : ''
-    productDescRow.style.display = alias ? 'none' : ''
-
-    // 别名：target selector（单选）
-    productAliasTargetRow.style.display = alias ? '' : 'none'
-
-    // 清理非当前模式下的错误显示（不清空输入）
-    clearInvalid(productSlug, productSlugErr)
-    setDomainsErr('')
-    setAliasTargetErr('')
-
-    renderPickedTarget()
+  function setOpen(v) {
+    open = !!v
+    panel.style.display = open ? '' : 'none'
+    btnToggle.textContent = open ? '▴' : '▾'
+    if (open) searchBox.focus()
   }
 
-  // Alias target search (single select)
-  const productSearch = createEntitySearch({
-    inputEl: productAliasTargetSearch,
-    listEl: productAliasTargetList,
-    statusEl: productAliasTargetStatus,
+  function renderList(items) {
+    list.innerHTML = ''
+    if (!items.length) {
+      const empty = document.createElement('div')
+      empty.className = 'hint'
+      empty.textContent = '无结果。'
+      list.appendChild(empty)
+      return
+    }
+
+    for (const it of items) {
+      const id = getId(it)
+      if (id === null || id === undefined) continue
+
+      const row = document.createElement('div')
+      row.className = 'es-item'
+      row.style.display = 'flex'
+      row.style.alignItems = 'flex-start'
+      row.style.gap = '10px'
+
+      const cb = document.createElement('input')
+      cb.type = 'checkbox'
+      cb.style.marginTop = '3px'
+
+      // pending 初始复制 confirmed
+      cb.checked = pending.has(id)
+
+      cb.addEventListener('change', () => {
+        if (cb.checked) pending.set(id, it)
+        else pending.delete(id)
+      })
+
+      const info = document.createElement('div')
+      info.style.flex = '1 1 auto'
+
+      const t = document.createElement('div')
+      t.className = 'es-title'
+      t.textContent = getLabel(it)
+
+      const sub = document.createElement('div')
+      sub.className = 'es-subtitle'
+      sub.textContent = [
+        it.cybersecurity_domain_slug ? `slug：${it.cybersecurity_domain_slug}` : null,
+        it.security_domain_id ? `ID：${it.security_domain_id}` : null,
+      ].filter(Boolean).join(' · ')
+
+      info.appendChild(t)
+      if (sub.textContent) info.appendChild(sub)
+
+      row.appendChild(cb)
+      row.appendChild(info)
+      list.appendChild(row)
+    }
+  }
+
+  async function doSearch() {
+    const q = String(searchBox.value || '').trim()
+    if (!q) {
+      status.textContent = '输入关键字开始搜索。'
+      list.innerHTML = ''
+      return
+    }
+    try {
+      status.textContent = '搜索中…'
+      const res = await fetchItems(q)
+      const items = res?.items || res?.data || []
+      status.textContent = `结果：${items.length}`
+      renderList(items)
+    } catch (e) {
+      status.textContent = `搜索失败：${e?.message || String(e)}`
+      list.innerHTML = ''
+    }
+  }
+
+  let t = null
+  searchBox.addEventListener('input', () => {
+    if (t) clearTimeout(t)
+    t = setTimeout(doSearch, 250)
+  })
+
+  btnToggle.addEventListener('click', () => {
+    // 打开时：pending = confirmed 的快照
+    if (!open) {
+      pending = new Map(confirmed)
+      setOpen(true)
+    } else {
+      setOpen(false)
+    }
+  })
+
+  btnClear.addEventListener('click', () => {
+    confirmed = new Map()
+    pending = new Map()
+    refreshSummary()
+    // 不强制关 panel
+  })
+
+  btnConfirm.addEventListener('click', () => {
+    confirmed = new Map(pending)
+    refreshSummary()
+    setOpen(false)
+  })
+
+  // init
+  setOpen(false)
+  refreshSummary()
+
+  return {
+    getConfirmedIds: () => Array.from(confirmed.keys()),
+    clear: () => { confirmed = new Map(); pending = new Map(); refreshSummary() },
+    focus: () => searchBox.focus(),
+  }
+}
+
+export function mountProductAdmin(ctx) {
+  const {
+    $,
+    openModal,
+    closeModal,
+    setInvalid,
+    clearInvalid,
+    norm,
+    isSlug,
+    apiFetch,
+    getToken,
+    showConfirmFlow,
+  } = ctx
+
+  const btnOpen = $('btnOpenProduct')
+
+  const modal = $('productModal')
+  const closeBtn = $('productClose')
+
+  const nameEl = $('productName')
+  const nameErr = $('productNameErr')
+
+  const isAliasEl = $('productIsAlias')
+  const isAliasErr = $('productIsAliasErr')
+
+  const slugRow = $('productSlugRow')
+  const slugEl = $('productSlug')
+  const slugErr = $('productSlugErr')
+
+  const domainsRow = $('productDomainsRow')
+  const domainsRoot = $('productDomains')
+  const domainsErr = $('productDomainsErr')
+
+  constControlled = undefined
+
+  const descRow = $('productDescRow')
+  const descEl = $('productDesc')
+
+  // alias target picker elements
+  const aliasTargetRow = $('productAliasTargetRow')
+  const pickedEl = $('productAliasTargetPicked')
+  const clearBtn = $('productAliasTargetClear')
+  const searchInput = $('productAliasTargetSearch')
+  const statusEl = $('productAliasTargetStatus')
+  const listEl = $('productAliasTargetList')
+  const targetErr = $('productAliasTargetErr')
+
+  const resetBtn = $('productReset')
+  const submitBtn = $('productSubmit')
+
+  closeBtn.addEventListener('click', () => closeModal(modal))
+
+  function clearAllErrors() {
+    clearInvalid(nameEl, nameErr)
+    clearInvalid(isAliasEl, isAliasErr)
+    clearInvalid(slugEl, slugErr)
+    if (domainsErr) {
+      domainsErr.textContent = ''
+      domainsErr.style.display = 'none'
+    }
+    if (targetErr) {
+      targetErr.textContent = ''
+      targetErr.style.display = 'none'
+    }
+  }
+
+  function showDomainsErr(msg) {
+    if (!domainsErr) return
+    domainsErr.textContent = msg || ''
+    domainsErr.style.display = msg ? '' : 'none'
+  }
+
+  // 多选 domains（仅主产品模式使用）
+  const domainMulti = mountDomainMultiSelect({
+    rootEl: domainsRoot,
+    fetchItems: async (q) => {
+      const token = getToken()
+      // 你当前后端大概率已有 domain_union
+      return await apiFetch(`/api/admin/dropdowns/domain_union?q=${encodeURIComponent(q)}`, { token })
+    },
+    getId: (it) => it.security_domain_id ?? it.normalized_id ?? it.domain_id ?? it.id,
+    getLabel: (it) => it.security_domain_name ?? it.domain_name ?? it.name ?? '（未命名领域）',
+  })
+
+  // 单选：归属产品（别名模式使用）
+  const aliasPicker = createSingleSelectPicker({
+    pickedEl,
+    clearBtn,
+    inputEl: searchInput,
+    statusEl,
+    listEl,
+    errEl: targetErr,
+    emptyText: '未选择（请在下方搜索并点击一个安全产品）',
     searchFn: async (q) => {
       const token = getToken()
+      // 主产品检索（不走 union，别名归属应指向主产品）
       return await apiFetch(`/api/admin/dropdowns/products?q=${encodeURIComponent(q)}`, { token })
     },
     renderItem: (it) => ({
-      title: it.name || '（未命名产品）',
+      title: it.security_product_name || it.product_name || it.name || '（未命名产品）',
       subtitle: [
-        it.slug ? `slug：${it.slug}` : null,
-        it.id ? `ID：${it.id}` : null,
+        it.security_product_slug ? `slug：${it.security_product_slug}` : null,
+        it.security_product_id ? `ID：${it.security_product_id}` : null,
       ].filter(Boolean).join(' · ')
     }),
-    onPick: async (it) => {
-      aliasTarget = { id: it.id, name: it.name, slug: it.slug || '' }
-      renderPickedTarget()
-      productAliasTargetList.innerHTML = ''
-      productAliasTargetStatus.textContent = '已选择（如需更换可继续搜索并点击新的结果）'
-      setAliasTargetErr('')
+    getId: (it) => it.security_product_id ?? it.id,
+    getLabel: (it, rendered) => rendered?.title ?? String(it.security_product_id ?? it.id ?? ''),
+  })
+
+  const aliasSwitch = createAliasSwitch({
+    selectEl: isAliasEl,
+    rowsWhenMain: [slugRow, domainsRow, descRow],
+    rowsWhenAlias: [aliasTargetRow],
+    onModeChange: (mode) => {
+      clearAllErrors()
+      if (mode === 'yes') {
+        // 别名模式：清掉主模式输入
+        slugEl.value = ''
+        if (descEl) descEl.value = ''
+        domainMulti.clear()
+        showDomainsErr('')
+      } else {
+        // 主模式：清掉别名选择
+        aliasPicker.clear()
+      }
     }
   })
 
-  productAliasTargetClear.addEventListener('click', () => {
-    aliasTarget = null
-    renderPickedTarget()
-  })
-
-  productIsAlias.addEventListener('change', async () => {
-    syncProductModeUI()
-    if (!isAliasMode()) {
-      // 回到非别名时，确保 domains grid 已准备好（保持体验一致）
-      try { await refreshDomainGrid() } catch (e) { console.error(e) }
-    }
-  })
+  function resetForm() {
+    nameEl.value = ''
+    isAliasEl.value = 'no'
+    slugEl.value = ''
+    if (descEl) descEl.value = ''
+    domainMulti.clear()
+    aliasPicker.clear()
+    clearAllErrors()
+    aliasSwitch.applyMode('no', { emit: false })
+  }
 
   function validate() {
-    clearErrors()
+    clearAllErrors()
     let ok = true
 
-    const name = norm(productName.value)
+    const name = norm(nameEl.value)
     if (!name) {
-      setInvalid(productName, productNameErr, '安全产品名称为必填。')
+      setInvalid(nameEl, nameErr, '安全产品名称为必填。')
       ok = false
     }
 
-    const isAliasVal = String(productIsAlias.value || '').trim()
-    if (!isAliasVal) {
-      setInvalid(productIsAlias, productIsAliasErr, '请选择“是否是安全产品别名”。')
-      ok = false
-    }
-
-    if (isAliasMode()) {
-      if (!aliasTarget?.id) {
-        setAliasTargetErr('别名模式下必须选择一个“归属的安全产品”。')
+    const mode = aliasSwitch.getMode()
+    if (mode === 'no') {
+      const slug = norm(slugEl.value)
+      if (!slug) {
+        setInvalid(slugEl, slugErr, '安全产品 slug 为必填。')
+        ok = false
+      } else if (!isSlug(slug)) {
+        setInvalid(slugEl, slugErr, 'slug 仅允许 a-z / 0-9 / 连字符 -（建议小写）。')
         ok = false
       }
-      return ok
-    }
 
-    // non-alias
-    const slug = norm(productSlug.value)
-    if (!slug) {
-      setInvalid(productSlug, productSlugErr, '安全产品 slug 为必填。')
-      ok = false
-    } else if (!isSlug(slug)) {
-      setInvalid(productSlug, productSlugErr, 'slug 仅允许 a-z / 0-9 / 连字符 -（建议小写）。')
-      ok = false
-    }
-
-    const selectedRaw = domainGrid?.getValues?.() || []
-    const selected = selectedRaw.map(x => Number(x)).filter(n => Number.isFinite(n))
-    if (selected.length === 0) {
-      setDomainsErr('至少选择一个安全领域。')
-      ok = false
+      const domainIds = domainMulti.getConfirmedIds()
+      if (!domainIds.length) {
+        showDomainsErr('请至少选择 1 个对应安全领域。')
+        ok = false
+      }
+    } else {
+      if (!aliasPicker.validateRequired('请选择“归属安全产品”。')) ok = false
     }
 
     return ok
   }
 
-  async function collectPayload() {
-    const name = norm(productName.value)
+  function collectPayload() {
+    const name = norm(nameEl.value)
+    const mode = aliasSwitch.getMode()
+    const desc = norm(descEl?.value)
 
-    if (isAliasMode()) {
+    if (mode === 'no') {
+      const slug = norm(slugEl.value)
+      const domainIds = domainMulti.getConfirmedIds()
       return {
-        is_alias: true,
-        security_product_alias_name: name,
-        security_product_id: Number(aliasTarget.id),
+        mode: 'main',
+        payload: {
+          security_product_name: name,
+          security_product_slug: slug,
+          security_product_description: desc || null,
+          domains: domainIds,
+        }
       }
     }
 
-    await refreshDomainGrid()
-    const selectedRaw = domainGrid?.getValues?.() || []
-    const selected = selectedRaw.map(x => Number(x)).filter(n => Number.isFinite(n))
-
+    const sel = aliasPicker.getSelected()
     return {
-      security_product_name: name,
-      security_product_slug: norm(productSlug.value),
-      security_product_description: norm(productDesc.value) || null,
-      domains: selected,
+      mode: 'alias',
+      payload: {
+        security_product_alias_name: name,
+        security_product_id: sel?.id,
+      }
     }
   }
 
-  async function resetForm() {
-    clearErrors()
-    productName.value = ''
-    productIsAlias.value = 'no'
-    productSlug.value = ''
-    productDesc.value = ''
-    aliasTarget = null
+  resetBtn.addEventListener('click', () => resetForm())
 
-    // domains
-    if (domainGrid?.clear) domainGrid.clear()
-
-    // search
-    productSearch.clear()
-    productAliasTargetList.innerHTML = ''
-    productAliasTargetStatus.textContent = '输入关键字开始搜索。'
-
-    syncProductModeUI()
-
-    // 确保非别名默认打开时 grid 可用
-    try { await refreshDomainGrid() } catch (e) { console.error(e) }
-  }
-
-  btnOpenProduct.addEventListener('click', async () => {
-    openModal(productModal)
-    syncProductModeUI()
-    if (!isAliasMode()) {
-      try { await refreshDomainGrid() } catch (e) { console.error(e) }
-    } else {
-      productSearch.clear()
-      productSearch.focus()
-    }
-  })
-  productClose.addEventListener('click', () => closeModal(productModal))
-
-  productReset.addEventListener('click', async () => {
-    await resetForm()
-  })
-
-  productSubmit.addEventListener('click', async () => {
-    // 非别名时 grid 需要先准备好，否则 validate 时拿不到 selected
-    if (!isAliasMode()) {
-      try { await refreshDomainGrid() } catch (e) { console.error(e) }
-    }
-
+  submitBtn.addEventListener('click', async () => {
     if (!validate()) return
 
     const token = getToken()
-    const payload = await collectPayload()
+    const { mode, payload } = collectPayload()
 
-    productSubmit.disabled = true
-    productReset.disabled = true
+    submitBtn.disabled = true
+    resetBtn.disabled = true
 
     await showConfirmFlow({
-      titleLoading: '录入中',
-      bodyLoading: isAliasMode() ? '写入安全产品别名中…' : '写入安全产品中…',
+      titleLoading: mode === 'main' ? '添加中' : '添加别名中',
+      bodyLoading: mode === 'main' ? '写入安全产品中…' : '写入安全产品别名中…',
       action: async () => {
-        const res = await apiFetch('/api/admin/product', { method: 'POST', token, body: payload })
-
-        const pid = res?.product?.security_product_id ?? res?.security_product_id
-        const aid = res?.alias?.security_product_alias_id ?? res?.security_product_alias_id
-
-        closeModal(productModal)
-        await resetForm()
-
-        if (isAliasMode()) {
-          return `✅ 写入别名成功：security_product_alias_id = ${aid ?? '（未返回）'}`
-        }
-        return `✅ 写入产品成功：security_product_id = ${pid ?? '（未返回）'}`
+        // 你当前后端应已支持：
+        // - 主产品：POST /api/admin/product
+        // - 别名：  POST /api/admin/product/alias
+        const url = mode === 'main' ? '/api/admin/product' : '/api/admin/product/alias'
+        const res = await apiFetch(url, { method: 'POST', token, body: payload })
+        closeModal(modal)
+        resetForm()
+        return `✅ 添加成功：${res?.id ?? res?.security_product_id ?? res?.security_product_alias_id ?? '（未返回）'}`
       }
     })
 
-    productSubmit.disabled = false
-    productReset.disabled = false
+    submitBtn.disabled = false
+    resetBtn.disabled = false
   })
 
-  // init
-  syncProductModeUI()
-  // 默认 no：预热 domains grid
-  refreshDomainGrid().catch(() => {})
+  btnOpen.addEventListener('click', () => {
+    resetForm()
+    openModal(modal)
+    nameEl.focus()
+  })
 }
