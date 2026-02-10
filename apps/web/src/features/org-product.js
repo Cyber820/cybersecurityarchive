@@ -1,5 +1,6 @@
 // apps/web/src/features/org-product.js
 import { createSingleSelectPicker } from '../ui/single-select-picker.js'
+import { makeProductUnionSearch } from '../core/dropdowns.js'
 
 function validateYearRange(val, { min = 1990, max = new Date().getFullYear() } = {}) {
   const s = String(val || '').trim()
@@ -84,11 +85,7 @@ export function mountOrgProductAdmin(ctx) {
     listEl: $('orgProductProdList'),
     errEl: prodErr,
     emptyText: '未选择（请在下方搜索并点击一个安全产品/别名）',
-    searchFn: async (q) => {
-      const token = getToken()
-      // union：产品 + 产品别名
-      return await apiFetch(`/api/admin/dropdowns/product_union?q=${encodeURIComponent(q)}`, { token })
-    },
+    searchFn: makeProductUnionSearch({ apiFetch, getToken }),
     renderItem: (it) => ({
       title: it.name || it.security_product_name || it.security_product_alias_name || '（未命名产品）',
       subtitle: [
