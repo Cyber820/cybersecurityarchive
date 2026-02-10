@@ -16,32 +16,52 @@ export function mountOrganizationAdmin(ctx) {
     showConfirmFlow,
   } = ctx
 
+  // admin.html 可能在重构中（元素缺失会导致整页 JS 崩溃）。
+  // 这里做“软失败”：缺元素就跳过挂载，并在 console 给出提示。
+  const req = (id) => {
+    const el = $(id)
+    if (!el) console.warn(`[org] missing element #${id}`)
+    return el
+  }
+
   /* =========================
    * Organization: Create + Edit shared form
    * ========================= */
-  const orgModal = $('orgModal')
-  const orgModalTitle = $('orgModalTitle')
-  const orgClose = $('orgClose')
+  const orgModal = req('orgModal')
+  const orgModalTitle = req('orgModalTitle')
+  const orgClose = req('orgClose')
 
-  const orgShortName = $('orgShortName')
-  const orgFullName = $('orgFullName')
-  const orgEstablishYear = $('orgEstablishYear')
-  const orgSlug = $('orgSlug')
-  const orgDescription = $('orgDescription')
+  const orgShortName = req('orgShortName')
+  const orgFullName = req('orgFullName')
+  const orgEstablishYear = req('orgEstablishYear')
+  const orgSlug = req('orgSlug')
+  const orgDescription = req('orgDescription')
 
-  const orgShortNameErr = $('orgShortNameErr')
-  const orgEstablishYearErr = $('orgEstablishYearErr')
-  const orgSlugErr = $('orgSlugErr')
+  const orgShortNameErr = req('orgShortNameErr')
+  const orgEstablishYearErr = req('orgEstablishYearErr')
+  const orgSlugErr = req('orgSlugErr')
 
-  const orgActionsCreate = $('orgActionsCreate')
-  const orgActionsEdit = $('orgActionsEdit')
+  const orgActionsCreate = req('orgActionsCreate')
+  const orgActionsEdit = req('orgActionsEdit')
 
-  const orgReset = $('orgReset')
-  const orgSubmit = $('orgSubmit')
+  const orgReset = req('orgReset')
+  const orgSubmit = req('orgSubmit')
 
-  const orgEditReset = $('orgEditReset')
-  const orgEditCancel = $('orgEditCancel')
-  const orgEditSubmit = $('orgEditSubmit')
+  const orgEditReset = req('orgEditReset')
+  const orgEditCancel = req('orgEditCancel')
+  const orgEditSubmit = req('orgEditSubmit')
+
+  // Critical nodes missing → skip mounting to avoid crashing the whole admin page.
+  if (
+    !orgModal || !orgModalTitle || !orgClose ||
+    !orgShortName || !orgFullName || !orgEstablishYear || !orgSlug ||
+    !orgShortNameErr || !orgEstablishYearErr || !orgSlugErr ||
+    !orgActionsCreate || !orgActionsEdit ||
+    !orgReset || !orgSubmit || !orgEditReset || !orgEditCancel || !orgEditSubmit
+  ) {
+    console.warn('[org] mountOrganizationAdmin skipped due to missing DOM nodes.')
+    return
+  }
 
   let editingOrgId = null
   let orgPrefillSnap = null
@@ -223,20 +243,33 @@ export function mountOrganizationAdmin(ctx) {
   /* =========================
    * Organization Edit: Search + Info
    * ========================= */
-  const btnOpenOrg = $('btnOpenOrg')
-  const btnOpenOrgEdit = $('btnOpenOrgEdit')
+  const btnOpenOrg = req('btnOpenOrg')
+  const btnOpenOrgEdit = req('btnOpenOrgEdit')
 
-  const orgSearchModal = $('orgSearchModal')
-  const orgSearchClose = $('orgSearchClose')
-  const orgSearchInput = $('orgSearchInput')
-  const orgSearchList = $('orgSearchList')
-  const orgSearchStatus = $('orgSearchStatus')
+  const orgSearchModal = req('orgSearchModal')
+  const orgSearchClose = req('orgSearchClose')
+  const orgSearchInput = req('orgSearchInput')
+  const orgSearchList = req('orgSearchList')
+  const orgSearchStatus = req('orgSearchStatus')
 
-  const orgInfoModal = $('orgInfoModal')
-  const orgInfoClose = $('orgInfoClose')
-  const orgInfoCancel = $('orgInfoCancel')
-  const orgInfoEdit = $('orgInfoEdit')
-  const orgInfoBody = $('orgInfoBody')
+  const orgInfoModal = req('orgInfoModal')
+  const orgInfoClose = req('orgInfoClose')
+  const orgInfoCancel = req('orgInfoCancel')
+  const orgInfoEdit = req('orgInfoEdit')
+  const orgInfoBody = req('orgInfoBody')
+
+  // 若关键元素缺失，直接跳过挂载，避免整页报错导致所有按钮失效。
+  const critical = [
+    orgModal, orgModalTitle, orgClose,
+    orgShortName, orgEstablishYear, orgSlug,
+    orgShortNameErr, orgEstablishYearErr, orgSlugErr,
+    orgActionsCreate, orgActionsEdit,
+    orgReset, orgSubmit, orgEditReset, orgEditCancel, orgEditSubmit,
+    btnOpenOrg, btnOpenOrgEdit,
+    orgSearchModal, orgSearchClose, orgSearchInput, orgSearchList, orgSearchStatus,
+    orgInfoModal, orgInfoClose, orgInfoCancel, orgInfoEdit, orgInfoBody,
+  ]
+  if (critical.some((x) => !x)) return
 
   const orgInfoTitleEl = orgInfoModal.querySelector('.modal-title')
 
