@@ -2,6 +2,13 @@
 import { createSingleSelectPicker } from '../ui/single-select-picker.js'
 import { makeProductUnionSearch } from '../core/dropdowns.js'
 
+function toIntStrict(v) {
+  // 接受 number / "123" / 123.0；拒绝 "" / null / "abc" / NaN
+  const n = typeof v === 'number' ? v : Number(String(v ?? '').trim())
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return null
+  return n
+}
+
 function validateYearRange(val, { min = 1990, max = new Date().getFullYear() } = {}) {
   const s = String(val || '').trim()
   if (!s) return { ok: true, value: null }
@@ -16,7 +23,6 @@ export function mountOrgProductAdmin(ctx) {
     $,
     openModal,
     closeModal,
-    norm,
     apiFetch,
     getToken,
     showConfirmFlow,
@@ -44,8 +50,6 @@ export function mountOrgProductAdmin(ctx) {
     return
   }
 
-  closeBtn.addEventListener('click', () => closeModal(modal))
-
   function showErr(el, msg) {
     if (!el) return
     el.textContent = msg || ''
@@ -58,6 +62,8 @@ export function mountOrgProductAdmin(ctx) {
     showErr(releaseYearErr, '')
     showErr(endYearErr, '')
   }
+
+  closeBtn.addEventListener('click', () => closeModal(modal))
 
   const orgPicker = createSingleSelectPicker({
     pickedEl: $('orgProductOrgPicked'),
@@ -97,7 +103,7 @@ export function mountOrgProductAdmin(ctx) {
       subtitle: [
         it.type ? `类型：${it.type}` : null,
         it.security_product_slug ? `slug：${it.security_product_slug}` : null,
-        it.security_product_id ? `ID：${it.security_product_id}` : (it.id ? `ID：${it.id}` : null),
+        (it.security_product_id ?? it.id) ? `ID：${it.security_product_id ?? it.id}` : null,
       ].filter(Boolean).join(' · ')
     }),
     // union 返回时，尽量取“归一后的主产品 id”
@@ -132,20 +138,43 @@ export function mountOrgProductAdmin(ctx) {
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
     if (!e.ok) { showErr(endYearErr, e.msg); ok = false }
 
+    // 关键：ID 必须能转成整数
+    const orgSel = orgPicker.getSelected()
+    const prodSel = productPicker.getSelected()
+
+    const orgId = toIntStrict(orgSel?.id)
+    if (orgId === null) {
+      showErr(orgErr, '企业ID无效（必须为数字）。请重新选择企业。')
+      ok = false
+    }
+
+    const prodId = toIntStrict(prodSel?.id)
+    if (prodId === null) {
+      showErr(prodErr, '产品ID无效（必须为数字）。请重新选择产品/别名。')
+      ok = false
+    }
+
     return ok
   }
 
   function collectPayload() {
     const orgSel = orgPicker.getSelected()
     const prodSel = productPicker.getSelected()
-    const now = new Date().getFullYear()
 
+    const orgId = toIntStrict(orgSel?.id)
+    const prodId = toIntStrict(prodSel?.id)
+
+    // validate() 已经兜底，这里仍做一次防御
+    if (orgId === null) throw new Error('organization_id must be a number')
+    if (prodId === null) throw new Error('security_product_id must be a number')
+
+    const now = new Date().getFullYear()
     const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
 
     return {
-      organization_id: orgSel?.id,
-      security_product_id: prodSel?.id,
+      organization_id: orgId,
+      security_product_id: prodId,
       product_release_year: r.value,
       product_end_year: e.value,
     }
@@ -157,7 +186,16 @@ export function mountOrgProductAdmin(ctx) {
     if (!validate()) return
 
     const token = getToken()
-    const payload = collectPayload()
+    let payload = null
+
+    try {
+      payload = collectPayload()
+    } catch (e) {
+      // 理论上不会走到这里，但万一走到，给用户一个明确提示
+      const msg = e?.message || String(e)
+      showErr(prodErr, msg)
+      return
+    }
 
     submitBtn.disabled = true
     resetBtn.disabled = true
@@ -166,7 +204,7 @@ export function mountOrgProductAdmin(ctx) {
       titleLoading: '添加中',
       bodyLoading: '写入企业产品中…',
       action: async () => {
-        // ✅ 后端实际存在的路由：POST /api/admin/org_product
+        // 后端路由：POST /api/admin/org_product
         const res = await apiFetch('/api/admin/org_product', { method: 'POST', token, body: payload })
 
         closeModal(modal)
