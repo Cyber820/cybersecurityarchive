@@ -5,6 +5,7 @@ import { initConfirm } from './core/confirm.js'
 
 import { mountOrganizationAdmin } from './features/organization.js'
 import { mountDomainAdmin } from './features/domain.js'
+import { mountDomainEditAdmin } from './features/domain-edit.js'
 import { mountProductAdmin } from './features/product.js'
 import { mountOrgProductAdmin } from './features/org-product.js'
 
@@ -38,6 +39,22 @@ mountOrganizationAdmin({
  * Domain
  * ========================= */
 mountDomainAdmin({
+  $,
+  openModal,
+  closeModal,
+  setInvalid,
+  clearInvalid,
+  norm,
+  isSlug,
+  apiFetch,
+  getToken,
+  showConfirmFlow,
+});
+
+/* =========================
+ * Domain Edit (NEW)
+ * ========================= */
+mountDomainEditAdmin({
   $,
   openModal,
   closeModal,
