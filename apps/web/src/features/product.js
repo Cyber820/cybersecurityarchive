@@ -1,6 +1,7 @@
 // apps/web/src/features/product.js
 import { createAliasSwitch } from '../ui/alias-switch.js'
 import { createSingleSelectPicker } from '../ui/single-select-picker.js'
+import { makeDomainUnionSearch } from '../core/dropdowns.js'
 
 function clampInt(v, min, max) {
   const n = Number(v)
@@ -265,8 +266,6 @@ export function mountProductAdmin(ctx) {
   const domainsRoot = $('productDomains')
   const domainsErr = $('productDomainsErr')
 
-  constControlled = undefined
-
   const descRow = $('productDescRow')
   const descEl = $('productDesc')
 
@@ -307,11 +306,7 @@ export function mountProductAdmin(ctx) {
   // 多选 domains（仅主产品模式使用）
   const domainMulti = mountDomainMultiSelect({
     rootEl: domainsRoot,
-    fetchItems: async (q) => {
-      const token = getToken()
-      // 你当前后端大概率已有 domain_union
-      return await apiFetch(`/api/admin/dropdowns/domain_union?q=${encodeURIComponent(q)}`, { token })
-    },
+    fetchItems: makeDomainUnionSearch({ apiFetch, getToken }),
     getId: (it) => it.security_domain_id ?? it.normalized_id ?? it.domain_id ?? it.id,
     getLabel: (it) => it.security_domain_name ?? it.domain_name ?? it.name ?? '（未命名领域）',
   })
