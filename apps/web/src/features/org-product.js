@@ -2,12 +2,42 @@
 import { createSingleSelectPicker } from '../ui/single-select-picker.js'
 import { makeProductUnionSearch } from '../core/dropdowns.js'
 
-console.log('[orgProduct] version = 2026-02-11-A+debug')
+console.log('[orgProduct] version = 2026-02-11-B (normalize union id)')
 
 function toIntStrict(v) {
   const n = typeof v === 'number' ? v : Number(String(v ?? '').trim())
   if (!Number.isFinite(n) || !Number.isInteger(n)) return null
   return n
+}
+
+function parsePrefixedId(v) {
+  // support: "p:7", "a:7", "7"
+  const s = String(v ?? '').trim()
+  if (!s) return null
+  if (/^\d+$/.test(s)) return toIntStrict(s)
+  const m = s.match(/^[a-zA-Z]+:(\d+)$/)
+  if (!m) return null
+  return toIntStrict(m[1])
+}
+
+function resolveUnionProductId(selected) {
+  // selected: { id, label, raw }
+  if (!selected) return null
+  const raw = selected.raw || {}
+  // 优先用 union 结果提供的“主产品 id”
+  const cands = [
+    raw.security_product_id,
+    raw.product_id,
+    raw.normalized_security_product_id,
+    raw.normalized_id,
+    raw.normalized_product_id,
+    selected.id,
+  ]
+  for (const v of cands) {
+    const n = typeof v === 'string' ? parsePrefixedId(v) : toIntStrict(v)
+    if (n !== null) return n
+  }
+  return null
 }
 
 function validateYearRange(val, { min = 1990, max = new Date().getFullYear() } = {}) {
@@ -59,11 +89,6 @@ export function mountOrgProductAdmin(ctx) {
     el.style.display = msg ? '' : 'none'
   }
 
-  function hardNotify(msg) {
-    try { alert(msg) } catch {}
-    console.warn('[orgProduct] notify:', msg)
-  }
-
   function clearErrors() {
     showErr(orgErr, '')
     showErr(prodErr, '')
@@ -95,9 +120,6 @@ export function mountOrgProductAdmin(ctx) {
     }),
     getId: (it) => it.organization_id,
     getLabel: (it, rendered) => rendered?.title ?? String(it.organization_id),
-    onPick: async (it, sel) => {
-      console.log('[orgProduct][pick org] sel=', sel, 'raw=', it)
-    }
   })
 
   const productPicker = createSingleSelectPicker({
@@ -109,40 +131,20 @@ export function mountOrgProductAdmin(ctx) {
     errEl: prodErr || null,
     emptyText: '未选择（请在下方搜索并点击一个安全产品/别名）',
     searchFn: makeProductUnionSearch({ apiFetch, getToken }),
-
-    // 这里我们把 “可能出现的字段” 全部打通，同时把原始值也打印出来（用于定位 union 返回结构）
-    getId: (it) => (
-      it.security_product_id ??
-      it.normalized_security_product_id ??
-      it.normalized_id ??
-      it.id ??
-      it.security_product_alias_id ?? // 万一 union 返回 alias_id（但应当还有 normalized）
-      it.security_product_alias_name_id // 极端兜底
-    ),
-
-    getLabel: (it, rendered) => rendered?.title ?? String(
-      it.name ??
-      it.security_product_name ??
-      it.security_product_alias_name ??
-      it.security_product_slug ??
-      (it.security_product_id ?? it.id ?? '')
-    ),
-
     renderItem: (it) => ({
       title: it.name || it.security_product_name || it.security_product_alias_name || '（未命名产品）',
       subtitle: [
-        it.type ? `类型：${it.type}` : null,
-        it.security_product_slug ? `slug：${it.security_product_slug}` : null,
-        (it.security_product_id ?? it.normalized_security_product_id ?? it.id) ? `ID：${it.security_product_id ?? it.normalized_security_product_id ?? it.id}` : null,
+        it.kind ? `类型：${it.kind}` : (it.type ? `类型：${it.type}` : null),
+        it.slug ? `slug：${it.slug}` : (it.security_product_slug ? `slug：${it.security_product_slug}` : null),
+        (it.product_id ?? it.security_product_id ?? it.normalized_security_product_id) ? `ID：${it.product_id ?? it.security_product_id ?? it.normalized_security_product_id}` : null,
       ].filter(Boolean).join(' · ')
     }),
-
-    onPick: async (it, sel) => {
-      console.log('[orgProduct][pick product] sel=', sel, 'raw=', it)
-    }
+    // 注意：这里可以保留 union 的字符串 id（p:7 / a:7），我们会在提交时做归一化
+    getId: (it) => it.id ?? it.security_product_id ?? it.product_id ?? it.normalized_security_product_id ?? it.normalized_id,
+    getLabel: (it, rendered) => rendered?.title ?? String(it.name ?? it.security_product_name ?? it.security_product_alias_name ?? it.id ?? ''),
   })
 
-  // 暴露出来方便你随时检查 picker 的内部状态
+  // 保留 debug
   window.__orgProductDebug = { orgPicker, productPicker }
 
   function resetForm() {
@@ -158,16 +160,10 @@ export function mountOrgProductAdmin(ctx) {
     let ok = true
 
     const orgOk = orgPicker.validateRequired('请选择企业/机构。')
-    if (!orgOk) {
-      ok = false
-      if (!orgErr) hardNotify('请选择企业/机构（orgProductOrgErr 节点缺失，无法在页面显示错误）。')
-    }
+    if (!orgOk) ok = false
 
     const prodOk = productPicker.validateRequired('请选择安全产品/别名。')
-    if (!prodOk) {
-      ok = false
-      if (!prodErr) hardNotify('请选择安全产品/别名（orgProductProdErr 节点缺失，无法在页面显示错误）。')
-    }
+    if (!prodOk) ok = false
 
     const now = new Date().getFullYear()
 
@@ -180,18 +176,17 @@ export function mountOrgProductAdmin(ctx) {
     const orgId = toIntStrict(orgPicker.getSelected()?.id)
     if (orgId === null) { showErr(orgErr, '企业 ID 无效（必须为数字）。请重新选择。'); ok = false }
 
-    const prodId = toIntStrict(productPicker.getSelected()?.id)
-    if (prodId === null) { showErr(prodErr, '产品 ID 无效（必须为数字）。请重新选择。'); ok = false }
+    const prodSel = productPicker.getSelected()
+    const prodId = resolveUnionProductId(prodSel)
+    if (prodId === null) { showErr(prodErr, '产品 ID 无效（请重新选择）。'); ok = false }
 
     if (!ok) {
       console.warn('[orgProduct] validate failed', {
         orgSelected: orgPicker.getSelected(),
-        productSelected: productPicker.getSelected(),
+        productSelected: prodSel,
+        resolvedProductId: prodId,
         releaseYear: releaseYearEl.value,
         endYear: endYearEl.value,
-        hasOrgErrEl: !!orgErr,
-        hasProdErrEl: !!prodErr,
-        prodPickedText: $('orgProductProdPicked')?.textContent,
       })
     }
 
@@ -202,7 +197,8 @@ export function mountOrgProductAdmin(ctx) {
     const now = new Date().getFullYear()
 
     const orgId = toIntStrict(orgPicker.getSelected()?.id)
-    const prodId = toIntStrict(productPicker.getSelected()?.id)
+    const prodSel = productPicker.getSelected()
+    const prodId = resolveUnionProductId(prodSel)
 
     if (orgId === null) throw new Error('organization_id must be a number')
     if (prodId === null) throw new Error('security_product_id must be a number')
@@ -243,16 +239,11 @@ export function mountOrgProductAdmin(ctx) {
       return msg
     }
 
-    if (typeof showConfirmFlow === 'function') {
-      await showConfirmFlow({
-        titleLoading: '添加中',
-        bodyLoading: '写入企业产品中…',
-        action,
-      })
-    } else {
-      const msg = await action()
-      alert(msg)
-    }
+    await showConfirmFlow({
+      titleLoading: '添加中',
+      bodyLoading: '写入企业产品中…',
+      action,
+    })
   }
 
   resetBtn.addEventListener('click', () => resetForm())
@@ -266,7 +257,7 @@ export function mountOrgProductAdmin(ctx) {
       console.error('[orgProduct] submit failed:', e)
       const msg = e?.message || String(e)
       showErr(prodErr, `❌ 失败：${msg}`)
-      hardNotify(`企业产品添加失败：${msg}`)
+      try { alert(`企业产品添加失败：${msg}`) } catch {}
     } finally {
       submitBtn.disabled = false
       resetBtn.disabled = false
