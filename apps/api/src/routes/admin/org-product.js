@@ -1,6 +1,7 @@
 // apps/api/src/routes/admin/org-product.js
 import { supabase } from '../../supabase.js'
 import { requireAdmin } from './auth.js'
+console.log('[orgProduct] version = 2026-02-11-A')
 
 /**
  * POST /api/admin/org_product
