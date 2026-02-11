@@ -2,42 +2,10 @@
 import { createSingleSelectPicker } from '../ui/single-select-picker.js'
 import { makeProductUnionSearch } from '../core/dropdowns.js'
 
-console.log('[orgProduct] version = 2026-02-11-B (normalize union id)')
-
 function toIntStrict(v) {
   const n = typeof v === 'number' ? v : Number(String(v ?? '').trim())
   if (!Number.isFinite(n) || !Number.isInteger(n)) return null
   return n
-}
-
-function parsePrefixedId(v) {
-  // support: "p:7", "a:7", "7"
-  const s = String(v ?? '').trim()
-  if (!s) return null
-  if (/^\d+$/.test(s)) return toIntStrict(s)
-  const m = s.match(/^[a-zA-Z]+:(\d+)$/)
-  if (!m) return null
-  return toIntStrict(m[1])
-}
-
-function resolveUnionProductId(selected) {
-  // selected: { id, label, raw }
-  if (!selected) return null
-  const raw = selected.raw || {}
-  // 优先用 union 结果提供的“主产品 id”
-  const cands = [
-    raw.security_product_id,
-    raw.product_id,
-    raw.normalized_security_product_id,
-    raw.normalized_id,
-    raw.normalized_product_id,
-    selected.id,
-  ]
-  for (const v of cands) {
-    const n = typeof v === 'string' ? parsePrefixedId(v) : toIntStrict(v)
-    if (n !== null) return n
-  }
-  return null
 }
 
 function validateYearRange(val, { min = 1990, max = new Date().getFullYear() } = {}) {
@@ -50,7 +18,14 @@ function validateYearRange(val, { min = 1990, max = new Date().getFullYear() } =
 }
 
 export function mountOrgProductAdmin(ctx) {
-  const { $, openModal, closeModal, apiFetch, getToken, showConfirmFlow } = ctx
+  const {
+    $,
+    openModal,
+    closeModal,
+    apiFetch,
+    getToken,
+    showConfirmFlow,
+  } = ctx
 
   const btnOpen = $('btnOpenOrgProduct')
   const modal = $('orgProductModal')
@@ -68,20 +43,11 @@ export function mountOrgProductAdmin(ctx) {
   const resetBtn = $('orgProductReset')
   const submitBtn = $('orgProductSubmit')
 
+  // guard（避免 silent failure）
   if (!btnOpen || !modal || !closeBtn || !resetBtn || !submitBtn || !releaseYearEl || !endYearEl) {
-    console.warn('[orgProduct] mount skipped: missing required DOM nodes.', {
-      btnOpen: !!btnOpen,
-      modal: !!modal,
-      closeBtn: !!closeBtn,
-      resetBtn: !!resetBtn,
-      submitBtn: !!submitBtn,
-      releaseYearEl: !!releaseYearEl,
-      endYearEl: !!endYearEl,
-    })
+    console.warn('[orgProduct] mount skipped: missing required DOM nodes.')
     return
   }
-
-  window.__orgProductMounted = true
 
   function showErr(el, msg) {
     if (!el) return
@@ -104,7 +70,7 @@ export function mountOrgProductAdmin(ctx) {
     inputEl: $('orgProductOrgSearch'),
     statusEl: $('orgProductOrgStatus'),
     listEl: $('orgProductOrgList'),
-    errEl: orgErr || null,
+    errEl: orgErr,
     emptyText: '未选择（请在下方搜索并点击一个企业/机构）',
     searchFn: async (q) => {
       const token = getToken()
@@ -128,24 +94,30 @@ export function mountOrgProductAdmin(ctx) {
     inputEl: $('orgProductProdSearch'),
     statusEl: $('orgProductProdStatus'),
     listEl: $('orgProductProdList'),
-    errEl: prodErr || null,
+    errEl: prodErr,
     emptyText: '未选择（请在下方搜索并点击一个安全产品/别名）',
+    // union: cybersecurity_product + cybersecurity_product_alias
+    // NOTE: 后端返回的 product_id 是“归一后的主产品 id”（FK 指向 cybersecurity_product.security_product_id）。
     searchFn: makeProductUnionSearch({ apiFetch, getToken }),
     renderItem: (it) => ({
       title: it.name || it.security_product_name || it.security_product_alias_name || '（未命名产品）',
       subtitle: [
-        it.kind ? `类型：${it.kind}` : (it.type ? `类型：${it.type}` : null),
-        it.slug ? `slug：${it.slug}` : (it.security_product_slug ? `slug：${it.security_product_slug}` : null),
-        (it.product_id ?? it.security_product_id ?? it.normalized_security_product_id) ? `ID：${it.product_id ?? it.security_product_id ?? it.normalized_security_product_id}` : null,
+        it.type ? `类型：${it.type}` : null,
+        it.security_product_slug ? `slug：${it.security_product_slug}` : null,
+        (it.product_id ?? it.security_product_id ?? it.id) ? `ID：${it.product_id ?? it.security_product_id ?? it.id}` : null,
       ].filter(Boolean).join(' · ')
     }),
-    // 注意：这里可以保留 union 的字符串 id（p:7 / a:7），我们会在提交时做归一化
-    getId: (it) => it.id ?? it.security_product_id ?? it.product_id ?? it.normalized_security_product_id ?? it.normalized_id,
-    getLabel: (it, rendered) => rendered?.title ?? String(it.name ?? it.security_product_name ?? it.security_product_alias_name ?? it.id ?? ''),
+    // IMPORTANT:
+    // - union 结果会带前缀 id（比如 p:7 / a:12），但 insert FK 需要主产品的数字 ID。
+    // - 因此优先使用 product_id（归一后的主产品 id）。
+    getId: (it) =>
+      it.product_id ??
+      it.security_product_id ??
+      it.normalized_id ??
+      it.normalized_security_product_id ??
+      it.id,
+    getLabel: (it, rendered) => rendered?.title ?? String(it.product_id ?? it.security_product_id ?? it.id ?? ''),
   })
-
-  // 保留 debug
-  window.__orgProductDebug = { orgPicker, productPicker }
 
   function resetForm() {
     orgPicker.clear()
@@ -159,11 +131,8 @@ export function mountOrgProductAdmin(ctx) {
     clearErrors()
     let ok = true
 
-    const orgOk = orgPicker.validateRequired('请选择企业/机构。')
-    if (!orgOk) ok = false
-
-    const prodOk = productPicker.validateRequired('请选择安全产品/别名。')
-    if (!prodOk) ok = false
+    if (!orgPicker.validateRequired('请选择企业/机构。')) ok = false
+    if (!productPicker.validateRequired('请选择安全产品/别名。')) ok = false
 
     const now = new Date().getFullYear()
 
@@ -173,22 +142,23 @@ export function mountOrgProductAdmin(ctx) {
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
     if (!e.ok) { showErr(endYearErr, e.msg); ok = false }
 
-    const orgId = toIntStrict(orgPicker.getSelected()?.id)
+    // ID 强制要求是整数
+    // organization search 的 id 通常就是 organization_id，但我们仍然优先读 raw.organization_id。
+    const orgSel = orgPicker.getSelected()
+    const orgId = toIntStrict(orgSel?.raw?.organization_id ?? orgSel?.id)
     if (orgId === null) { showErr(orgErr, '企业 ID 无效（必须为数字）。请重新选择。'); ok = false }
 
+    // product union 的返回里：
+    // - kind=product: product_id = cybersecurity_product.security_product_id
+    // - kind=alias:  product_id = alias 归一后的主产品 id（同样指向 cybersecurity_product）
+    // selected.id 可能是 'p:7' 这种前缀形式，因此必须优先读 raw.product_id。
     const prodSel = productPicker.getSelected()
-    const prodId = resolveUnionProductId(prodSel)
-    if (prodId === null) { showErr(prodErr, '产品 ID 无效（请重新选择）。'); ok = false }
-
-    if (!ok) {
-      console.warn('[orgProduct] validate failed', {
-        orgSelected: orgPicker.getSelected(),
-        productSelected: prodSel,
-        resolvedProductId: prodId,
-        releaseYear: releaseYearEl.value,
-        endYear: endYearEl.value,
-      })
-    }
+    const prodId = toIntStrict(
+      prodSel?.raw?.product_id ??
+      prodSel?.raw?.security_product_id ??
+      (typeof prodSel?.id === 'string' && prodSel.id.includes(':') ? prodSel.id.split(':')[1] : prodSel?.id)
+    )
+    if (prodId === null) { showErr(prodErr, '产品 ID 无效（必须为数字）。请重新选择。'); ok = false }
 
     return ok
   }
@@ -196,9 +166,15 @@ export function mountOrgProductAdmin(ctx) {
   function collectPayload() {
     const now = new Date().getFullYear()
 
-    const orgId = toIntStrict(orgPicker.getSelected()?.id)
+    const orgSel = orgPicker.getSelected()
     const prodSel = productPicker.getSelected()
-    const prodId = resolveUnionProductId(prodSel)
+
+    const orgId = toIntStrict(orgSel?.raw?.organization_id ?? orgSel?.id)
+    const prodId = toIntStrict(
+      prodSel?.raw?.product_id ??
+      prodSel?.raw?.security_product_id ??
+      (typeof prodSel?.id === 'string' && prodSel.id.includes(':') ? prodSel.id.split(':')[1] : prodSel?.id)
+    )
 
     if (orgId === null) throw new Error('organization_id must be a number')
     if (prodId === null) throw new Error('security_product_id must be a number')
@@ -220,9 +196,8 @@ export function mountOrgProductAdmin(ctx) {
     const token = getToken()
     const payload = collectPayload()
 
-    console.log('[orgProduct] submit payload:', payload)
-
     const action = async () => {
+      // ✅ 正确路由：POST /api/admin/org_product
       const res = await apiFetch('/api/admin/org_product', { method: 'POST', token, body: payload })
       const row = res?.organization_product ?? res
 
@@ -239,11 +214,17 @@ export function mountOrgProductAdmin(ctx) {
       return msg
     }
 
-    await showConfirmFlow({
-      titleLoading: '添加中',
-      bodyLoading: '写入企业产品中…',
-      action,
-    })
+    if (typeof showConfirmFlow === 'function') {
+      await showConfirmFlow({
+        titleLoading: '添加中',
+        bodyLoading: '写入企业产品中…',
+        action,
+      })
+    } else {
+      // 兜底：confirm 初始化失败也不会“没反应”
+      const msg = await action()
+      alert(msg)
+    }
   }
 
   resetBtn.addEventListener('click', () => resetForm())
@@ -256,8 +237,8 @@ export function mountOrgProductAdmin(ctx) {
     } catch (e) {
       console.error('[orgProduct] submit failed:', e)
       const msg = e?.message || String(e)
+      // 优先显示在产品错误位（用户最容易看到）
       showErr(prodErr, `❌ 失败：${msg}`)
-      try { alert(`企业产品添加失败：${msg}`) } catch {}
     } finally {
       submitBtn.disabled = false
       resetBtn.disabled = false
