@@ -3,7 +3,6 @@ import { createSingleSelectPicker } from '../ui/single-select-picker.js'
 import { makeProductUnionSearch } from '../core/dropdowns.js'
 
 function toIntStrict(v) {
-  // 接受 number / "123" / 123.0；拒绝 "" / null / "abc" / NaN
   const n = typeof v === 'number' ? v : Number(String(v ?? '').trim())
   if (!Number.isFinite(n) || !Number.isInteger(n)) return null
   return n
@@ -106,7 +105,6 @@ export function mountOrgProductAdmin(ctx) {
         (it.security_product_id ?? it.id) ? `ID：${it.security_product_id ?? it.id}` : null,
       ].filter(Boolean).join(' · ')
     }),
-    // union 返回时，尽量取“归一后的主产品 id”
     getId: (it) =>
       it.security_product_id ??
       it.normalized_id ??
@@ -138,7 +136,6 @@ export function mountOrgProductAdmin(ctx) {
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
     if (!e.ok) { showErr(endYearErr, e.msg); ok = false }
 
-    // 关键：ID 必须能转成整数
     const orgSel = orgPicker.getSelected()
     const prodSel = productPicker.getSelected()
 
@@ -164,7 +161,6 @@ export function mountOrgProductAdmin(ctx) {
     const orgId = toIntStrict(orgSel?.id)
     const prodId = toIntStrict(prodSel?.id)
 
-    // validate() 已经兜底，这里仍做一次防御
     if (orgId === null) throw new Error('organization_id must be a number')
     if (prodId === null) throw new Error('security_product_id must be a number')
 
@@ -180,54 +176,67 @@ export function mountOrgProductAdmin(ctx) {
     }
   }
 
-  resetBtn.addEventListener('click', () => resetForm())
-
-  submitBtn.addEventListener('click', async () => {
+  async function doSubmit() {
     if (!validate()) return
 
     const token = getToken()
-    let payload = null
+    const payload = collectPayload()
 
-    try {
-      payload = collectPayload()
-    } catch (e) {
-      // 理论上不会走到这里，但万一走到，给用户一个明确提示
-      const msg = e?.message || String(e)
-      showErr(prodErr, msg)
-      return
+    // ✅ 一定要有可见反馈：confirm 可用就走 confirm，不可用就 fallback
+    const run = async () => {
+      // 后端路由：POST /api/admin/org_product
+      const res = await apiFetch('/api/admin/org_product', { method: 'POST', token, body: payload })
+      const row = res?.organization_product ?? res
+      const orgId = row?.organization_id ?? payload.organization_id
+      const prodId = row?.security_product_id ?? payload.security_product_id
+      const ry = row?.product_release_year ?? payload.product_release_year
+      const ey = row?.product_end_year ?? payload.product_end_year
+
+      return [
+        '✅ 添加成功：organization_product',
+        `organization_id = ${orgId}`,
+        `security_product_id = ${prodId}`,
+        `product_release_year = ${ry ?? '—'}`,
+        `product_end_year = ${ey ?? '—'}`,
+      ].join('\n')
     }
 
+    if (typeof showConfirmFlow === 'function') {
+      await showConfirmFlow({
+        titleLoading: '添加中',
+        bodyLoading: '写入企业产品中…',
+        action: async () => {
+          const msg = await run()
+          closeModal(modal)
+          resetForm()
+          return msg
+        }
+      })
+    } else {
+      // fallback：防止“没反应”
+      const msg = await run()
+      closeModal(modal)
+      resetForm()
+      alert(msg)
+    }
+  }
+
+  resetBtn.addEventListener('click', () => resetForm())
+
+  submitBtn.addEventListener('click', async () => {
     submitBtn.disabled = true
     resetBtn.disabled = true
-
-    await showConfirmFlow({
-      titleLoading: '添加中',
-      bodyLoading: '写入企业产品中…',
-      action: async () => {
-        // 后端路由：POST /api/admin/org_product
-        const res = await apiFetch('/api/admin/org_product', { method: 'POST', token, body: payload })
-
-        closeModal(modal)
-        resetForm()
-
-        const row = res?.organization_product ?? res
-        const orgId = row?.organization_id ?? payload.organization_id
-        const prodId = row?.security_product_id ?? payload.security_product_id
-        const ry = row?.product_release_year ?? payload.product_release_year
-        const ey = row?.product_end_year ?? payload.product_end_year
-
-        return [
-          '✅ 添加成功：organization_product',
-          `organization_id = ${orgId}`,
-          `security_product_id = ${prodId}`,
-          `product_release_year = ${ry ?? '—'}`,
-          `product_end_year = ${ey ?? '—'}`,
-        ].join('\n')
-      }
-    })
-
-    submitBtn.disabled = false
-    resetBtn.disabled = false
+    try {
+      await doSubmit()
+    } catch (e) {
+      console.error('[orgProduct] submit failed:', e)
+      // 尽量把错误显示出来，避免“没反应”
+      const msg = e?.message || String(e)
+      showErr(prodErr, `❌ 失败：${msg}`)
+    } finally {
+      submitBtn.disabled = false
+      resetBtn.disabled = false
+    }
   })
 
   btnOpen.addEventListener('click', () => {
