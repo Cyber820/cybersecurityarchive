@@ -1,6 +1,7 @@
 // apps/web/src/features/org-product.js
 import { createSingleSelectPicker } from '../ui/single-select-picker.js'
 import { makeProductUnionSearch } from '../core/dropdowns.js'
+console.log('[orgProduct] version = 2026-02-11-A')
 
 function toIntStrict(v) {
   const n = typeof v === 'number' ? v : Number(String(v ?? '').trim())
