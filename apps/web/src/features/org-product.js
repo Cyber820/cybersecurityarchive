@@ -43,9 +43,9 @@ export function mountOrgProductAdmin(ctx) {
   const resetBtn = $('orgProductReset')
   const submitBtn = $('orgProductSubmit')
 
-  // ===== guard =====
-  if (!btnOpen || !modal || !closeBtn || !releaseYearEl || !endYearEl || !resetBtn || !submitBtn) {
-    console.warn('[orgProduct] mountOrgProductAdmin skipped: missing required DOM nodes.')
+  // guard（避免 silent failure）
+  if (!btnOpen || !modal || !closeBtn || !resetBtn || !submitBtn || !releaseYearEl || !endYearEl) {
+    console.warn('[orgProduct] mount skipped: missing required DOM nodes.')
     return
   }
 
@@ -136,35 +136,25 @@ export function mountOrgProductAdmin(ctx) {
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
     if (!e.ok) { showErr(endYearErr, e.msg); ok = false }
 
-    const orgSel = orgPicker.getSelected()
-    const prodSel = productPicker.getSelected()
+    // ID 强制要求是整数
+    const orgId = toIntStrict(orgPicker.getSelected()?.id)
+    if (orgId === null) { showErr(orgErr, '企业 ID 无效（必须为数字）。请重新选择。'); ok = false }
 
-    const orgId = toIntStrict(orgSel?.id)
-    if (orgId === null) {
-      showErr(orgErr, '企业ID无效（必须为数字）。请重新选择企业。')
-      ok = false
-    }
-
-    const prodId = toIntStrict(prodSel?.id)
-    if (prodId === null) {
-      showErr(prodErr, '产品ID无效（必须为数字）。请重新选择产品/别名。')
-      ok = false
-    }
+    const prodId = toIntStrict(productPicker.getSelected()?.id)
+    if (prodId === null) { showErr(prodErr, '产品 ID 无效（必须为数字）。请重新选择。'); ok = false }
 
     return ok
   }
 
   function collectPayload() {
-    const orgSel = orgPicker.getSelected()
-    const prodSel = productPicker.getSelected()
+    const now = new Date().getFullYear()
 
-    const orgId = toIntStrict(orgSel?.id)
-    const prodId = toIntStrict(prodSel?.id)
+    const orgId = toIntStrict(orgPicker.getSelected()?.id)
+    const prodId = toIntStrict(productPicker.getSelected()?.id)
 
     if (orgId === null) throw new Error('organization_id must be a number')
     if (prodId === null) throw new Error('security_product_id must be a number')
 
-    const now = new Date().getFullYear()
     const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
 
@@ -176,47 +166,39 @@ export function mountOrgProductAdmin(ctx) {
     }
   }
 
-  async function doSubmit() {
+  async function runSubmit() {
     if (!validate()) return
 
     const token = getToken()
     const payload = collectPayload()
 
-    // ✅ 一定要有可见反馈：confirm 可用就走 confirm，不可用就 fallback
-    const run = async () => {
-      // 后端路由：POST /api/admin/org_product
+    const action = async () => {
+      // ✅ 正确路由：POST /api/admin/org_product
       const res = await apiFetch('/api/admin/org_product', { method: 'POST', token, body: payload })
       const row = res?.organization_product ?? res
-      const orgId = row?.organization_id ?? payload.organization_id
-      const prodId = row?.security_product_id ?? payload.security_product_id
-      const ry = row?.product_release_year ?? payload.product_release_year
-      const ey = row?.product_end_year ?? payload.product_end_year
 
-      return [
+      const msg = [
         '✅ 添加成功：organization_product',
-        `organization_id = ${orgId}`,
-        `security_product_id = ${prodId}`,
-        `product_release_year = ${ry ?? '—'}`,
-        `product_end_year = ${ey ?? '—'}`,
+        `organization_id = ${row?.organization_id ?? payload.organization_id}`,
+        `security_product_id = ${row?.security_product_id ?? payload.security_product_id}`,
+        `product_release_year = ${(row?.product_release_year ?? payload.product_release_year) ?? '—'}`,
+        `product_end_year = ${(row?.product_end_year ?? payload.product_end_year) ?? '—'}`,
       ].join('\n')
+
+      closeModal(modal)
+      resetForm()
+      return msg
     }
 
     if (typeof showConfirmFlow === 'function') {
       await showConfirmFlow({
         titleLoading: '添加中',
         bodyLoading: '写入企业产品中…',
-        action: async () => {
-          const msg = await run()
-          closeModal(modal)
-          resetForm()
-          return msg
-        }
+        action,
       })
     } else {
-      // fallback：防止“没反应”
-      const msg = await run()
-      closeModal(modal)
-      resetForm()
+      // 兜底：confirm 初始化失败也不会“没反应”
+      const msg = await action()
       alert(msg)
     }
   }
@@ -227,11 +209,11 @@ export function mountOrgProductAdmin(ctx) {
     submitBtn.disabled = true
     resetBtn.disabled = true
     try {
-      await doSubmit()
+      await runSubmit()
     } catch (e) {
       console.error('[orgProduct] submit failed:', e)
-      // 尽量把错误显示出来，避免“没反应”
       const msg = e?.message || String(e)
+      // 优先显示在产品错误位（用户最容易看到）
       showErr(prodErr, `❌ 失败：${msg}`)
     } finally {
       submitBtn.disabled = false
