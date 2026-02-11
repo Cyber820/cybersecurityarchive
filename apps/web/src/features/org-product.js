@@ -1,6 +1,7 @@
 // apps/web/src/features/org-product.js
 import { createSingleSelectPicker } from '../ui/single-select-picker.js'
 import { makeProductUnionSearch } from '../core/dropdowns.js'
+
 console.log('[orgProduct] version = 2026-02-11-A')
 
 function toIntStrict(v) {
@@ -19,14 +20,7 @@ function validateYearRange(val, { min = 1990, max = new Date().getFullYear() } =
 }
 
 export function mountOrgProductAdmin(ctx) {
-  const {
-    $,
-    openModal,
-    closeModal,
-    apiFetch,
-    getToken,
-    showConfirmFlow,
-  } = ctx
+  const { $, openModal, closeModal, apiFetch, getToken, showConfirmFlow } = ctx
 
   const btnOpen = $('btnOpenOrgProduct')
   const modal = $('orgProductModal')
@@ -44,16 +38,33 @@ export function mountOrgProductAdmin(ctx) {
   const resetBtn = $('orgProductReset')
   const submitBtn = $('orgProductSubmit')
 
-  // guard（避免 silent failure）
+  // 必备节点（少一个就无法工作）
   if (!btnOpen || !modal || !closeBtn || !resetBtn || !submitBtn || !releaseYearEl || !endYearEl) {
-    console.warn('[orgProduct] mount skipped: missing required DOM nodes.')
+    console.warn('[orgProduct] mount skipped: missing required DOM nodes.', {
+      btnOpen: !!btnOpen,
+      modal: !!modal,
+      closeBtn: !!closeBtn,
+      resetBtn: !!resetBtn,
+      submitBtn: !!submitBtn,
+      releaseYearEl: !!releaseYearEl,
+      endYearEl: !!endYearEl,
+    })
     return
   }
+
+  // 标记 mount 成功（便于你 console 检查）
+  window.__orgProductMounted = true
 
   function showErr(el, msg) {
     if (!el) return
     el.textContent = msg || ''
     el.style.display = msg ? '' : 'none'
+  }
+
+  function hardNotify(msg) {
+    // 兜底：避免“校验失败但没提示”造成“没反应”
+    try { alert(msg) } catch {}
+    console.warn('[orgProduct] notify:', msg)
   }
 
   function clearErrors() {
@@ -71,7 +82,7 @@ export function mountOrgProductAdmin(ctx) {
     inputEl: $('orgProductOrgSearch'),
     statusEl: $('orgProductOrgStatus'),
     listEl: $('orgProductOrgList'),
-    errEl: orgErr,
+    errEl: orgErr || null,
     emptyText: '未选择（请在下方搜索并点击一个企业/机构）',
     searchFn: async (q) => {
       const token = getToken()
@@ -95,7 +106,7 @@ export function mountOrgProductAdmin(ctx) {
     inputEl: $('orgProductProdSearch'),
     statusEl: $('orgProductProdStatus'),
     listEl: $('orgProductProdList'),
-    errEl: prodErr,
+    errEl: prodErr || null,
     emptyText: '未选择（请在下方搜索并点击一个安全产品/别名）',
     searchFn: makeProductUnionSearch({ apiFetch, getToken }),
     renderItem: (it) => ({
@@ -126,8 +137,18 @@ export function mountOrgProductAdmin(ctx) {
     clearErrors()
     let ok = true
 
-    if (!orgPicker.validateRequired('请选择企业/机构。')) ok = false
-    if (!productPicker.validateRequired('请选择安全产品/别名。')) ok = false
+    // 1) 必填校验（如果 errEl 缺失，给硬提示）
+    const orgOk = orgPicker.validateRequired('请选择企业/机构。')
+    if (!orgOk) {
+      ok = false
+      if (!orgErr) hardNotify('请选择企业/机构（orgProductOrgErr 节点缺失，无法在页面显示错误）。')
+    }
+
+    const prodOk = productPicker.validateRequired('请选择安全产品/别名。')
+    if (!prodOk) {
+      ok = false
+      if (!prodErr) hardNotify('请选择安全产品/别名（orgProductProdErr 节点缺失，无法在页面显示错误）。')
+    }
 
     const now = new Date().getFullYear()
 
@@ -137,12 +158,23 @@ export function mountOrgProductAdmin(ctx) {
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
     if (!e.ok) { showErr(endYearErr, e.msg); ok = false }
 
-    // ID 强制要求是整数
+    // 2) ID 必须是整数
     const orgId = toIntStrict(orgPicker.getSelected()?.id)
     if (orgId === null) { showErr(orgErr, '企业 ID 无效（必须为数字）。请重新选择。'); ok = false }
 
     const prodId = toIntStrict(productPicker.getSelected()?.id)
     if (prodId === null) { showErr(prodErr, '产品 ID 无效（必须为数字）。请重新选择。'); ok = false }
+
+    if (!ok) {
+      console.warn('[orgProduct] validate failed', {
+        orgSelected: orgPicker.getSelected(),
+        productSelected: productPicker.getSelected(),
+        releaseYear: releaseYearEl.value,
+        endYear: endYearEl.value,
+        hasOrgErrEl: !!orgErr,
+        hasProdErrEl: !!prodErr,
+      })
+    }
 
     return ok
   }
@@ -173,8 +205,9 @@ export function mountOrgProductAdmin(ctx) {
     const token = getToken()
     const payload = collectPayload()
 
+    console.log('[orgProduct] submit payload:', payload)
+
     const action = async () => {
-      // ✅ 正确路由：POST /api/admin/org_product
       const res = await apiFetch('/api/admin/org_product', { method: 'POST', token, body: payload })
       const row = res?.organization_product ?? res
 
@@ -198,7 +231,6 @@ export function mountOrgProductAdmin(ctx) {
         action,
       })
     } else {
-      // 兜底：confirm 初始化失败也不会“没反应”
       const msg = await action()
       alert(msg)
     }
@@ -214,8 +246,8 @@ export function mountOrgProductAdmin(ctx) {
     } catch (e) {
       console.error('[orgProduct] submit failed:', e)
       const msg = e?.message || String(e)
-      // 优先显示在产品错误位（用户最容易看到）
       showErr(prodErr, `❌ 失败：${msg}`)
+      hardNotify(`企业产品添加失败：${msg}`)
     } finally {
       submitBtn.disabled = false
       resetBtn.disabled = false
