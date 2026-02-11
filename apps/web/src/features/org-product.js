@@ -2,7 +2,7 @@
 import { createSingleSelectPicker } from '../ui/single-select-picker.js'
 import { makeProductUnionSearch } from '../core/dropdowns.js'
 
-console.log('[orgProduct] version = 2026-02-11-A')
+console.log('[orgProduct] version = 2026-02-11-A+debug')
 
 function toIntStrict(v) {
   const n = typeof v === 'number' ? v : Number(String(v ?? '').trim())
@@ -38,7 +38,6 @@ export function mountOrgProductAdmin(ctx) {
   const resetBtn = $('orgProductReset')
   const submitBtn = $('orgProductSubmit')
 
-  // 必备节点（少一个就无法工作）
   if (!btnOpen || !modal || !closeBtn || !resetBtn || !submitBtn || !releaseYearEl || !endYearEl) {
     console.warn('[orgProduct] mount skipped: missing required DOM nodes.', {
       btnOpen: !!btnOpen,
@@ -52,7 +51,6 @@ export function mountOrgProductAdmin(ctx) {
     return
   }
 
-  // 标记 mount 成功（便于你 console 检查）
   window.__orgProductMounted = true
 
   function showErr(el, msg) {
@@ -62,7 +60,6 @@ export function mountOrgProductAdmin(ctx) {
   }
 
   function hardNotify(msg) {
-    // 兜底：避免“校验失败但没提示”造成“没反应”
     try { alert(msg) } catch {}
     console.warn('[orgProduct] notify:', msg)
   }
@@ -98,6 +95,9 @@ export function mountOrgProductAdmin(ctx) {
     }),
     getId: (it) => it.organization_id,
     getLabel: (it, rendered) => rendered?.title ?? String(it.organization_id),
+    onPick: async (it, sel) => {
+      console.log('[orgProduct][pick org] sel=', sel, 'raw=', it)
+    }
   })
 
   const productPicker = createSingleSelectPicker({
@@ -109,21 +109,41 @@ export function mountOrgProductAdmin(ctx) {
     errEl: prodErr || null,
     emptyText: '未选择（请在下方搜索并点击一个安全产品/别名）',
     searchFn: makeProductUnionSearch({ apiFetch, getToken }),
+
+    // 这里我们把 “可能出现的字段” 全部打通，同时把原始值也打印出来（用于定位 union 返回结构）
+    getId: (it) => (
+      it.security_product_id ??
+      it.normalized_security_product_id ??
+      it.normalized_id ??
+      it.id ??
+      it.security_product_alias_id ?? // 万一 union 返回 alias_id（但应当还有 normalized）
+      it.security_product_alias_name_id // 极端兜底
+    ),
+
+    getLabel: (it, rendered) => rendered?.title ?? String(
+      it.name ??
+      it.security_product_name ??
+      it.security_product_alias_name ??
+      it.security_product_slug ??
+      (it.security_product_id ?? it.id ?? '')
+    ),
+
     renderItem: (it) => ({
       title: it.name || it.security_product_name || it.security_product_alias_name || '（未命名产品）',
       subtitle: [
         it.type ? `类型：${it.type}` : null,
         it.security_product_slug ? `slug：${it.security_product_slug}` : null,
-        (it.security_product_id ?? it.id) ? `ID：${it.security_product_id ?? it.id}` : null,
+        (it.security_product_id ?? it.normalized_security_product_id ?? it.id) ? `ID：${it.security_product_id ?? it.normalized_security_product_id ?? it.id}` : null,
       ].filter(Boolean).join(' · ')
     }),
-    getId: (it) =>
-      it.security_product_id ??
-      it.normalized_id ??
-      it.normalized_security_product_id ??
-      it.id,
-    getLabel: (it, rendered) => rendered?.title ?? String(it.security_product_id ?? it.id ?? ''),
+
+    onPick: async (it, sel) => {
+      console.log('[orgProduct][pick product] sel=', sel, 'raw=', it)
+    }
   })
+
+  // 暴露出来方便你随时检查 picker 的内部状态
+  window.__orgProductDebug = { orgPicker, productPicker }
 
   function resetForm() {
     orgPicker.clear()
@@ -137,7 +157,6 @@ export function mountOrgProductAdmin(ctx) {
     clearErrors()
     let ok = true
 
-    // 1) 必填校验（如果 errEl 缺失，给硬提示）
     const orgOk = orgPicker.validateRequired('请选择企业/机构。')
     if (!orgOk) {
       ok = false
@@ -158,7 +177,6 @@ export function mountOrgProductAdmin(ctx) {
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
     if (!e.ok) { showErr(endYearErr, e.msg); ok = false }
 
-    // 2) ID 必须是整数
     const orgId = toIntStrict(orgPicker.getSelected()?.id)
     if (orgId === null) { showErr(orgErr, '企业 ID 无效（必须为数字）。请重新选择。'); ok = false }
 
@@ -173,6 +191,7 @@ export function mountOrgProductAdmin(ctx) {
         endYear: endYearEl.value,
         hasOrgErrEl: !!orgErr,
         hasProdErrEl: !!prodErr,
+        prodPickedText: $('orgProductProdPicked')?.textContent,
       })
     }
 
