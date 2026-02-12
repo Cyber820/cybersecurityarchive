@@ -5,9 +5,10 @@ import { initConfirm } from './core/confirm.js'
 
 import { mountOrganizationAdmin } from './features/organization.js'
 import { mountDomainAdmin } from './features/domain.js'
-import { mountDomainEditAdmin } from './features/domain-edit.js'
 import { mountProductAdmin } from './features/product.js'
 import { mountOrgProductAdmin } from './features/org-product.js'
+import { mountDomainEditAdmin } from './features/domain-edit.js'
+import { mountProductEditAdmin } from './features/product-edit.js'
 
 /* =========================
  * Confirm (loading -> result -> ack)
@@ -62,7 +63,7 @@ try {
 }
 
 /* =========================
- * Domain Edit (search/edit/delete)
+ * Domain Edit
  * ========================= */
 try {
   mountDomainEditAdmin({ $, openModal, closeModal, setInvalid, clearInvalid, norm, isSlug, apiFetch, getToken, showConfirmFlow })
@@ -77,6 +78,15 @@ try {
   mountProductAdmin({ $, openModal, closeModal, setInvalid, clearInvalid, norm, isSlug, apiFetch, getToken, showConfirmFlow })
 } catch (e) {
   console.error('[admin] mountProductAdmin failed:', e)
+}
+
+/* =========================
+ * Product Edit
+ * ========================= */
+try {
+  mountProductEditAdmin({ $, openModal, closeModal, setInvalid, clearInvalid, norm, isSlug, apiFetch, getToken, showConfirmFlow })
+} catch (e) {
+  console.error('[admin] mountProductEditAdmin failed:', e)
 }
 
 /* =========================
