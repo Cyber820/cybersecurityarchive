@@ -5,6 +5,7 @@ import { initConfirm } from './core/confirm.js'
 
 import { mountOrganizationAdmin } from './features/organization.js'
 import { mountDomainAdmin } from './features/domain.js'
+import { mountDomainEditAdmin } from './features/domain-edit.js'
 import { mountProductAdmin } from './features/product.js'
 import { mountOrgProductAdmin } from './features/org-product.js'
 
@@ -58,6 +59,15 @@ try {
   mountDomainAdmin({ $, openModal, closeModal, setInvalid, clearInvalid, norm, isSlug, apiFetch, getToken, showConfirmFlow })
 } catch (e) {
   console.error('[admin] mountDomainAdmin failed:', e)
+}
+
+/* =========================
+ * Domain Edit (search/edit/delete)
+ * ========================= */
+try {
+  mountDomainEditAdmin({ $, openModal, closeModal, setInvalid, clearInvalid, norm, isSlug, apiFetch, getToken, showConfirmFlow })
+} catch (e) {
+  console.error('[admin] mountDomainEditAdmin failed:', e)
 }
 
 /* =========================
