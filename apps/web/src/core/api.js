@@ -9,6 +9,10 @@
  * - Admin token 放在 input#tokenInput
  * - localStorage key 默认 ia_admin_token
  * - 请求时带 header: x-admin-token
+ *
+ * ✅ 关键修复：
+ * - 只有在 body 存在时才发送 Content-Type: application/json
+ *   否则 Fastify 可能会尝试解析空 JSON body，直接返回 400 Bad Request
  */
 
 export function initAdminTokenInput(inputEl, { storageKey = 'ia_admin_token' } = {}) {
@@ -28,13 +32,18 @@ export function initAdminTokenInput(inputEl, { storageKey = 'ia_admin_token' } =
 }
 
 export async function apiFetch(path, { method = 'GET', token = '', body = null } = {}) {
-  const headers = { 'Content-Type': 'application/json' }
+  const headers = {}
+
+  // ✅ 只有有 body 才设置 JSON content-type
+  const hasBody = body !== null && body !== undefined
+  if (hasBody) headers['Content-Type'] = 'application/json'
+
   if (token) headers['x-admin-token'] = token
 
   const res = await fetch(path, {
     method,
     headers,
-    body: body ? JSON.stringify(body) : undefined
+    body: hasBody ? JSON.stringify(body) : undefined
   })
 
   const text = await res.text()
@@ -42,11 +51,13 @@ export async function apiFetch(path, { method = 'GET', token = '', body = null }
   try { data = text ? JSON.parse(text) : null } catch { data = { raw: text } }
 
   if (!res.ok) {
-    const msg = data?.error || data?.message || `HTTP ${res.status}`
+    // Fastify 默认错误结构：{ statusCode, error, message }
+    const msg = data?.message || data?.error || `HTTP ${res.status}`
     const err = new Error(msg)
     err.status = res.status
     err.detail = data
     throw err
   }
+
   return data
 }
