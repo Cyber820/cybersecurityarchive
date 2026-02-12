@@ -128,10 +128,21 @@ export function mountDomainEditAdmin(ctx) {
 
     const sub = document.createElement('div')
     sub.className = 'es-subtitle'
+
     if (item.kind === 'domain') {
-      sub.textContent = item.slug ? `slug：${item.slug}` : '—'
+      sub.textContent = [
+        item.slug ? `slug：${item.slug}` : null,
+        item.domain_id ? `ID：${item.domain_id}` : null
+      ].filter(Boolean).join(' · ') || '—'
     } else {
-      sub.textContent = 'alias'
+      const { id: aliasId } = parseUnionId(item?.id)
+      const targetName = item?.extra?.domain_name ? `→ ${item.extra.domain_name}` : null
+      const targetSlug = item?.extra?.domain_slug ? `(${item.extra.domain_slug})` : null
+      sub.textContent = [
+        Number.isFinite(aliasId) ? `aliasId：${aliasId}` : null,
+        targetName ? `alias ${targetName}${targetSlug ? ' ' + targetSlug : ''}` : 'alias',
+        item.domain_id ? `domainId：${item.domain_id}` : null
+      ].filter(Boolean).join(' · ')
     }
 
     left.appendChild(title)
@@ -173,9 +184,33 @@ export function mountDomainEditAdmin(ctx) {
     return row
   }
 
+  function filterUnionItemsForSlugQuery(items, q) {
+    const qq = String(q || '').trim()
+    if (!qq) return items
+    if (!isSlug(qq)) return items
+
+    // 规则：若 slug 精确命中某个 domain.slug，则仅返回该 domain（不附带该 domain 的 alias 列表）
+    const hitDomain = (items || []).find(it =>
+      it?.kind === 'domain' && String(it?.slug || '').toLowerCase() === qq.toLowerCase()
+    )
+    if (!hitDomain) return items
+
+    const hitSlug = String(hitDomain.slug || '').toLowerCase()
+    return (items || []).filter(it => {
+      if (!it) return false
+      if (it.kind === 'domain') return true
+      const targetSlug = String(it?.extra?.domain_slug || '').toLowerCase()
+      // 过滤：指向命中 domain 的 alias
+      if (targetSlug && targetSlug === hitSlug) return false
+      return true
+    })
+  }
+
   async function doSearch(q) {
     const token = getToken()
-    if (!q) {
+    const qq = String(q || '').trim()
+
+    if (!qq) {
       clearSearchList()
       setStatus('请输入关键字开始搜索。')
       return
@@ -183,9 +218,13 @@ export function mountDomainEditAdmin(ctx) {
 
     setStatus('搜索中…')
     clearSearchList()
+
     try {
-      const res = await apiFetch(`/api/admin/dropdowns/domain_union?q=${encodeURIComponent(q)}`, { token })
-      const items = res?.items || []
+      const res = await apiFetch(`/api/admin/dropdowns/domain_union?q=${encodeURIComponent(qq)}`, { token })
+      let items = res?.items || []
+
+      items = filterUnionItemsForSlugQuery(items, qq)
+
       if (!items.length) {
         setStatus('无结果。')
         return
@@ -321,75 +360,84 @@ export function mountDomainEditAdmin(ctx) {
     } catch (e) {
       await showConfirmFlow({
         titleLoading: '失败',
-        bodyLoading: '读取详情失败。',
-        action: async () => `❌ 读取失败：${e?.message || String(e)}`
+        bodyLoading: '读取失败',
+        action: async () => { throw e }
       })
     }
   }
 
-  if (mainSubmit) {
-    mainSubmit.addEventListener('click', async () => {
-      if (!editingMainId) return
-      if (!validateMain()) return
+  async function submitMain() {
+    if (!validateMain()) return
+    const token = getToken()
+    const id = Number(editingMainId)
+    if (!Number.isFinite(id)) return
 
-      const token = getToken()
-      const payload = {
-        security_domain_name: norm(mainName.value),
-        cybersecurity_domain_slug: norm(mainSlug.value),
-        security_domain_description: norm(mainDesc?.value) || null,
-      }
-
-      mainSubmit.disabled = true
-      await showConfirmFlow({
-        titleLoading: '更新中',
-        bodyLoading: '更新安全领域中…',
-        action: async () => {
-          const res = await apiFetch(`/api/admin/domain/${editingMainId}`, { method: 'PATCH', token, body: payload })
-          closeModal(mainModal)
-          await doSearch(norm(searchInput?.value))
-          const d = res?.domain || {}
-          return `✅ 编辑成功：security_domain_name=${d.security_domain_name || ''} · slug=${d.cybersecurity_domain_slug || ''}`
-        }
-      })
-      mainSubmit.disabled = false
-    })
-  }
-
-  if (aliasSubmit) {
-    aliasSubmit.addEventListener('click', async () => {
-      if (!editingAliasId) return
-      if (!validateAlias()) return
-
-      const token = getToken()
-      const sel = aliasPicker.getSelected()
-      const payload = {
-        security_domain_alias_name: norm(aliasName.value),
-        security_domain_id: sel?.id,
-      }
-
-      aliasSubmit.disabled = true
-      await showConfirmFlow({
-        titleLoading: '更新中',
-        bodyLoading: '更新安全领域别名中…',
-        action: async () => {
-          const res = await apiFetch(`/api/admin/domain/alias/${editingAliasId}`, { method: 'PATCH', token, body: payload })
-          closeModal(aliasModal)
-          await doSearch(norm(searchInput?.value))
-          const a = res?.alias || {}
-          return `✅ 编辑成功：security_domain_alias_name=${a.security_domain_alias_name || ''}`
-        }
-      })
-      aliasSubmit.disabled = false
-    })
-  }
-
-  btnOpen.addEventListener('click', () => {
-    openModal(searchModal)
-    if (searchInput) {
-      searchInput.value = ''
-      searchInput.focus()
+    const payload = {
+      security_domain_name: norm(mainName.value),
+      cybersecurity_domain_slug: norm(mainSlug.value),
+      security_domain_description: (mainDesc ? norm(mainDesc.value) : '') || null
     }
+
+    await showConfirmFlow({
+      titleLoading: '更新中',
+      bodyLoading: '更新安全领域中…',
+      action: async () => {
+        await apiFetch(`/api/admin/domain/${id}`, { method: 'PATCH', token, body: payload })
+        closeModal(mainModal)
+        await doSearch(norm(searchInput?.value))
+        return '✅ 更新成功'
+      }
+    })
+  }
+
+  async function submitAlias() {
+    if (!validateAlias()) return
+    const token = getToken()
+    const aliasId = Number(editingAliasId)
+    if (!Number.isFinite(aliasId)) return
+
+    const sel = aliasPicker.getSelected()
+    const domainId = Number(sel?.id)
+    if (!Number.isFinite(domainId)) {
+      if (aliasTargetErr) {
+        aliasTargetErr.textContent = '请选择“同等安全领域”。'
+        aliasTargetErr.style.display = 'block'
+      }
+      return
+    }
+
+    const payload = {
+      security_domain_alias_name: norm(aliasName.value),
+      security_domain_id: domainId,
+    }
+
+    await showConfirmFlow({
+      titleLoading: '更新中',
+      bodyLoading: '更新安全领域别名中…',
+      action: async () => {
+        await apiFetch(`/api/admin/domain/alias/${aliasId}`, { method: 'PATCH', token, body: payload })
+        closeModal(aliasModal)
+        await doSearch(norm(searchInput?.value))
+        return '✅ 更新成功'
+      }
+    })
+  }
+
+  if (mainSubmit) mainSubmit.addEventListener('click', (ev) => {
+    ev.preventDefault()
+    submitMain()
+  })
+  if (aliasSubmit) aliasSubmit.addEventListener('click', (ev) => {
+    ev.preventDefault()
+    submitAlias()
+  })
+
+  btnOpen.addEventListener('click', (ev) => {
+    ev.preventDefault()
+    if (searchInput) searchInput.value = ''
     clearSearchList()
     setStatus('请输入关键字开始搜索。')
+    openModal(searchModal)
+    searchInput && searchInput.focus()
   })
 }
