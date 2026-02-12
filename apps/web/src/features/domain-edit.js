@@ -1,14 +1,6 @@
 // apps/web/src/features/domain-edit.js
 import { createSingleSelectPicker } from '../ui/single-select-picker.js'
 
-/**
- * 编辑安全领域（含 alias）
- * - 搜索（domain.slug/name + domain_alias.name） -> 列表
- * - 每行：编辑 / 删除
- * - 编辑：
- *   - domain：name/slug/description
- *   - alias：alias_name + domain_id（同等安全领域，单选）
- */
 export function mountDomainEditAdmin(ctx) {
   const {
     $,
@@ -110,6 +102,20 @@ export function mountDomainEditAdmin(ctx) {
     return { kind: null, id: NaN }
   }
 
+  function isNotFoundLikeError(e) {
+    const msg = String(e?.message || '').toLowerCase()
+    const raw = String(e?.detail?.error || e?.detail?.message || '').toLowerCase()
+    // supabase postgrest 常见“不存在”
+    return (
+      msg.includes('no rows') ||
+      msg.includes('0 rows') ||
+      msg.includes('results contain 0 rows') ||
+      raw.includes('no rows') ||
+      raw.includes('0 rows') ||
+      raw.includes('results contain 0 rows')
+    )
+  }
+
   function renderResultRow(item) {
     const row = document.createElement('div')
     row.className = 'es-item'
@@ -189,7 +195,6 @@ export function mountDomainEditAdmin(ctx) {
     if (!qq) return items
     if (!isSlug(qq)) return items
 
-    // 规则：若 slug 精确命中某个 domain.slug，则仅返回该 domain（不附带该 domain 的 alias 列表）
     const hitDomain = (items || []).find(it =>
       it?.kind === 'domain' && String(it?.slug || '').toLowerCase() === qq.toLowerCase()
     )
@@ -200,7 +205,6 @@ export function mountDomainEditAdmin(ctx) {
       if (!it) return false
       if (it.kind === 'domain') return true
       const targetSlug = String(it?.extra?.domain_slug || '').toLowerCase()
-      // 过滤：指向命中 domain 的 alias
       if (targetSlug && targetSlug === hitSlug) return false
       return true
     })
@@ -230,7 +234,7 @@ export function mountDomainEditAdmin(ctx) {
         return
       }
 
-      setStatus(`共 ${items.length} 条（最多显示 ${items.length} 条）`)
+      setStatus(`共 ${items.length} 条`)
       for (const it of items) {
         const row = renderResultRow(it)
         searchList.appendChild(row)
@@ -313,15 +317,25 @@ export function mountDomainEditAdmin(ctx) {
           ? `/api/admin/domain/${id}`
           : `/api/admin/domain/alias/${id}`
 
-        const res = await apiFetch(url, { method: 'DELETE', token })
-        await doSearch(norm(searchInput?.value))
+        try {
+          const res = await apiFetch(url, { method: 'DELETE', token })
+          await doSearch(norm(searchInput?.value))
 
-        if (kind === 'domain') {
-          const d = res?.deleted || {}
-          return `✅ 删除成功：security_domain_id=${d.security_domain_id} · security_domain_name=${d.security_domain_name || ''} · slug=${d.cybersecurity_domain_slug || ''}`
+          if (kind === 'domain') {
+            const d = res?.deleted || {}
+            return `✅ 删除成功：security_domain_id=${d.security_domain_id} · ${d.security_domain_name || ''} · ${d.cybersecurity_domain_slug || ''}`
+          }
+          const a = res?.deleted || {}
+          return `✅ 删除成功：security_domain_alias_id=${a.security_domain_alias_id} · ${a.security_domain_alias_name || ''}`
+        } catch (e) {
+          // ✅ 幂等删除：如果后端报“0 rows / No rows found”，视为已删除或不存在
+          if (e?.status === 400 && isNotFoundLikeError(e)) {
+            await doSearch(norm(searchInput?.value))
+            return `✅ 已删除/不存在：${kind === 'alias' ? `aliasId=${id}` : `domainId=${id}`}（列表已刷新）`
+          }
+          // 其他错误照常抛出让 confirm 显示失败
+          throw e
         }
-        const a = res?.deleted || {}
-        return `✅ 删除成功：security_domain_alias_id=${a.security_domain_alias_id} · security_domain_alias_name=${a.security_domain_alias_name || ''}`
       }
     })
   }
@@ -352,7 +366,6 @@ export function mountDomainEditAdmin(ctx) {
       aliasPicker.clear()
       clearAliasErrors()
 
-      // 预填 target（没有 name 时先用 ID 占位；用户也可改选）
       aliasPicker.setSelected({ id: a.security_domain_id, label: `ID：${a.security_domain_id}` })
 
       openModal(aliasModal)
