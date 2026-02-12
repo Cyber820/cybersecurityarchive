@@ -12,7 +12,7 @@
       --muted:rgba(0,0,0,0.62);
       --bd:rgba(0,0,0,0.14);
       --bd2:rgba(0,0,0,0.22);
-      --pri:#111;
+      --pri:#111; /* primary 仍为黑色：仅用于“保存/添加”等关键动作 */
     }
     body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background:var(--bg); color:var(--txt); }
     .wrap{ max-width: 980px; margin: 22px auto; padding: 0 14px; }
@@ -141,7 +141,8 @@
 
     <!-- 第一排：添加 -->
     <div class="toolbar">
-      <button id="btnOpenOrg" class="btn btn-primary" type="button">添加企业/机构</button>
+      <!-- ✅ 修复：不要 primary（避免黑底） -->
+      <button id="btnOpenOrg" class="btn" type="button">添加企业/机构</button>
       <button id="btnOpenDomain" class="btn" type="button">添加安全领域</button>
       <button id="btnOpenProduct" class="btn" type="button">添加安全产品</button>
       <button id="btnOpenOrgProduct" class="btn" type="button">添加企业产品</button>
@@ -161,7 +162,192 @@
     </div>
   </div>
 
-  <!-- ========== Domain: Edit (Search / Main / Alias) ========== -->
+  <!-- =========================
+       Organization: Create/Edit Modal
+       ========================= -->
+  <div id="orgModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="企业/机构">
+      <div class="modal-head">
+        <div id="orgModalTitle" class="modal-title">添加企业/机构</div>
+        <button id="orgClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div class="row">
+        <div class="label">企业简称 *</div>
+        <div>
+          <input id="orgShortName" class="input" type="text" placeholder="必填：organization_short_name" />
+          <div id="orgShortNameErr" class="err"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">企业全称</div>
+        <div>
+          <input id="orgFullName" class="input" type="text" placeholder="选填：organization_full_name" />
+          <div class="hint">可为空。</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">成立时间</div>
+        <div>
+          <input id="orgEstablishYear" class="input" type="text" inputmode="numeric" placeholder="选填：1990 ~ 当前年份" />
+          <div id="orgEstablishYearErr" class="err"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">slug *</div>
+        <div>
+          <input id="orgSlug" class="input" type="text" placeholder="必填：organization_slug（英文/数字/连字符）" />
+          <div id="orgSlugErr" class="err"></div>
+          <div class="hint">规则：仅允许 a-z / 0-9 / 连字符 -（建议小写）。</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">企业/机构描述</div>
+        <div>
+          <textarea id="orgDescription" class="textarea" rows="6" placeholder="选填：organization_description"></textarea>
+          <div class="hint">可为空。</div>
+        </div>
+      </div>
+
+      <div class="modal-actions" id="orgActionsCreate">
+        <button id="orgReset" class="btn" type="button">清空</button>
+        <button id="orgSubmit" class="btn btn-primary" type="button">添加</button>
+      </div>
+
+      <div class="modal-actions" id="orgActionsEdit" style="display:none;">
+        <button id="orgEditReset" class="btn" type="button">重置</button>
+        <button id="orgEditCancel" class="btn" type="button">取消</button>
+        <button id="orgEditSubmit" class="btn btn-primary" type="button">确定更新</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================
+       Organization: Search Modal
+       ========================= -->
+  <div id="orgSearchModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="搜索企业/机构">
+      <div class="modal-head">
+        <div class="modal-title">编辑企业/机构（搜索）</div>
+        <button id="orgSearchClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div class="row" style="grid-template-columns: 1fr;">
+        <div>
+          <input id="orgSearchInput" class="input" type="text" placeholder="搜索 short_name / full_name / slug ..." />
+          <div class="hint">点击结果进入详情。</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="label">搜索结果</div>
+        <div id="orgSearchStatus" class="hint" style="margin-top:6px;">请输入关键字开始搜索。</div>
+        <div id="orgSearchList" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================
+       ✅ Organization: Info Modal（此前漏掉导致 org 功能全挂）
+       ========================= -->
+  <div id="orgInfoModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="企业信息">
+      <div class="modal-head">
+        <div class="modal-title">企业/机构信息</div>
+        <button id="orgInfoClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div id="orgInfoBody"></div>
+
+      <div class="modal-actions">
+        <button id="orgInfoCancel" class="btn" type="button">取消</button>
+        <button id="orgInfoEdit" class="btn btn-primary" type="button">编辑</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================
+       Domain: Create Modal
+       ========================= -->
+  <div id="domainModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="安全领域">
+      <div class="modal-head">
+        <div class="modal-title">添加安全领域</div>
+        <button id="domainClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div class="row">
+        <div class="label">安全领域名称 *</div>
+        <div>
+          <input id="domainName" class="input" type="text" placeholder="必填：security_domain_name" />
+          <div id="domainNameErr" class="err"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">是否为别名 *</div>
+        <div>
+          <select id="domainIsAlias" class="select">
+            <option value="no">否（创建主领域）</option>
+            <option value="yes">是（创建别名）</option>
+          </select>
+          <div id="domainIsAliasErr" class="err"></div>
+          <div class="hint">别名模式：仅写入 cybersecurity_domain_alias（指向一个主领域）。</div>
+        </div>
+      </div>
+
+      <div id="domainSlugRow" class="row">
+        <div class="label">slug *</div>
+        <div>
+          <input id="domainSlug" class="input" type="text" placeholder="必填：cybersecurity_domain_slug" />
+          <div id="domainSlugErr" class="err"></div>
+          <div class="hint">规则：仅允许 a-z / 0-9 / 连字符 -（建议小写）。</div>
+        </div>
+      </div>
+
+      <div id="domainDescRow" class="row">
+        <div class="label">描述</div>
+        <div>
+          <textarea id="domainDesc" class="textarea" placeholder="选填：security_domain_description"></textarea>
+          <div class="hint">可为空。</div>
+        </div>
+      </div>
+
+      <div id="domainAliasTargetRow" class="row" style="display:none;">
+        <div class="label">同等安全领域 *</div>
+        <div>
+          <div class="card" style="margin-top:0;">
+            <div class="label">选择同等安全领域（单选）</div>
+            <div class="hint" id="domainAliasTargetPicked" style="margin-top:6px;">未选择（请在下方搜索并点击一个安全领域）</div>
+
+            <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
+              <button id="domainAliasTargetClear" class="btn" type="button" style="display:none;">清除已选择</button>
+            </div>
+
+            <div style="margin-top:10px;">
+              <input id="domainAliasTargetSearch" class="input" type="text" placeholder="搜索安全领域 name / alias / slug ..." />
+              <div id="domainAliasTargetStatus" class="hint" style="margin-top:6px;">输入关键字开始搜索。</div>
+              <div id="domainAliasTargetList" style="margin-top:10px;"></div>
+              <div id="domainAliasTargetErr" class="err"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="domainReset" class="btn" type="button">清空</button>
+        <button id="domainSubmit" class="btn btn-primary" type="button">添加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================
+       Domain Edit: Search/Main/Alias
+       ========================= -->
   <div id="domainEditSearchModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="编辑安全领域">
       <div class="modal-head">
@@ -260,7 +446,92 @@
     </div>
   </div>
 
-  <!-- ========== Product: Edit (Search / Main / Alias) ========== -->
+  <!-- =========================
+       Product: Create Modal
+       ========================= -->
+  <div id="productModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="安全产品">
+      <div class="modal-head">
+        <div class="modal-title">添加安全产品</div>
+        <button id="productClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div class="row">
+        <div class="label">安全产品名称 *</div>
+        <div>
+          <input id="productName" class="input" type="text" placeholder="必填：security_product_name / security_product_alias_name" />
+          <div id="productNameErr" class="err"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">是否为别名 *</div>
+        <div>
+          <select id="productIsAlias" class="select">
+            <option value="no">否（创建主产品）</option>
+            <option value="yes">是（创建别名）</option>
+          </select>
+          <div id="productIsAliasErr" class="err"></div>
+          <div class="hint">别名模式：仅写入 cybersecurity_product_alias（指向一个主产品）。</div>
+        </div>
+      </div>
+
+      <div id="productSlugRow" class="row">
+        <div class="label">slug *</div>
+        <div>
+          <input id="productSlug" class="input" type="text" placeholder="必填：security_product_slug" />
+          <div id="productSlugErr" class="err"></div>
+          <div class="hint">规则：仅允许 a-z / 0-9 / 连字符 -（建议小写）。</div>
+        </div>
+      </div>
+
+      <div id="productDomainsRow" class="row">
+        <div class="label">对应安全领域 *</div>
+        <div>
+          <div id="productDomains" class="card" style="margin-top:0;"></div>
+          <div id="productDomainsErr" class="err"></div>
+        </div>
+      </div>
+
+      <div id="productDescRow" class="row">
+        <div class="label">描述</div>
+        <div>
+          <textarea id="productDesc" class="textarea" placeholder="选填：security_product_description"></textarea>
+          <div class="hint">可为空。</div>
+        </div>
+      </div>
+
+      <div id="productAliasTargetRow" class="row" style="display:none;">
+        <div class="label">归属安全产品 *</div>
+        <div>
+          <div class="card" style="margin-top:0;">
+            <div class="label">选择归属安全产品（单选）</div>
+            <div class="hint" id="productAliasTargetPicked" style="margin-top:6px;">未选择（请在下方搜索并点击一个安全产品）</div>
+
+            <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
+              <button id="productAliasTargetClear" class="btn" type="button" style="display:none;">清除已选择</button>
+            </div>
+
+            <div style="margin-top:10px;">
+              <input id="productAliasTargetSearch" class="input" type="text" placeholder="搜索产品名 / slug ..." />
+              <div id="productAliasTargetStatus" class="hint" style="margin-top:6px;">输入关键字开始搜索。</div>
+              <div id="productAliasTargetList" style="margin-top:10px;"></div>
+              <div id="productAliasTargetErr" class="err"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="productReset" class="btn" type="button">清空</button>
+        <button id="productSubmit" class="btn btn-primary" type="button">添加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================
+       Product Edit: Search/Main/Alias
+       ========================= -->
   <div id="productEditSearchModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="编辑安全产品">
       <div class="modal-head">
@@ -367,246 +638,9 @@
     </div>
   </div>
 
-  <!-- ========== Organization: Create/Edit Modal ========== -->
-  <div id="orgModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="企业/机构">
-      <div class="modal-head">
-        <div id="orgModalTitle" class="modal-title">添加企业/机构</div>
-        <button id="orgClose" class="btn" type="button">关闭</button>
-      </div>
-
-      <div class="row">
-        <div class="label">企业简称 *</div>
-        <div>
-          <input id="orgShortName" class="input" type="text" placeholder="必填：organization_short_name" />
-          <div id="orgShortNameErr" class="err"></div>
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="label">企业全称</div>
-        <div>
-          <input id="orgFullName" class="input" type="text" placeholder="选填：organization_full_name" />
-          <div class="hint">可为空。</div>
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="label">成立时间</div>
-        <div>
-          <input id="orgEstablishYear" class="input" type="text" inputmode="numeric" placeholder="选填：1990 ~ 当前年份" />
-          <div id="orgEstablishYearErr" class="err"></div>
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="label">slug *</div>
-        <div>
-          <input id="orgSlug" class="input" type="text" placeholder="必填：organization_slug（英文/数字/连字符）" />
-          <div id="orgSlugErr" class="err"></div>
-          <div class="hint">规则：仅允许 a-z / 0-9 / 连字符 -（建议小写）。</div>
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="label">企业/机构描述</div>
-        <div>
-          <textarea id="orgDescription" class="textarea" rows="6" placeholder="选填：organization_description"></textarea>
-          <div class="hint">可为空。</div>
-        </div>
-      </div>
-
-      <div class="modal-actions" id="orgActionsCreate">
-        <button id="orgReset" class="btn" type="button">清空</button>
-        <button id="orgSubmit" class="btn btn-primary" type="button">添加</button>
-      </div>
-
-      <div class="modal-actions" id="orgActionsEdit" style="display:none;">
-        <button id="orgEditReset" class="btn" type="button">重置</button>
-        <button id="orgEditCancel" class="btn" type="button">取消</button>
-        <button id="orgEditSubmit" class="btn btn-primary" type="button">确定更新</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========== Organization: Search Modal ========== -->
-  <div id="orgSearchModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="搜索企业/机构">
-      <div class="modal-head">
-        <div class="modal-title">编辑企业/机构（搜索）</div>
-        <button id="orgSearchClose" class="btn" type="button">关闭</button>
-      </div>
-
-      <div class="row" style="grid-template-columns: 1fr;">
-        <div>
-          <input id="orgSearchInput" class="input" type="text" placeholder="搜索 short_name / full_name / slug ..." />
-          <div class="hint">点击结果进入详情。</div>
-        </div>
-      </div>
-
-      <div class="card" style="margin-top:12px;">
-        <div class="label">搜索结果</div>
-        <div id="orgSearchStatus" class="hint" style="margin-top:6px;">请输入关键字开始搜索。</div>
-        <div id="orgSearchList" style="margin-top:10px;"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========== Domain: Create Modal ========== -->
-  <div id="domainModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="安全领域">
-      <div class="modal-head">
-        <div class="modal-title">添加安全领域</div>
-        <button id="domainClose" class="btn" type="button">关闭</button>
-      </div>
-
-      <div class="row">
-        <div class="label">安全领域名称 *</div>
-        <div>
-          <input id="domainName" class="input" type="text" placeholder="必填：security_domain_name" />
-          <div id="domainNameErr" class="err"></div>
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="label">是否为别名 *</div>
-        <div>
-          <select id="domainIsAlias" class="select">
-            <option value="no">否（创建主领域）</option>
-            <option value="yes">是（创建别名）</option>
-          </select>
-          <div id="domainIsAliasErr" class="err"></div>
-          <div class="hint">别名模式：仅写入 cybersecurity_domain_alias（指向一个主领域）。</div>
-        </div>
-      </div>
-
-      <div id="domainSlugRow" class="row">
-        <div class="label">slug *</div>
-        <div>
-          <input id="domainSlug" class="input" type="text" placeholder="必填：cybersecurity_domain_slug" />
-          <div id="domainSlugErr" class="err"></div>
-          <div class="hint">规则：仅允许 a-z / 0-9 / 连字符 -（建议小写）。</div>
-        </div>
-      </div>
-
-      <div id="domainDescRow" class="row">
-        <div class="label">描述</div>
-        <div>
-          <textarea id="domainDesc" class="textarea" placeholder="选填：security_domain_description"></textarea>
-          <div class="hint">可为空。</div>
-        </div>
-      </div>
-
-      <div id="domainAliasTargetRow" class="row" style="display:none;">
-        <div class="label">同等安全领域 *</div>
-        <div>
-          <div class="card" style="margin-top:0;">
-            <div class="label">选择同等安全领域（单选）</div>
-            <div class="hint" id="domainAliasTargetPicked" style="margin-top:6px;">未选择（请在下方搜索并点击一个安全领域）</div>
-
-            <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
-              <button id="domainAliasTargetClear" class="btn" type="button" style="display:none;">清除已选择</button>
-            </div>
-
-            <div style="margin-top:10px;">
-              <input id="domainAliasTargetSearch" class="input" type="text" placeholder="搜索安全领域 name / alias / slug ..." />
-              <div id="domainAliasTargetStatus" class="hint" style="margin-top:6px;">输入关键字开始搜索。</div>
-              <div id="domainAliasTargetList" style="margin-top:10px;"></div>
-              <div id="domainAliasTargetErr" class="err"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="modal-actions">
-        <button id="domainReset" class="btn" type="button">清空</button>
-        <button id="domainSubmit" class="btn btn-primary" type="button">添加</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========== Product: Create Modal ========== -->
-  <div id="productModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="安全产品">
-      <div class="modal-head">
-        <div class="modal-title">添加安全产品</div>
-        <button id="productClose" class="btn" type="button">关闭</button>
-      </div>
-
-      <div class="row">
-        <div class="label">安全产品名称 *</div>
-        <div>
-          <input id="productName" class="input" type="text" placeholder="必填：security_product_name / security_product_alias_name" />
-          <div id="productNameErr" class="err"></div>
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="label">是否为别名 *</div>
-        <div>
-          <select id="productIsAlias" class="select">
-            <option value="no">否（创建主产品）</option>
-            <option value="yes">是（创建别名）</option>
-          </select>
-          <div id="productIsAliasErr" class="err"></div>
-          <div class="hint">别名模式：仅写入 cybersecurity_product_alias（指向一个主产品）。</div>
-        </div>
-      </div>
-
-      <div id="productSlugRow" class="row">
-        <div class="label">slug *</div>
-        <div>
-          <input id="productSlug" class="input" type="text" placeholder="必填：security_product_slug" />
-          <div id="productSlugErr" class="err"></div>
-          <div class="hint">规则：仅允许 a-z / 0-9 / 连字符 -（建议小写）。</div>
-        </div>
-      </div>
-
-      <div id="productDomainsRow" class="row">
-        <div class="label">对应安全领域 *</div>
-        <div>
-          <div id="productDomains" class="card" style="margin-top:0;"></div>
-          <div id="productDomainsErr" class="err"></div>
-        </div>
-      </div>
-
-      <div id="productDescRow" class="row">
-        <div class="label">描述</div>
-        <div>
-          <textarea id="productDesc" class="textarea" placeholder="选填：security_product_description"></textarea>
-          <div class="hint">可为空。</div>
-        </div>
-      </div>
-
-      <div id="productAliasTargetRow" class="row" style="display:none;">
-        <div class="label">归属安全产品 *</div>
-        <div>
-          <div class="card" style="margin-top:0;">
-            <div class="label">选择归属安全产品（单选）</div>
-            <div class="hint" id="productAliasTargetPicked" style="margin-top:6px;">未选择（请在下方搜索并点击一个安全产品）</div>
-
-            <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
-              <button id="productAliasTargetClear" class="btn" type="button" style="display:none;">清除已选择</button>
-            </div>
-
-            <div style="margin-top:10px;">
-              <input id="productAliasTargetSearch" class="input" type="text" placeholder="搜索产品名 / slug ..." />
-              <div id="productAliasTargetStatus" class="hint" style="margin-top:6px;">输入关键字开始搜索。</div>
-              <div id="productAliasTargetList" style="margin-top:10px;"></div>
-              <div id="productAliasTargetErr" class="err"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="modal-actions">
-        <button id="productReset" class="btn" type="button">清空</button>
-        <button id="productSubmit" class="btn btn-primary" type="button">添加</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ========== OrgProduct: Create Modal ========== -->
+  <!-- =========================
+       OrgProduct: Create Modal
+       ========================= -->
   <div id="orgProductModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="企业产品">
       <div class="modal-head">
