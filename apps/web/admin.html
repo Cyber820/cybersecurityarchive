@@ -41,6 +41,8 @@
     .modal-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; position:sticky; top:0; background:#fff; padding-bottom:10px; border-bottom:1px solid rgba(0,0,0,0.08); }
     .modal-title{ font-weight:900; font-size:15px; }
     .modal-actions{ display:flex; gap:10px; justify-content:flex-end; margin-top:14px; }
+
+    /* confirm */
     .confirm-overlay{
       position:fixed; inset:0; display:none; align-items:center; justify-content:center;
       background: rgba(0,0,0,0.35);
@@ -51,9 +53,13 @@
       background:#fff;
       border:1px solid rgba(0,0,0,0.20);
       border-radius:12px;
-      padding:10px;
-      display:none;
+      padding:12px;
+      display:block; /* ✅ 修复：必须可见，否则只剩遮罩层导致页面无法操作 */
+      box-sizing: border-box;
     }
+    .confirm-title{ font-weight:900; font-size:15px; }
+    .confirm-body{ margin-top:8px; font-size:13px; white-space:pre-wrap; word-break:break-word; }
+    .confirm-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:12px; }
 
     /* simple KV */
     .kv { display:flex; gap:10px; padding:6px 0; border-bottom:1px solid rgba(0,0,0,0.08); }
@@ -81,7 +87,8 @@
 
     <!-- 第一排：添加 -->
     <div class="toolbar">
-      <button id="btnOpenOrg" class="btn btn-primary" type="button">添加企业/机构</button>
+      <!-- ✅ 修复：去掉 btn-primary，避免黑底 -->
+      <button id="btnOpenOrg" class="btn" type="button">添加企业/机构</button>
       <button id="btnOpenDomain" class="btn" type="button">添加安全领域</button>
       <button id="btnOpenProduct" class="btn" type="button">添加安全产品</button>
       <button id="btnOpenOrgProduct" class="btn" type="button">添加企业产品</button>
@@ -202,7 +209,7 @@
     </div>
   </div>
 
-  <!-- ========== Domain Modal ========== -->
+  <!-- ========== Domain Modal（添加）========== -->
   <div id="domainModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="添加安全领域">
       <div class="modal-head">
