@@ -7,8 +7,7 @@ import { mountOrganizationAdmin } from './features/organization.js'
 import { mountDomainAdmin } from './features/domain.js'
 import { mountProductAdmin } from './features/product.js'
 import { mountOrgProductAdmin } from './features/org-product.js'
-import { mountDomainEditAdmin } from './features/domain-edit.js'
-import { mountProductEditAdmin } from './features/product-edit.js'
+import { mountOrgProductEditAdmin } from './features/org-product-edit.js'
 
 /* =========================
  * Confirm (loading -> result -> ack)
@@ -63,15 +62,6 @@ try {
 }
 
 /* =========================
- * Domain Edit
- * ========================= */
-try {
-  mountDomainEditAdmin({ $, openModal, closeModal, setInvalid, clearInvalid, norm, isSlug, apiFetch, getToken, showConfirmFlow })
-} catch (e) {
-  console.error('[admin] mountDomainEditAdmin failed:', e)
-}
-
-/* =========================
  * Product
  * ========================= */
 try {
@@ -81,19 +71,19 @@ try {
 }
 
 /* =========================
- * Product Edit
- * ========================= */
-try {
-  mountProductEditAdmin({ $, openModal, closeModal, setInvalid, clearInvalid, norm, isSlug, apiFetch, getToken, showConfirmFlow })
-} catch (e) {
-  console.error('[admin] mountProductEditAdmin failed:', e)
-}
-
-/* =========================
- * Organization Product
+ * Organization Product (Create)
  * ========================= */
 try {
   mountOrgProductAdmin({ $, openModal, closeModal, setInvalid, clearInvalid, norm, apiFetch, getToken, showConfirmFlow })
 } catch (e) {
   console.error('[admin] mountOrgProductAdmin failed:', e)
+}
+
+/* =========================
+ * Organization Product (Edit)
+ * ========================= */
+try {
+  mountOrgProductEditAdmin({ $, openModal, closeModal, apiFetch, getToken, showConfirmFlow })
+} catch (e) {
+  console.error('[admin] mountOrgProductEditAdmin failed:', e)
 }
