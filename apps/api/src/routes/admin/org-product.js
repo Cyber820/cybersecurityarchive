@@ -1,26 +1,35 @@
 // apps/api/src/routes/admin/org-product.js
 import { supabase } from '../../supabase.js'
 import { requireAdmin } from './auth.js'
-console.log('[orgProduct] version = 2026-02-11-A')
+console.log('[orgProduct] version = 2026-02-13-orgProductEdit-A')
 
 /**
- * POST /api/admin/org_product
- *
- * Insert into organization_product:
+ * organization_product
+ * Columns (per your ERD / current implementation):
+ * - organization_product_id (int8)
  * - organization_id (int8)
- * - security_product_id (int8)
+ * - security_product_id (int8)  FK -> cybersecurity_product.security_product_id
  * - product_release_year (int4, nullable)
  * - product_end_year (int4, nullable)
  *
- * Body:
- * {
- *   organization_id: number,
- *   security_product_id: number,
- *   product_release_year?: number|null,
- *   product_end_year?: number|null
- * }
+ * Routes:
+ * - POST   /api/admin/org_product                         create
+ * - GET    /api/admin/org_product?organization_id=123      list by org
+ * - PATCH  /api/admin/org_product/:id                     update years only
+ * - DELETE /api/admin/org_product/:id                     delete row
  */
 export function registerOrgProductAdmin(app) {
+  /**
+   * POST /api/admin/org_product
+   *
+   * Body:
+   * {
+   *   organization_id: number,
+   *   security_product_id: number,
+   *   product_release_year?: number|null,
+   *   product_end_year?: number|null
+   * }
+   */
   app.post('/org_product', async (req, reply) => {
     if (!requireAdmin(req, reply)) return
 
@@ -64,6 +73,137 @@ export function registerOrgProductAdmin(app) {
     if (error) return reply.code(400).send({ error: error.message })
 
     return reply.send({ organization_product: data })
+  })
+
+  /**
+   * GET /api/admin/org_product?organization_id=123
+   *
+   * Return:
+   * {
+   *   items: [
+   *     {
+   *       organization_product_id,
+   *       organization_id,
+   *       security_product_id,
+   *       product_release_year,
+   *       product_end_year,
+   *       product: { security_product_name, security_product_slug }
+   *     }, ...
+   *   ]
+   * }
+   */
+  app.get('/org_product', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return
+
+    const organization_id = Number(req.query?.organization_id)
+    if (!Number.isFinite(organization_id)) {
+      return reply.code(400).send({ error: 'organization_id must be a number' })
+    }
+
+    // 尽量带出产品名（用于前端列表显示）
+    const { data, error } = await supabase
+      .from('organization_product')
+      .select(`
+        organization_product_id,
+        organization_id,
+        security_product_id,
+        product_release_year,
+        product_end_year,
+        cybersecurity_product:cybersecurity_product (
+          security_product_name,
+          security_product_slug
+        )
+      `)
+      .eq('organization_id', organization_id)
+      .order('organization_product_id', { ascending: true })
+      .limit(500)
+
+    if (error) return reply.code(400).send({ error: error.message })
+
+    const items = (data || []).map((r) => ({
+      organization_product_id: r.organization_product_id,
+      organization_id: r.organization_id,
+      security_product_id: r.security_product_id,
+      product_release_year: r.product_release_year ?? null,
+      product_end_year: r.product_end_year ?? null,
+      product: r.cybersecurity_product
+        ? {
+            security_product_name: r.cybersecurity_product.security_product_name,
+            security_product_slug: r.cybersecurity_product.security_product_slug
+          }
+        : null
+    }))
+
+    return reply.send({ items })
+  })
+
+  /**
+   * PATCH /api/admin/org_product/:id
+   * Body:
+   * {
+   *   product_release_year?: number|null,
+   *   product_end_year?: number|null
+   * }
+   */
+  app.patch('/org_product/:id', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return
+
+    const id = Number(req.params?.id)
+    if (!Number.isFinite(id)) return reply.code(400).send({ error: 'Invalid organization_product id' })
+
+    const body = req.body || {}
+    const nowYear = new Date().getFullYear()
+
+    // 只允许更新年份字段
+    const patch = {}
+
+    if ('product_release_year' in body) {
+      const v = normalizeYear(body.product_release_year, nowYear)
+      if (v === '__invalid__') {
+        return reply.code(400).send({ error: `product_release_year must be an integer between 1990 and ${nowYear}` })
+      }
+      patch.product_release_year = v === undefined ? null : v
+    }
+
+    if ('product_end_year' in body) {
+      const v = normalizeYear(body.product_end_year, nowYear)
+      if (v === '__invalid__') {
+        return reply.code(400).send({ error: `product_end_year must be an integer between 1990 and ${nowYear}` })
+      }
+      patch.product_end_year = v === undefined ? null : v
+    }
+
+    if (!Object.keys(patch).length) {
+      return reply.code(400).send({ error: 'No updatable fields in body' })
+    }
+
+    const { data, error } = await supabase
+      .from('organization_product')
+      .update(patch)
+      .eq('organization_product_id', id)
+      .select('*')
+      .single()
+
+    if (error) return reply.code(400).send({ error: error.message })
+    return reply.send({ organization_product: data })
+  })
+
+  /**
+   * DELETE /api/admin/org_product/:id
+   */
+  app.delete('/org_product/:id', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return
+
+    const id = Number(req.params?.id)
+    if (!Number.isFinite(id)) return reply.code(400).send({ error: 'Invalid organization_product id' })
+
+    const { error } = await supabase
+      .from('organization_product')
+      .delete()
+      .eq('organization_product_id', id)
+
+    if (error) return reply.code(400).send({ error: error.message })
+    return reply.send({ ok: true })
   })
 }
 
