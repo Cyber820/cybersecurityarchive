@@ -1,22 +1,23 @@
 // apps/web/src/securitydomain.js
 const $ = (id) => document.getElementById(id);
 
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
+function normalizeQ(raw) {
+  let q = String(raw ?? '').trim();
+  // 容错：用户误把 slug 当成 html 文件名
+  if (q.toLowerCase().endsWith('.html')) q = q.slice(0, -5);
+  return q;
 }
 
 function getQFromPath() {
-  // pathname like: /securitydomain/%E5%AE%89%E5%85%A8%E9%A2%86%E5%9F%9F%E5%90%8D
   const parts = (location.pathname || '').split('/').filter(Boolean);
   const idx = parts.indexOf('securitydomain');
   if (idx < 0) return '';
-  const q = parts.slice(idx + 1).join('/'); // allow encoded slashes if ever happens
+  const q = parts.slice(idx + 1).join('/');
   try { return decodeURIComponent(q); } catch { return q; }
 }
 
-async function loadDomain(q) {
+async function loadDomain(qRaw) {
+  const q = normalizeQ(qRaw);
   const url = `/api/domain/${encodeURIComponent(q)}`;
   $('apiUrl').textContent = url;
 
@@ -37,22 +38,30 @@ async function loadDomain(q) {
 
   $('status').textContent = '✅ 成功';
   $('output').textContent = JSON.stringify(data, null, 2);
+
+  // 如果用户输入了 .html，我们把地址栏也纠正一下（更干净）
+  const normalized = normalizeQ(getQFromPath());
+  if (normalized && normalized !== getQFromPath()) {
+    history.replaceState(null, '', `/securitydomain/${encodeURIComponent(normalized)}`);
+    $('q').textContent = normalized;
+  }
 }
 
 function init() {
-  const q = getQFromPath();
+  const qPath = getQFromPath();
+  const q = normalizeQ(qPath);
   $('q').textContent = q || '(空)';
 
-  // allow manual retry
   $('btnGo').addEventListener('click', async () => {
-    const v = $('inputQ').value.trim();
-    if (!v) return alert('请输入安全领域名或 slug');
+    const vRaw = $('inputQ').value.trim();
+    if (!vRaw) return alert('请输入安全领域名或 slug');
+    const v = normalizeQ(vRaw);
     history.replaceState(null, '', `/securitydomain/${encodeURIComponent(v)}`);
     $('q').textContent = v;
     await loadDomain(v);
   });
 
-  $('inputQ').addEventListener('keydown', async (e) => {
+  $('inputQ').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') $('btnGo').click();
   });
 
@@ -60,6 +69,7 @@ function init() {
     $('status').textContent = '请输入 /securitydomain/xxx 或在下方输入框输入安全领域名/slug。';
     return;
   }
+
   loadDomain(q);
 }
 
