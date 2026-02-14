@@ -1,35 +1,98 @@
-const $ = (id) => document.getElementById(id);
+import { supabase } from '../supabase.js';
 
-function renderList(title, items, kind) {
-  if (!items?.length) return '';
-  const rows = items.map((x) => {
-    if (kind === 'company') return `<li><a href="/api/company/${encodeURIComponent(x.organization_slug)}" target="_blank">${escapeHtml(x.company_short_name || x.company_full_name || x.organization_slug)}</a> <span style="color:#666">(${escapeHtml(x.organization_slug)})</span></li>`;
-    if (kind === 'product') return `<li><a href="/api/product/${encodeURIComponent(x.security_product_slug)}" target="_blank">${escapeHtml(x.security_product_name || x.security_product_slug)}</a> <span style="color:#666">(${escapeHtml(x.security_product_slug)})</span></li>`;
-    return `<li><a href="/api/domain/${encodeURIComponent(x.cybersecurity_domain_slug)}" target="_blank">${escapeHtml(x.security_domain_name || x.cybersecurity_domain_slug)}</a> <span style="color:#666">(${escapeHtml(x.cybersecurity_domain_slug)})</span></li>`;
-  }).join('');
-  return `<h4>${title}</h4><ul>${rows}</ul>`;
+export async function viewerRoutes(app) {
+  app.get('/company/:slug', async (req, reply) => {
+    const { slug } = req.params;
+
+    const { data, error } = await supabase
+      .from('organization')
+      .select('*')
+      .eq('organization_slug', slug)
+      .maybeSingle();
+
+    if (error) return reply.code(500).send({ error: error.message });
+    if (!data) return reply.code(404).send({ error: 'company not found' });
+    return reply.send(data);
+  });
+
+  app.get('/product/:slug', async (req, reply) => {
+    const { slug } = req.params;
+
+    const { data, error } = await supabase
+      .from('cybersecurity_product')
+      .select('*')
+      .eq('security_product_slug', slug)
+      .maybeSingle();
+
+    if (error) return reply.code(500).send({ error: error.message });
+    if (!data) return reply.code(404).send({ error: 'product not found' });
+    return reply.send(data);
+  });
+
+  /**
+   * GET /api/domain/:q
+   * - q 优先当作 cybersecurity_domain_slug 精确匹配
+   * - 若未命中，则当作 security_domain_name 精确匹配（支持中文名直达）
+   */
+  app.get('/domain/:q', async (req, reply) => {
+    const qRaw = req.params?.q;
+    const q = String(qRaw ?? '').trim();
+    if (!q) return reply.code(400).send({ error: 'domain query is empty' });
+
+    // 1) slug exact match
+    const bySlug = await supabase
+      .from('cybersecurity_domain')
+      .select('*')
+      .eq('cybersecurity_domain_slug', q)
+      .maybeSingle();
+
+    if (bySlug.error) return reply.code(500).send({ error: bySlug.error.message });
+    if (bySlug.data) return reply.send(bySlug.data);
+
+    // 2) name exact match
+    const byName = await supabase
+      .from('cybersecurity_domain')
+      .select('*')
+      .eq('security_domain_name', q)
+      .maybeSingle();
+
+    if (byName.error) return reply.code(500).send({ error: byName.error.message });
+    if (byName.data) return reply.send(byName.data);
+
+    return reply.code(404).send({ error: 'domain not found' });
+  });
+
+  // Minimal search: query organizations/products/domains by name or slug
+  app.get('/search', async (req, reply) => {
+    const q = String(req.query?.q || '').trim();
+    if (!q) return reply.send({ q, companies: [], products: [], domains: [] });
+
+    const [companies, products, domains] = await Promise.all([
+      supabase
+        .from('organization')
+        .select('organization_id, company_short_name, company_full_name, organization_slug')
+        .or(`company_short_name.ilike.%${q}%,company_full_name.ilike.%${q}%,organization_slug.ilike.%${q}%`)
+        .limit(30),
+      supabase
+        .from('cybersecurity_product')
+        .select('security_product_id, security_product_name, security_product_slug')
+        .or(`security_product_name.ilike.%${q}%,security_product_slug.ilike.%${q}%`)
+        .limit(30),
+      supabase
+        .from('cybersecurity_domain')
+        .select('security_domain_id, security_domain_name, cybersecurity_domain_slug')
+        .or(`security_domain_name.ilike.%${q}%,cybersecurity_domain_slug.ilike.%${q}%`)
+        .limit(30),
+    ]);
+
+    const err = companies.error || products.error || domains.error;
+    if (err) return reply.code(500).send({ error: err.message });
+
+    return reply.send({
+      q,
+      companies: companies.data || [],
+      products: products.data || [],
+      domains: domains.data || [],
+    });
+  });
 }
-
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
-}
-
-async function search() {
-  const q = $('q').value.trim();
-  const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
-  const data = await res.json();
-  const html = [
-    renderList('Companies', data.companies, 'company'),
-    renderList('Products', data.products, 'product'),
-    renderList('Domains', data.domains, 'domain'),
-  ].filter(Boolean).join('') || '<p style="color:#666">无结果</p>';
-  $('result').innerHTML = html;
-}
-
-$('btnSearch').addEventListener('click', search);
-$('q').addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
-
-// Default: show empty message
-$('result').innerHTML = '<p style="color:#666">输入关键词并搜索。</p>';
