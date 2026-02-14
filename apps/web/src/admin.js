@@ -5,7 +5,9 @@ import { initConfirm } from './core/confirm.js'
 
 import { mountOrganizationAdmin } from './features/organization.js'
 import { mountDomainAdmin } from './features/domain.js'
+import { mountDomainEditAdmin } from './features/domain-edit.js'
 import { mountProductAdmin } from './features/product.js'
+import { mountProductEditAdmin } from './features/product-edit.js'
 import { mountOrgProductAdmin } from './features/org-product.js'
 import { mountOrgProductEditAdmin } from './features/org-product-edit.js'
 
@@ -27,7 +29,7 @@ function safeInitConfirm() {
   }
 }
 
-const { showConfirmFlow } = safeInitConfirm();
+const { showConfirmFlow } = safeInitConfirm()
 
 /* =========================
  * Admin token (input + localStorage)
@@ -41,7 +43,7 @@ function safeInitToken() {
   return initAdminTokenInput(input, { storageKey: 'ia_admin_token' })
 }
 
-const { getToken } = safeInitToken();
+const { getToken } = safeInitToken()
 
 /* =========================
  * Organization
@@ -53,7 +55,7 @@ try {
 }
 
 /* =========================
- * Domain
+ * Domain (Create)
  * ========================= */
 try {
   mountDomainAdmin({ $, openModal, closeModal, setInvalid, clearInvalid, norm, isSlug, apiFetch, getToken, showConfirmFlow })
@@ -62,12 +64,30 @@ try {
 }
 
 /* =========================
- * Product
+ * Domain (Edit)
+ * ========================= */
+try {
+  mountDomainEditAdmin({ $, openModal, closeModal, setInvalid, clearInvalid, norm, isSlug, apiFetch, getToken, showConfirmFlow })
+} catch (e) {
+  console.error('[admin] mountDomainEditAdmin failed:', e)
+}
+
+/* =========================
+ * Product (Create)
  * ========================= */
 try {
   mountProductAdmin({ $, openModal, closeModal, setInvalid, clearInvalid, norm, isSlug, apiFetch, getToken, showConfirmFlow })
 } catch (e) {
   console.error('[admin] mountProductAdmin failed:', e)
+}
+
+/* =========================
+ * Product (Edit)
+ * ========================= */
+try {
+  mountProductEditAdmin({ $, openModal, closeModal, setInvalid, clearInvalid, norm, isSlug, apiFetch, getToken, showConfirmFlow })
+} catch (e) {
+  console.error('[admin] mountProductEditAdmin failed:', e)
 }
 
 /* =========================
