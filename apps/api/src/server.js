@@ -10,33 +10,29 @@ import { config } from './config.js';
 import { viewerRoutes } from './routes/viewer.js';
 import { adminRoutes } from './routes/admin/index.js';
 
-
 const app = Fastify({ logger: true });
 
-// 同域一般不需要 CORS；保守起见开着也行
 await app.register(fastifyCors, { origin: true });
 
 // ===== Static hosting (Vite build output) =====
-// Railway/monorepo 下最稳：从 cwd 指向 apps/web/dist
 const webDist = path.resolve(process.cwd(), '../../apps/web/dist');
-
 const hasStatic = fs.existsSync(webDist);
 
-// 让你能在日志里看到到底有没有 dist
 app.log.info({ webDist, hasStatic }, 'Static dist check');
 
 if (hasStatic) {
   await app.register(fastifyStatic, {
     root: webDist,
     prefix: '/',
-    // optional: set this true if you want to serve precompressed assets
-    // preCompressed: true,
   });
 
-  // 显式处理 / -> index.html（不要依赖目录 index 自动解析）
+  // root
   app.get('/', (req, reply) => reply.sendFile('index.html'));
+
+  // ✅ 新增：/securitydomain/* 落地到 securitydomain.html
+  app.get('/securitydomain', (req, reply) => reply.sendFile('securitydomain.html'));
+  app.get('/securitydomain/*', (req, reply) => reply.sendFile('securitydomain.html'));
 } else {
-  // dist 缺失也不要让服务挂掉：至少让 API 能跑
   app.get('/', async () => ({
     ok: true,
     hint: 'Static dist missing. Ensure Railway Build Command runs `npm run build` and Vite outputs to apps/web/dist.',
@@ -48,10 +44,8 @@ if (hasStatic) {
 await app.register(viewerRoutes, { prefix: '/api' });
 await app.register(adminRoutes, { prefix: '/api/admin' });
 
-// health check
 app.get('/api/health', async () => ({ ok: true }));
 
-// debug endpoint (safe): helps confirm dist presence on Railway
 app.get('/api/_debug/static', async () => ({
   cwd: process.cwd(),
   webDist,
@@ -60,8 +54,6 @@ app.get('/api/_debug/static', async () => ({
 }));
 
 // ===== Not Found =====
-// API: strict 404 JSON
-// Pages: if we have static, fall back to viewer.html; else JSON
 app.setNotFoundHandler((req, reply) => {
   const url = req.raw.url || '';
 
@@ -71,7 +63,6 @@ app.setNotFoundHandler((req, reply) => {
   }
 
   if (hasStatic) {
-    // 你如果想让未知页面落到 index.html，也可以改成 index.html
     reply.sendFile('viewer.html');
   } else {
     reply.code(404).send({
