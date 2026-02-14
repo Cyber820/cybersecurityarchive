@@ -2,6 +2,7 @@
 import Fastify from 'fastify';
 import path from 'node:path';
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import fastifyStatic from '@fastify/static';
 import fastifyCors from '@fastify/cors';
@@ -15,10 +16,16 @@ const app = Fastify({ logger: true });
 await app.register(fastifyCors, { origin: true });
 
 // ===== Static hosting (Vite build output) =====
-const webDist = path.resolve(process.cwd(), '../../apps/web/dist');
+// server.js is at: apps/api/src/server.js
+// so __dirname = .../apps/api/src
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// => .../apps/web/dist
+const webDist = path.resolve(__dirname, '../../web/dist');
 const hasStatic = fs.existsSync(webDist);
 
-app.log.info({ webDist, hasStatic }, 'Static dist check');
+app.log.info({ webDist, hasStatic, cwd: process.cwd() }, 'Static dist check');
 
 if (hasStatic) {
   await app.register(fastifyStatic, {
@@ -29,14 +36,20 @@ if (hasStatic) {
   // root
   app.get('/', (req, reply) => reply.sendFile('index.html'));
 
-  // ✅ 新增：/securitydomain/* 落地到 securitydomain.html
+  // ✅ /securitydomain/* 落地到 securitydomain.html
   app.get('/securitydomain', (req, reply) => reply.sendFile('securitydomain.html'));
   app.get('/securitydomain/*', (req, reply) => reply.sendFile('securitydomain.html'));
+
+  // ✅ admin 访问落地（建议加，避免用户必须记 /admin.html）
+  app.get('/admin', (req, reply) => reply.sendFile('admin.html'));
+  app.get('/admin/*', (req, reply) => reply.sendFile('admin.html'));
 } else {
+  // Static missing: still expose / for diagnosis
   app.get('/', async () => ({
     ok: true,
-    hint: 'Static dist missing. Ensure Railway Build Command runs `npm run build` and Vite outputs to apps/web/dist.',
+    hint: 'Static dist missing. Ensure build outputs to apps/web/dist.',
     webDist,
+    cwd: process.cwd(),
   }));
 }
 
@@ -50,7 +63,7 @@ app.get('/api/_debug/static', async () => ({
   cwd: process.cwd(),
   webDist,
   hasStatic,
-  files: hasStatic ? fs.readdirSync(webDist).slice(0, 50) : []
+  files: hasStatic ? fs.readdirSync(webDist).slice(0, 80) : [],
 }));
 
 // ===== Not Found =====
@@ -63,11 +76,14 @@ app.setNotFoundHandler((req, reply) => {
   }
 
   if (hasStatic) {
+    // fallback to viewer (debug viewer)
     reply.sendFile('viewer.html');
   } else {
     reply.code(404).send({
       error: 'Not Found',
       hint: 'Static dist missing, cannot serve pages. Check build output.',
+      webDist,
+      cwd: process.cwd(),
     });
   }
 });
