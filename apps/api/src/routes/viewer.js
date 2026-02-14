@@ -1,3 +1,4 @@
+// apps/api/src/routes/viewer.js
 import { supabase } from '../supabase.js';
 
 export async function viewerRoutes(app) {
@@ -29,18 +30,38 @@ export async function viewerRoutes(app) {
     return reply.send(data);
   });
 
-  app.get('/domain/:slug', async (req, reply) => {
-    const { slug } = req.params;
+  /**
+   * GET /api/domain/:q
+   * - q 可以是 cybersecurity_domain_slug（优先）
+   * - 也可以是 security_domain_name（精确匹配兜底）
+   */
+  app.get('/domain/:q', async (req, reply) => {
+    const qRaw = req.params?.q;
+    const q = String(qRaw ?? '').trim();
 
-    const { data, error } = await supabase
+    if (!q) return reply.code(400).send({ error: 'domain query is empty' });
+
+    // 1) try slug exact match
+    const bySlug = await supabase
       .from('cybersecurity_domain')
       .select('*')
-      .eq('cybersecurity_domain_slug', slug)
+      .eq('cybersecurity_domain_slug', q)
       .maybeSingle();
 
-    if (error) return reply.code(500).send({ error: error.message });
-    if (!data) return reply.code(404).send({ error: 'domain not found' });
-    return reply.send(data);
+    if (bySlug.error) return reply.code(500).send({ error: bySlug.error.message });
+    if (bySlug.data) return reply.send(bySlug.data);
+
+    // 2) try name exact match
+    const byName = await supabase
+      .from('cybersecurity_domain')
+      .select('*')
+      .eq('security_domain_name', q)
+      .maybeSingle();
+
+    if (byName.error) return reply.code(500).send({ error: byName.error.message });
+    if (byName.data) return reply.send(byName.data);
+
+    return reply.code(404).send({ error: 'domain not found' });
   });
 
   // Minimal search: query organizations/products/domains by name or slug
