@@ -1,211 +1,568 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Admin</title>
   <style>
-    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background:#f7f7f9; color:#111; }
-    .wrap { max-width: 1100px; margin: 22px auto; padding: 0 14px; }
-    .card { background:#fff; border:1px solid rgba(0,0,0,0.14); border-radius:14px; padding:14px; margin: 14px 0; }
-    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    button {
-      border:1px solid rgba(0,0,0,0.22);
-      background:#fff;
-      color:#111;
-      border-radius:999px;
-      padding:10px 14px;
-      font-size:13px;
-      cursor:pointer;
-    }
-    button.primary {
-      background:#111;
-      color:#fff;
-      border-color:#111;
-    }
-    input, textarea, select {
-      border:1px solid rgba(0,0,0,0.22);
-      border-radius:12px;
-      padding:10px 10px;
-      font-size:13px;
-      background:#fff;
-      color:#111;
-      box-sizing:border-box;
-      width: 100%;
-    }
-    textarea { min-height: 84px; resize: vertical; }
-    .hint { color: rgba(0,0,0,0.62); font-size: 12px; margin-top: 6px; }
-    .err { color: #b00020; font-size: 12px; margin-top: 6px; display:none; }
+    :root { --bd: rgba(0,0,0,0.18); --muted: rgba(0,0,0,0.55); }
+    body{ font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji"; margin:0; background:#fafafa; color:#111; }
+    .wrap{ max-width:1100px; margin:24px auto; padding:0 16px; }
+    h1{ font-size:20px; margin:0 0 14px 0; }
+    .toolbar{ display:flex; gap:10px; flex-wrap:wrap; margin:10px 0 14px; }
+    .btn{ border:1px solid var(--bd); background:#fff; padding:8px 12px; border-radius:10px; cursor:pointer; font-size:13px; }
+    .btn:hover{ border-color: rgba(0,0,0,0.28); }
+    .btn-primary{ background:#111; color:#fff; border-color:#111; }
+    .btn-primary:hover{ opacity:0.9; }
+    .card{ border:1px solid var(--bd); background:#fff; border-radius:14px; padding:14px; margin:12px 0; }
+    .label{ font-weight:700; font-size:13px; color: rgba(0,0,0,.75); }
+    .hint{ font-size:12px; color: var(--muted); }
+    .input, .textarea, select{ width:100%; box-sizing:border-box; border:1px solid var(--bd); border-radius:12px; padding:10px 12px; font-size:13px; background:#fff; }
+    .textarea{ resize: vertical; }
+    .row{ display:grid; grid-template-columns: 180px 1fr; gap:10px; margin-top:12px; align-items:start; }
+    .err{ margin-top:6px; font-size:12px; color:#b00020; display:none; }
 
-    /* Modal */
-    .af-modal-overlay {
-      position: fixed;
-      inset: 0;
+    /* modals */
+    .modal-overlay{
+      position:fixed; inset:0; display:none; align-items:center; justify-content:center;
       background: rgba(0,0,0,0.35);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 99999;
-      padding: 16px;
+      z-index: 9999; padding:16px;
     }
-    .af-modal {
+    .modal{
       width: min(900px, 100%);
       max-height: 85vh;
       overflow: auto;
-      background: #fff;
-      border: 1px solid rgba(0,0,0,0.20);
-      border-radius: 12px;
+      background:#fff;
+      border:1px solid var(--bd);
+      border-radius: 14px;
       padding: 12px;
       box-sizing: border-box;
     }
-    .af-modal-title { font-size: 15px; font-weight: 800; margin: 4px 0 12px; }
-    .af-grid { display:grid; gap:10px; grid-template-columns: 1fr; }
-    .af-actions { display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap; margin-top: 12px; }
-    .af-row2 { display:grid; gap:10px; grid-template-columns: 1fr 1fr; }
-    @media (max-width: 720px){ .af-row2 { grid-template-columns: 1fr; } }
+    .modal-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; position:sticky; top:0; background:#fff; padding-bottom:10px; border-bottom:1px solid rgba(0,0,0,0.08); }
+    .modal-title{ font-weight:900; font-size:15px; }
+    .modal-actions{ display:flex; gap:10px; justify-content:flex-end; margin-top:14px; }
 
-    .af-pill { display:inline-flex; padding:6px 10px; border-radius:999px; border:1px solid rgba(0,0,0,0.18); background:#fff; font-size:12px; }
-    .af-list { border:1px solid rgba(0,0,0,0.18); border-radius:12px; padding:8px; max-height:240px; overflow:auto; background:#fff; }
-    .af-list button { width:100%; text-align:left; border-radius:10px; margin:4px 0; }
+    /* confirm */
+    .confirm-overlay{
+      position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+      background: rgba(0,0,0,0.35);
+      z-index: 99999; padding:16px;
+    }
+    .confirm{
+      width: min(560px, 100%);
+      background:#fff;
+      border:1px solid rgba(0,0,0,0.20);
+      border-radius:12px;
+      padding:12px;
+      display:block; /* ✅ 修复：必须可见，否则只剩遮罩层导致页面无法操作 */
+      box-sizing: border-box;
+    }
+    .confirm-title{ font-weight:900; font-size:15px; }
+    .confirm-body{ margin-top:8px; font-size:13px; white-space:pre-wrap; word-break:break-word; }
+    .confirm-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:12px; }
+
+    /* simple KV */
+    .kv { display:flex; gap:10px; padding:6px 0; border-bottom:1px solid rgba(0,0,0,0.08); }
+    .kv-k { width:160px; flex:0 0 160px; font-weight:700; font-size:13px; color:rgba(0,0,0,.75); }
+    .kv-v { flex:1 1 auto; min-width:0; font-size:13px; white-space:pre-wrap; word-break:break-word; }
+
+    /* search list items */
+    .es-item{
+      border:1px solid rgba(0,0,0,0.12);
+      border-radius:12px;
+      padding:10px;
+      cursor:pointer;
+      background:#fff;
+      margin:8px 0;
+    }
+    .es-item:hover{ border-color: rgba(0,0,0,0.25); }
+    .es-title{ font-weight:800; font-size:14px; }
+    .es-subtitle{ margin-top:4px; font-size:12px; color: rgba(0,0,0,0.65); }
   </style>
 </head>
+
 <body>
   <div class="wrap">
+    <h1>Industry Archive Admin</h1>
+
+    <!-- 第一排：添加 -->
+    <div class="toolbar">
+      <!-- ✅ 修复：去掉 btn-primary，避免黑底 -->
+      <button id="btnOpenOrg" class="btn" type="button">添加企业/机构</button>
+      <button id="btnOpenDomain" class="btn" type="button">添加安全领域</button>
+      <button id="btnOpenProduct" class="btn" type="button">添加安全产品</button>
+      <button id="btnOpenOrgProduct" class="btn" type="button">添加企业产品</button>
+    </div>
+
+    <!-- 第二排：编辑 -->
+    <div class="toolbar">
+      <button id="btnOpenOrgEdit" class="btn" type="button">编辑企业/机构</button>
+      <button id="btnOpenDomainEdit" class="btn" type="button">编辑安全领域</button>
+    </div>
+
     <div class="card">
-      <h2 style="margin:0 0 10px;">Admin</h2>
+      <div class="label">Token（只需输入一次，可连续录入）</div>
+      <input id="tokenInput" class="input" type="password" placeholder="输入 token（留空则按匿名/默认策略）" />
+      <div class="hint">token 会被缓存到 localStorage（仅本浏览器）。</div>
+    </div>
+  </div>
+
+  <!-- ========== Organization: Create/Edit Modal ========== -->
+  <div id="orgModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="企业/机构">
+      <div class="modal-head">
+        <div id="orgModalTitle" class="modal-title">添加企业/机构</div>
+        <button id="orgClose" class="btn" type="button">关闭</button>
+      </div>
+
       <div class="row">
-        <!-- 这些按钮的 id/文本请保持你现有 admin.js 能识别即可；如果你的 JS 绑定的是别的 id，你再告诉我我就对齐 -->
-        <button id="btnAddOrg" type="button">添加企业/机构</button>
-        <button id="btnEditDomain" type="button">编辑安全领域</button>
-        <button id="btnEditProduct" type="button">编辑安全产品</button>
-        <button id="btnEditOrgProduct" type="button">编辑企业产品</button>
+        <div class="label">企业简称 *</div>
+        <div>
+          <input id="orgShortName" class="input" type="text" placeholder="必填：organization_short_name" />
+          <div id="orgShortNameErr" class="err"></div>
+        </div>
       </div>
-      <div class="hint">如果按钮仍点不开：说明你的 admin.js 绑定的按钮 id 不同，把 admin.js 里绑定按钮的那几行贴我，我会对齐。</div>
-    </div>
 
-    <div class="card">
-      <div class="hint">调试：</div>
-      <pre id="adminDebug" style="white-space:pre-wrap;word-break:break-word;margin:0;"></pre>
+      <div class="row">
+        <div class="label">企业全称</div>
+        <div>
+          <input id="orgFullName" class="input" type="text" placeholder="选填：organization_full_name" />
+          <div class="hint">可为空。</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">成立时间</div>
+        <div>
+          <input id="orgEstablishYear" class="input" type="text" inputmode="numeric" placeholder="选填：1990 ~ 当前年份" />
+          <div id="orgEstablishYearErr" class="err"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">slug *</div>
+        <div>
+          <input id="orgSlug" class="input" type="text" placeholder="必填：organization_slug（英文/数字/连字符）" />
+          <div id="orgSlugErr" class="err"></div>
+          <div class="hint">规则：仅允许 a-z / 0-9 / 连字符 -（建议小写）。</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">企业/机构描述</div>
+        <div>
+          <textarea id="orgDescription" class="textarea" rows="6" placeholder="选填：organization_description"></textarea>
+          <div class="hint">可为空。</div>
+        </div>
+      </div>
+
+      <div class="modal-actions" id="orgActionsCreate">
+        <button id="orgReset" class="btn" type="button">清空</button>
+        <button id="orgSubmit" class="btn btn-primary" type="button">添加</button>
+      </div>
+
+      <div class="modal-actions" id="orgActionsEdit" style="display:none;">
+        <button id="orgEditReset" class="btn" type="button">重置</button>
+        <button id="orgEditCancel" class="btn" type="button">取消</button>
+        <button id="orgEditSubmit" class="btn btn-primary" type="button">确定更新</button>
+      </div>
     </div>
   </div>
 
-  <!-- =========================
-       Domain Modal (编辑安全领域)
-       ========================= -->
-  <div class="af-modal-overlay" id="domainModal">
-    <div class="af-modal">
-      <div class="af-modal-title">编辑安全领域</div>
+  <!-- ========== Organization: Search Modal ========== -->
+  <div id="orgSearchModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="搜索企业/机构">
+      <div class="modal-head">
+        <div class="modal-title">编辑企业/机构（搜索）</div>
+        <button id="orgSearchClose" class="btn" type="button">关闭</button>
+      </div>
 
-      <div class="af-grid">
-        <div class="af-row2">
-          <div>
-            <div class="hint">安全领域名</div>
-            <input id="domainName" />
-            <div class="err" id="domainNameErr"></div>
-          </div>
-          <div>
-            <div class="hint">slug</div>
-            <input id="domainSlug" />
-            <div class="err" id="domainSlugErr"></div>
-          </div>
-        </div>
-
+      <div class="row" style="grid-template-columns: 1fr;">
         <div>
-          <div class="hint">描述</div>
-          <textarea id="domainDesc"></textarea>
-          <div class="err" id="domainDescErr"></div>
+          <input id="orgSearchInput" class="input" type="text" placeholder="搜索 short_name / full_name / slug ..." />
+          <div class="hint">点击结果进入详情。</div>
         </div>
+      </div>
 
-        <div class="af-row2">
-          <div>
-            <label class="hint"><input id="domainIsAlias" type="checkbox" /> 这是 alias（别名）</label>
-            <div class="err" id="domainIsAliasErr"></div>
-          </div>
-          <div>
-            <div class="hint">alias 指向目标（可选）</div>
-            <div class="row" style="margin-top:6px;">
-              <span class="af-pill" id="domainAliasTargetPicked">(none)</span>
-              <button id="domainAliasTargetClear" type="button">清除</button>
+      <div class="card" style="margin-top:12px;">
+        <div class="label">搜索结果</div>
+        <div id="orgSearchStatus" class="hint" style="margin-top:6px;">请输入关键字开始搜索。</div>
+        <div id="orgSearchList" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== Organization: Info Modal ========== -->
+  <div id="orgInfoModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="企业信息">
+      <div class="modal-head">
+        <div class="modal-title">企业/机构信息</div>
+        <button id="orgInfoClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div id="orgInfoBody"></div>
+
+      <div class="modal-actions">
+        <button id="orgInfoCancel" class="btn" type="button">取消</button>
+        <button id="orgInfoEdit" class="btn btn-primary" type="button">编辑</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== Domain Modal（添加）========== -->
+  <div id="domainModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="添加安全领域">
+      <div class="modal-head">
+        <div class="modal-title">添加安全领域</div>
+        <button id="domainClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div class="row">
+        <div class="label">安全领域名称 *</div>
+        <div>
+          <input id="domainName" class="input" type="text" placeholder="必填：security_domain_name / security_domain_alias_name" />
+          <div id="domainNameErr" class="err"></div>
+          <div class="hint">当选择“是别名”时，此名称将写入别名表；当选择“否”时写入安全领域主表。</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">是否是安全领域别名 *</div>
+        <div>
+          <select id="domainIsAlias" class="input">
+            <option value="no">否（新增安全领域）</option>
+            <option value="yes">是（新增别名，归属已有领域）</option>
+          </select>
+          <div id="domainIsAliasErr" class="err"></div>
+        </div>
+      </div>
+
+      <div id="domainSlugRow" class="row">
+        <div class="label">安全领域 slug *</div>
+        <div>
+          <input id="domainSlug" class="input" type="text" placeholder="必填：cybersecurity_domain_slug（英文/数字/连字符）" />
+          <div id="domainSlugErr" class="err"></div>
+          <div class="hint">规则：仅允许 a-z / 0-9 / 连字符 -（建议小写）。</div>
+        </div>
+      </div>
+
+      <div id="domainDescRow" class="row">
+        <div class="label">安全领域描述</div>
+        <div>
+          <textarea id="domainDesc" class="textarea" rows="6" placeholder="选填：security_domain_description"></textarea>
+          <div class="hint">可为空。</div>
+        </div>
+      </div>
+
+      <div id="domainAliasTargetRow" class="row" style="display:none;">
+        <div class="label">同等安全领域 *</div>
+        <div>
+          <div class="card" style="margin-top:0;">
+            <div class="label">选择同等领域（单选）</div>
+            <div class="hint" id="domainAliasTargetPicked" style="margin-top:6px;">未选择（请在下方搜索并点击一个安全领域）</div>
+
+            <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
+              <button id="domainAliasTargetClear" class="btn" type="button" style="display:none;">清除已选择</button>
             </div>
-            <input id="domainAliasTargetSearch" placeholder="搜索目标领域…" />
-            <div class="hint" id="domainAliasTargetStatus"></div>
-            <div class="af-list" id="domainAliasTargetList"></div>
-            <div class="err" id="domainAliasTargetErr"></div>
-          </div>
-        </div>
 
-        <div class="af-actions">
-          <button id="domainClose" type="button">关闭</button>
-          <button id="domainReset" type="button">重置</button>
-          <button id="domainSubmit" class="primary" type="button">提交</button>
+            <div style="margin-top:10px;">
+              <input id="domainAliasTargetSearch" class="input" type="text" placeholder="搜索安全领域 name / slug ..." />
+              <div id="domainAliasTargetStatus" class="hint" style="margin-top:6px;">输入关键字开始搜索。</div>
+              <div id="domainAliasTargetList" style="margin-top:10px;"></div>
+              <div id="domainAliasTargetErr" class="err"></div>
+            </div>
+          </div>
+
+          <div class="hint">别名表写入：security_domain_alias_name（=上面的名称） + security_domain_id（=这里选中的领域ID）。</div>
         </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="domainReset" class="btn" type="button">清空</button>
+        <button id="domainSubmit" class="btn btn-primary" type="button">添加</button>
       </div>
     </div>
   </div>
 
-  <!-- =========================
-       Product Modal (编辑安全产品 / 添加安全产品)
-       这些 id 是你日志里缺失的关键节点
-       ========================= -->
-  <div class="af-modal-overlay" id="productModal">
-    <div class="af-modal">
-      <div class="af-modal-title">编辑安全产品</div>
+  <!-- ========== Domain Edit: Search Modal ========== -->
+  <div id="domainEditSearchModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="编辑安全领域（搜索）">
+      <div class="modal-head">
+        <div class="modal-title">编辑安全领域（搜索）</div>
+        <button id="domainEditSearchClose" class="btn" type="button">关闭</button>
+      </div>
 
-      <div class="af-grid">
+      <div class="row" style="grid-template-columns: 1fr;">
         <div>
-          <div class="hint">产品名称</div>
-          <input id="productName" />
-          <div class="err" id="productNameErr"></div>
+          <input id="domainEditSearchInput" class="input" type="text" placeholder="搜索 security_domain_name / slug / alias ..." />
+          <div class="hint">支持主领域与别名（domain_union）。每条结果可编辑或删除。</div>
         </div>
+      </div>
 
-        <div class="af-row2">
-          <div>
-            <label class="hint"><input id="productIsAlias" type="checkbox" /> 这是 alias（别名）</label>
-            <div class="err" id="productIsAliasErr"></div>
-          </div>
-
-          <!-- slug 行：JS 里经常会根据 alias 勾选来 show/hide -->
-          <div id="productSlugRow">
-            <div class="hint">slug</div>
-            <input id="productSlug" />
-            <div class="err" id="productSlugErr"></div>
-          </div>
-        </div>
-
-        <div id="productDomainsRow">
-          <div class="hint">所属安全领域（可多选/单选由 JS 控制）</div>
-          <div id="productDomains"></div>
-          <div class="err" id="productDomainsErr"></div>
-        </div>
-
-        <div id="productDescRow">
-          <div class="hint">描述</div>
-          <textarea id="productDesc"></textarea>
-        </div>
-
-        <div id="productAliasTargetRow">
-          <div class="hint">alias 指向目标产品</div>
-          <div class="row" style="margin-top:6px;">
-            <span class="af-pill" id="productAliasTargetPicked">(none)</span>
-            <button id="productAliasTargetClear" type="button">清除</button>
-          </div>
-
-          <input id="productAliasTargetSearch" placeholder="搜索目标产品…" />
-          <div class="hint" id="productAliasTargetStatus"></div>
-          <div class="af-list" id="productAliasTargetList"></div>
-          <div class="err" id="productAliasTargetErr"></div>
-        </div>
-
-        <div class="af-actions">
-          <button id="productClose" type="button">关闭</button>
-          <button id="productReset" type="button">重置</button>
-          <button id="productSubmit" class="primary" type="button">提交</button>
-        </div>
+      <div class="card" style="margin-top:12px;">
+        <div class="label">搜索结果</div>
+        <div id="domainEditSearchStatus" class="hint" style="margin-top:6px;">请输入关键字开始搜索。</div>
+        <div id="domainEditSearchList" style="margin-top:10px;"></div>
       </div>
     </div>
   </div>
 
-  <!-- 你项目里 admin 的入口脚本（保持原样，Vite 会替换成 hash bundle） -->
+  <!-- ========== Domain Edit: Main Domain Modal ========== -->
+  <div id="domainEditMainModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="编辑安全领域">
+      <div class="modal-head">
+        <div class="modal-title">编辑安全领域</div>
+        <button id="domainEditMainClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div class="row">
+        <div class="label">安全领域名称 *</div>
+        <div>
+          <input id="domainEditMainName" class="input" type="text" placeholder="必填：security_domain_name" />
+          <div id="domainEditMainNameErr" class="err"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">安全领域 slug *</div>
+        <div>
+          <input id="domainEditMainSlug" class="input" type="text" placeholder="必填：cybersecurity_domain_slug（英文/数字/连字符）" />
+          <div id="domainEditMainSlugErr" class="err"></div>
+          <div class="hint">规则：仅允许 a-z / 0-9 / 连字符 -（建议小写）。</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">安全领域描述</div>
+        <div>
+          <textarea id="domainEditMainDesc" class="textarea" rows="6" placeholder="选填：security_domain_description"></textarea>
+          <div class="hint">可为空。</div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="domainEditMainCancel" class="btn" type="button">取消</button>
+        <button id="domainEditMainSubmit" class="btn btn-primary" type="button">确定更新</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== Domain Edit: Alias Modal ========== -->
+  <div id="domainEditAliasModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="编辑安全领域别名">
+      <div class="modal-head">
+        <div class="modal-title">编辑安全领域别名</div>
+        <button id="domainEditAliasClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div class="row">
+        <div class="label">安全领域别名 *</div>
+        <div>
+          <input id="domainEditAliasName" class="input" type="text" placeholder="必填：security_domain_alias_name" />
+          <div id="domainEditAliasNameErr" class="err"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">同等安全领域 *</div>
+        <div>
+          <div class="card" style="margin-top:0;">
+            <div class="label">选择同等领域（单选）</div>
+            <div class="hint" id="domainEditAliasTargetPicked" style="margin-top:6px;">未选择（请在下方搜索并点击一个安全领域）</div>
+
+            <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
+              <button id="domainEditAliasTargetClear" class="btn" type="button" style="display:none;">清除已选择</button>
+            </div>
+
+            <div style="margin-top:10px;">
+              <input id="domainEditAliasTargetSearch" class="input" type="text" placeholder="搜索安全领域 name / slug ..." />
+              <div id="domainEditAliasTargetStatus" class="hint" style="margin-top:6px;">输入关键字开始搜索。</div>
+              <div id="domainEditAliasTargetList" style="margin-top:10px;"></div>
+              <div id="domainEditAliasTargetErr" class="err"></div>
+            </div>
+          </div>
+
+          <div class="hint">别名表写入：security_domain_alias_name + security_domain_id（=这里选中的领域 ID）。</div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="domainEditAliasCancel" class="btn" type="button">取消</button>
+        <button id="domainEditAliasSubmit" class="btn btn-primary" type="button">确定更新</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== Product Modal ========== -->
+  <div id="productModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="添加安全产品">
+      <div class="modal-head">
+        <div class="modal-title">添加安全产品</div>
+        <button id="productClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div class="row">
+        <div class="label">安全产品名称 *</div>
+        <div>
+          <input id="productName" class="input" type="text" placeholder="必填：security_product_name / security_product_alias_name" />
+          <div id="productNameErr" class="err"></div>
+          <div class="hint">当选择“是别名”时，此名称将写入别名表；当选择“否”时写入安全产品主表。</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">是否是安全产品别名 *</div>
+        <div>
+          <select id="productIsAlias" class="input">
+            <option value="no">否（新增安全产品）</option>
+            <option value="yes">是（新增别名，归属已有产品）</option>
+          </select>
+          <div id="productIsAliasErr" class="err"></div>
+        </div>
+      </div>
+
+      <div id="productSlugRow" class="row">
+        <div class="label">安全产品 slug *</div>
+        <div>
+          <input id="productSlug" class="input" type="text" placeholder="必填：security_product_slug（英文/数字/连字符）" />
+          <div id="productSlugErr" class="err"></div>
+          <div class="hint">规则：仅允许 a-z / 0-9 / 连字符 -（建议小写）。</div>
+        </div>
+      </div>
+
+      <div id="productDescRow" class="row">
+        <div class="label">安全产品描述</div>
+        <div>
+          <textarea id="productDesc" class="textarea" rows="6" placeholder="选填：security_product_description"></textarea>
+          <div class="hint">可为空。</div>
+        </div>
+      </div>
+
+      <div id="productAliasTargetRow" class="row" style="display:none;">
+        <div class="label">同等安全产品 *</div>
+        <div>
+          <div class="card" style="margin-top:0;">
+            <div class="label">选择同等产品（单选）</div>
+            <div class="hint" id="productAliasTargetPicked" style="margin-top:6px;">未选择（请在下方搜索并点击一个安全产品）</div>
+
+            <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
+              <button id="productAliasTargetClear" class="btn" type="button" style="display:none;">清除已选择</button>
+            </div>
+
+            <div style="margin-top:10px;">
+              <input id="productAliasTargetSearch" class="input" type="text" placeholder="搜索安全产品 name / slug ..." />
+              <div id="productAliasTargetStatus" class="hint" style="margin-top:6px;">输入关键字开始搜索。</div>
+              <div id="productAliasTargetList" style="margin-top:10px;"></div>
+              <div id="productAliasTargetErr" class="err"></div>
+            </div>
+          </div>
+
+          <div class="hint">别名表写入：security_product_alias_name（=上面的名称） + security_product_id（=这里选中的产品ID）。</div>
+        </div>
+      </div>
+
+      <div id="productDomainsRow" class="row">
+        <div class="label">产品所属安全领域（可多选）</div>
+        <div>
+          <div id="productDomains" class="ia-ms"></div>
+          <div id="productDomainsErr" class="err"></div>
+          <div class="hint">（增强项）创建产品时写入 cybersecurity_product_domain。</div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="productReset" class="btn" type="button">清空</button>
+        <button id="productSubmit" class="btn btn-primary" type="button">添加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== Organization Product Modal ========== -->
+  <div id="orgProductModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="添加企业产品">
+      <div class="modal-head">
+        <div class="modal-title">添加企业产品</div>
+        <button id="orgProductClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div class="row">
+        <div class="label">企业/机构 *</div>
+        <div>
+          <div class="card" style="margin-top:0;">
+            <div class="label">选择企业（单选）</div>
+            <div class="hint" id="orgProductOrgPicked" style="margin-top:6px;">未选择（请在下方搜索并点击一个企业）</div>
+
+            <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
+              <button id="orgProductOrgClear" class="btn" type="button" style="display:none;">清除已选择</button>
+            </div>
+
+            <div style="margin-top:10px;">
+              <input id="orgProductOrgSearch" class="input" type="text" placeholder="搜索企业 short_name / full_name / slug ..." />
+              <div id="orgProductOrgStatus" class="hint" style="margin-top:6px;">输入关键字开始搜索。</div>
+              <div id="orgProductOrgList" style="margin-top:10px;"></div>
+              <div id="orgProductOrgErr" class="err"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">安全产品（或别名） *</div>
+        <div>
+          <div class="card" style="margin-top:0;">
+            <div class="label">选择产品（单选）</div>
+            <div class="hint" id="orgProductProdPicked" style="margin-top:6px;">未选择（请在下方搜索并点击一个安全产品）</div>
+
+            <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
+              <button id="orgProductProdClear" class="btn" type="button" style="display:none;">清除已选择</button>
+            </div>
+
+            <div style="margin-top:10px;">
+              <input id="orgProductProdSearch" class="input" type="text" placeholder="搜索产品 name / slug / alias ..." />
+              <div id="orgProductProdStatus" class="hint" style="margin-top:6px;">输入关键字开始搜索。</div>
+              <div id="orgProductProdList" style="margin-top:10px;"></div>
+              <div id="orgProductProdErr" class="err"></div>
+            </div>
+          </div>
+
+          <div class="hint">提示：product_union 返回 id 可能带前缀（p: / a:）；写入 FK 必须使用 canonical product_id。</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">产品发布年份</div>
+        <div>
+          <input id="orgProductReleaseYear" class="input" type="text" inputmode="numeric" placeholder="选填：1990 ~ 当前年份" />
+          <div id="orgProductReleaseYearErr" class="err"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">产品终止年份</div>
+        <div>
+          <input id="orgProductEndYear" class="input" type="text" inputmode="numeric" placeholder="选填：1990 ~ 当前年份" />
+          <div id="orgProductEndYearErr" class="err"></div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="orgProductReset" class="btn" type="button">清空</button>
+        <button id="orgProductSubmit" class="btn btn-primary" type="button">添加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== Confirm (REQUIRED by initConfirm) ========== -->
+  <div id="confirmOverlay" class="confirm-overlay" aria-hidden="true">
+    <div class="confirm" role="dialog" aria-modal="true" aria-label="状态">
+      <div id="confirmTitle" class="confirm-title">处理中</div>
+      <div id="confirmBody" class="confirm-body">请稍候…</div>
+      <div class="confirm-actions">
+        <button id="confirmOk" class="btn btn-primary" type="button">确定</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="/src/admin.js"></script>
 </body>
 </html>
