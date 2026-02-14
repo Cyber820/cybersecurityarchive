@@ -1,22 +1,24 @@
 # syntax=docker/dockerfile:1
 FROM node:22-alpine
 
+# ===== 工作目录 =====
 WORKDIR /app
 
-# 先复制整个项目
+# ===== 先复制 package.json（利用缓存层，加快构建）=====
+COPY package.json ./
+COPY apps/api/package.json ./apps/api/package.json
+COPY apps/web/package.json ./apps/web/package.json
+
+# ===== 安装依赖（根 workspace）=====
+RUN npm install
+
+# ===== 再复制全部源码 =====
 COPY . .
 
-# ===== 安装 web 依赖并构建 =====
-WORKDIR /app/apps/web
-RUN npm install
+# ===== 构建前端 dist =====
 RUN npm run build
 
-# ===== 安装 api 依赖（如果存在 package.json）=====
-WORKDIR /app/apps/api
-RUN if [ -f package.json ]; then npm install; fi
-
-# ===== 启动服务 =====
-WORKDIR /app
+# ===== 运行环境 =====
 ENV NODE_ENV=production
 EXPOSE 3000
 
