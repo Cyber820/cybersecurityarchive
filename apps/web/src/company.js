@@ -1,190 +1,174 @@
-<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Company</title>
-  <style>
-    body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background:#f7f7f9; color:#111; }
-    .wrap{ max-width: 980px; margin: 22px auto; padding: 0 14px; }
-    h1{ font-size: 22px; margin: 0 0 14px; font-weight: 900; }
-    .card{ background:#fff; border:1px solid rgba(0,0,0,0.14); border-radius:14px; padding:14px; margin-top: 14px; }
-    .label{ font-weight:900; font-size: 13px; margin-bottom: 8px; }
-    .hint{ color: rgba(0,0,0,0.62); font-size: 12px; margin-top: 6px; }
-    .kv{ white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.6; }
-    .empty{ color: rgba(0,0,0,0.52); font-size: 13px; }
+// apps/web/src/company.js
+import { mountGlobalSearch } from './ui/globalSearch.js';
 
-    /* ===== global search basic styles ===== */
-    .gs-row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    .gs-input{
-      flex:1; min-width: 240px;
-      border:1px solid rgba(0,0,0,0.22);
-      border-radius:12px;
-      padding:10px 10px;
-      font-size:13px;
-      background:#fff;
-      color:#111;
-      box-sizing:border-box;
-    }
-    .gs-btn{
-      border:1px solid rgba(0,0,0,0.22);
-      background:#fff;
-      border-radius:999px;
-      padding:10px 14px;
-      font-size:13px;
-      cursor:pointer;
-    }
-    .gs-hint{ color: rgba(0,0,0,0.62); font-size: 12px; margin-top: 8px; }
-    .gs-list{ margin-top: 10px; display:grid; gap: 12px; }
-    .gs-group{ border:1px dashed rgba(0,0,0,0.18); border-radius:12px; padding:10px; }
-    .gs-group-title{ font-weight:900; font-size: 12px; margin-bottom: 8px; color: rgba(0,0,0,0.75); }
-    .gs-item{
-      border:1px solid rgba(0,0,0,0.12);
-      border-radius:10px;
-      padding:8px 10px;
-      font-size: 12px;
-      cursor:pointer;
-      background:#fff;
-      margin: 6px 0;
-    }
-    .gs-item:hover{ border-color: rgba(0,0,0,0.25); }
-    .gs-empty{ color: rgba(0,0,0,0.50); font-size: 12px; }
+const $ = (id) => document.getElementById(id);
 
-    /* ===== 两列豆腐块 ===== */
-    .grid2{ display:grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-    @media (max-width: 820px){ .grid2{ grid-template-columns: 1fr; } }
+function normalizeQ(raw) {
+  let q = String(raw ?? '').trim();
+  if (q.toLowerCase().endsWith('.html')) q = q.slice(0, -5);
+  return q;
+}
 
-    /* ===== 产品 chips（蓝底）===== */
-    .chips{ display:flex; flex-wrap:wrap; gap:10px; }
-    .chip-blue{
-      display:inline-flex;
-      align-items:center;
-      padding: 8px 10px;
-      border-radius: 999px;
-      border: 1px solid rgba(40, 120, 255, 0.28);
-      background: rgba(40, 120, 255, 0.12);
-      color: rgba(20, 70, 160, 1);
-      font-size: 12px;
-      cursor:pointer;
-      user-select:none;
-    }
-    .chip-blue:hover{
-      border-color: rgba(40, 120, 255, 0.45);
-      background: rgba(40, 120, 255, 0.16);
-    }
+function getQFromPath() {
+  const parts = (location.pathname || '').split('/').filter(Boolean);
+  const idx = parts.indexOf('company');
+  if (idx < 0) return '';
+  const q = parts.slice(idx + 1).join('/');
+  try { return decodeURIComponent(q); } catch { return q; }
+}
 
-    /* ===== modal ===== */
-    .modal-overlay{
-      position:fixed; inset:0;
-      background: rgba(0,0,0,0.35);
-      display:none;
-      align-items:center;
-      justify-content:center;
-      z-index: 99999;
-      padding: 16px;
-    }
-    .modal{
-      width: min(520px, 100%);
-      background:#fff;
-      border:1px solid rgba(0,0,0,0.18);
-      border-radius: 14px;
-      padding: 14px;
-      box-sizing: border-box;
-    }
-    .modal-title{ font-weight: 900; font-size: 14px; margin: 0 0 10px; }
-    .modal-body{ font-size: 13px; color: rgba(0,0,0,0.75); line-height: 1.6; }
-    .modal-actions{ display:flex; justify-content:flex-end; margin-top: 12px; }
-    .modal-btn{
-      border:1px solid rgba(0,0,0,0.22);
-      background:#fff;
-      border-radius: 999px;
-      padding: 8px 12px;
-      font-size: 12px;
-      cursor:pointer;
-    }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <!-- 1) 标题：直接显示企业/机构名称 -->
-    <h1 id="pageTitle">—</h1>
+function showModal(title = '开发中', body = '开发中') {
+  $('modalTitle').textContent = title;
+  $('modalBody').textContent = body;
+  $('modalOverlay').style.display = 'flex';
+}
 
-    <!-- 2) 复用全局搜索框 -->
-    <div class="card">
-      <div class="label">全站搜索</div>
-      <div id="globalSearch"></div>
-    </div>
+function hideModal() {
+  $('modalOverlay').style.display = 'none';
+}
 
-    <!-- 3) 基础信息 + 4) 企业简介：同行两列 -->
-    <div class="grid2">
-      <div class="card">
-        <div class="label">基础信息</div>
-        <div id="baseInfo" class="kv empty">加载中…</div>
-      </div>
+function renderBaseInfo(org) {
+  const fullName = org?.organization_full_name || '';
+  const establish = org?.establish_year ?? '';
+  const ipo = org?.if_ipo === true ? '已上市' : '';
 
-      <div class="card">
-        <div class="label">企业简介</div>
-        <div id="orgDesc" class="kv empty">加载中…</div>
-      </div>
-    </div>
+  const lines = [];
+  lines.push(`企业全称：${fullName || '（无）'}`);
+  lines.push(`成立时间：${String(establish || '（无）')}`);
+  if (ipo) lines.push(`最近融资：${ipo}`);
 
-    <!-- 5) 专长领域（占位） -->
-    <div class="card">
-      <div class="label">专长领域（占位）</div>
-      <div class="empty">（后续：领域/产品反推、人工标注、画像等）</div>
-    </div>
+  return lines.join('\n');
+}
 
-    <!-- 6) 特色产品 -->
-    <div class="card">
-      <div class="label">特色产品</div>
-      <div class="hint">（recommendation_score ≥ 6）</div>
-      <div id="featuredProducts" class="chips"></div>
-      <div id="featuredEmpty" class="empty" style="display:none;">（无）</div>
-    </div>
+function renderTextOrEmpty(v) {
+  const t = String(v ?? '').trim();
+  return t ? t : '（无）';
+}
 
-    <!-- 7) 其他产品 -->
-    <div class="card">
-      <div class="label">其他产品</div>
-      <div id="otherProducts" class="chips"></div>
-      <div id="otherEmpty" class="empty" style="display:none;">（无）</div>
-    </div>
+function makeChip(label, onClick) {
+  const d = document.createElement('div');
+  d.className = 'chip-blue';
+  d.textContent = label;
+  d.tabIndex = 0;
+  d.role = 'button';
+  d.addEventListener('click', onClick);
+  d.addEventListener('keydown', (e) => { if (e.key === 'Enter') onClick(); });
+  return d;
+}
 
-    <!-- 8) 融资信息（占位） -->
-    <div class="card">
-      <div class="label">融资信息（占位）</div>
-      <div class="empty">（后续：融资数据源接入）</div>
-    </div>
+async function loadCompany(qRaw) {
+  const q = normalizeQ(qRaw);
+  if (!q) return;
 
-    <!-- 9) 荣誉与资质（占位） -->
-    <div class="card">
-      <div class="label">荣誉与资质（占位）</div>
-      <div class="empty">（后续：荣誉/资质数据源接入）</div>
-    </div>
+  // 纠正地址栏：如果用户输入了 .html
+  const qPath = getQFromPath();
+  const normalized = normalizeQ(qPath);
+  if (normalized && normalized !== qPath) {
+    history.replaceState(null, '', `/company/${encodeURIComponent(normalized)}`);
+  }
 
-    <!-- 10) 报告与书籍（占位） -->
-    <div class="card">
-      <div class="label">报告与书籍（占位）</div>
-      <div class="empty">（后续：报告索引、引用、下载等）</div>
-    </div>
+  const url = `/api/company/${encodeURIComponent(q)}`;
 
-    <!-- 11) 社会活动（占位） -->
-    <div class="card">
-      <div class="label">社会活动（占位）</div>
-      <div class="empty">（后续：新闻/事件、CSR 等）</div>
-    </div>
-  </div>
+  // loading 状态
+  $('pageTitle').textContent = '加载中…';
+  $('baseInfo').textContent = '加载中…';
+  $('baseInfo').classList.add('empty');
+  $('orgDesc').textContent = '加载中…';
+  $('orgDesc').classList.add('empty');
 
-  <!-- modal -->
-  <div id="modalOverlay" class="modal-overlay" role="dialog" aria-modal="true">
-    <div class="modal">
-      <div class="modal-title" id="modalTitle">开发中</div>
-      <div class="modal-body" id="modalBody">开发中</div>
-      <div class="modal-actions">
-        <button class="modal-btn" id="modalClose" type="button">关闭</button>
-      </div>
-    </div>
-  </div>
+  $('featuredProducts').innerHTML = '';
+  $('otherProducts').innerHTML = '';
+  $('featuredEmpty').style.display = 'none';
+  $('otherEmpty').style.display = 'none';
 
-  <script type="module" src="/src/company.js"></script>
-</body>
-</html>
+  let res, data;
+  try {
+    res = await fetch(url);
+    const txt = await res.text();
+    try { data = JSON.parse(txt); } catch { data = { raw: txt }; }
+  } catch (e) {
+    $('pageTitle').textContent = q;
+    $('baseInfo').textContent = `❌ 加载失败：网络错误\n${String(e?.message || e)}`;
+    return;
+  }
+
+  if (!res.ok) {
+    $('pageTitle').textContent = q;
+    $('baseInfo').textContent = `❌ 加载失败：HTTP ${res.status}\n${JSON.stringify(data, null, 2)}`;
+    return;
+  }
+
+  const org = data?.organization || null;
+  const list = Array.isArray(data?.products) ? data.products : [];
+
+  const title = org?.organization_short_name || org?.organization_full_name || q;
+  $('pageTitle').textContent = title;
+
+  $('baseInfo').textContent = renderBaseInfo(org);
+  $('baseInfo').classList.remove('empty');
+
+  $('orgDesc').textContent = renderTextOrEmpty(org?.organization_description);
+  $('orgDesc').classList.remove('empty');
+
+  // 产品分组：recommendation_score >= 6 视为“特色产品”
+  const featured = [];
+  const others = [];
+
+  for (const row of list) {
+    const score = row?.recommendation_score;
+    const p = row?.product || null;
+
+    const name = p?.security_product_name || `#${row?.security_product_id ?? 'unknown'}`;
+    const slug = p?.security_product_slug || '';
+
+    const label = score != null ? `${name}（${score}）` : name;
+    const click = () => {
+      // 这里按你的要求：先不跳产品页，点击弹窗“开发中”
+      // 后续如果你要改成跳 /securityproduct/{slug}，把这里替换成 location.href 即可
+      showModal('开发中', `「${name}」详情弹窗：开发中`);
+    };
+
+    const item = { label, click, score, slug, name };
+    if (typeof score === 'number' && score >= 6) featured.push(item);
+    else others.push(item);
+  }
+
+  if (!featured.length) {
+    $('featuredEmpty').style.display = 'block';
+  } else {
+    for (const it of featured) $('featuredProducts').appendChild(makeChip(it.label, it.click));
+  }
+
+  if (!others.length) {
+    $('otherEmpty').style.display = 'block';
+  } else {
+    for (const it of others) $('otherProducts').appendChild(makeChip(it.label, it.click));
+  }
+}
+
+function init() {
+  // 全站搜索挂载
+  mountGlobalSearch('globalSearch');
+
+  // modal
+  $('modalClose').addEventListener('click', hideModal);
+  $('modalOverlay').addEventListener('click', (e) => {
+    if (e.target === $('modalOverlay')) hideModal();
+  });
+
+  const q = normalizeQ(getQFromPath());
+  if (!q) {
+    $('pageTitle').textContent = '（请从 /company/企业slug 进入，或用上方全站搜索）';
+    $('baseInfo').textContent = '（无）';
+    $('baseInfo').classList.remove('empty');
+    $('orgDesc').textContent = '（无）';
+    $('orgDesc').classList.remove('empty');
+    $('featuredEmpty').style.display = 'block';
+    $('otherEmpty').style.display = 'block';
+    return;
+  }
+
+  loadCompany(q);
+}
+
+init();
