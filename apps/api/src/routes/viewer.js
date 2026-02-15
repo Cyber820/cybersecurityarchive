@@ -44,12 +44,72 @@ export async function viewerRoutes(app) {
     return reply.code(404).send({ error: 'company not found' });
   });
 
+  /**
+   * GET /api/product/:q
+   * - q: security_product_slug（优先）或 security_product_name（精确匹配兜底）
+   * - 返回：
+   *   - product 主记录字段
+   *   - aliases: string[]
+   *   - related_domains: {security_domain_id, security_domain_name, cybersecurity_domain_slug}[]
+   */
   app.get('/product/:q', async (req, reply) => {
     const qRaw = req.params?.q;
     const q = normalizeQ(qRaw);
 
     if (!q) return reply.code(400).send({ error: 'product query is empty' });
 
+    async function enrich(product) {
+      // aliases
+      const aliasRes = await supabase
+        .from('cybersecurity_product_alias')
+        .select('security_product_alias_name')
+        .eq('security_product_id', product.security_product_id);
+
+      if (aliasRes.error) return { error: aliasRes.error };
+
+      const aliases = (aliasRes.data || [])
+        .map((r) => r.security_product_alias_name)
+        .filter(Boolean);
+
+      // product -> domain ids via cybersecurity_product_domain
+      const relRes = await supabase
+        .from('cybersecurity_product_domain')
+        .select('security_domain_id')
+        .eq('security_product_id', product.security_product_id);
+
+      if (relRes.error) return { error: relRes.error };
+
+      const domainIds = (relRes.data || [])
+        .map((r) => r.security_domain_id)
+        .filter((v) => typeof v === 'number' || (typeof v === 'string' && v !== ''));
+
+      let related_domains = [];
+      if (domainIds.length) {
+        const domRes = await supabase
+          .from('cybersecurity_domain')
+          .select('security_domain_id, security_domain_name, cybersecurity_domain_slug, cybersecurity_domain_name')
+          .in('security_domain_id', domainIds);
+
+        if (domRes.error) return { error: domRes.error };
+
+        related_domains = (domRes.data || [])
+          .map((d) => ({
+            security_domain_id: d.security_domain_id,
+            security_domain_name: d.security_domain_name || d.cybersecurity_domain_name || '',
+            cybersecurity_domain_slug: d.cybersecurity_domain_slug || '',
+          }))
+          .sort((a, b) =>
+            String(a.security_domain_name || '').localeCompare(
+              String(b.security_domain_name || ''),
+              'zh-Hans-CN'
+            )
+          );
+      }
+
+      return { data: { ...product, aliases, related_domains } };
+    }
+
+    // 1) slug exact
     const bySlug = await supabase
       .from('cybersecurity_product')
       .select('*')
@@ -57,8 +117,13 @@ export async function viewerRoutes(app) {
       .maybeSingle();
 
     if (bySlug.error) return reply.code(500).send({ error: bySlug.error.message });
-    if (bySlug.data) return reply.send(bySlug.data);
+    if (bySlug.data) {
+      const out = await enrich(bySlug.data);
+      if (out.error) return reply.code(500).send({ error: out.error.message });
+      return reply.send(out.data);
+    }
 
+    // 2) name exact
     const byName = await supabase
       .from('cybersecurity_product')
       .select('*')
@@ -66,7 +131,11 @@ export async function viewerRoutes(app) {
       .maybeSingle();
 
     if (byName.error) return reply.code(500).send({ error: byName.error.message });
-    if (byName.data) return reply.send(byName.data);
+    if (byName.data) {
+      const out = await enrich(byName.data);
+      if (out.error) return reply.code(500).send({ error: out.error.message });
+      return reply.send(out.data);
+    }
 
     return reply.code(404).send({ error: 'product not found' });
   });
@@ -86,7 +155,6 @@ export async function viewerRoutes(app) {
     if (!q) return reply.code(400).send({ error: 'domain query is empty' });
 
     async function enrich(domain) {
-      // aliases
       const aliasRes = await supabase
         .from('cybersecurity_domain_alias')
         .select('security_domain_alias_name')
@@ -98,7 +166,6 @@ export async function viewerRoutes(app) {
         .map((r) => r.security_domain_alias_name)
         .filter(Boolean);
 
-      // ✅ 关联表：cybersecurity_product_domain（不是 cybersecurity_domain_product）
       const relRes = await supabase
         .from('cybersecurity_product_domain')
         .select('security_product_id')
@@ -132,7 +199,6 @@ export async function viewerRoutes(app) {
       return { data: { ...domain, aliases, related_products } };
     }
 
-    // 1) slug exact
     const bySlug = await supabase
       .from('cybersecurity_domain')
       .select('*')
@@ -146,7 +212,6 @@ export async function viewerRoutes(app) {
       return reply.send(out.data);
     }
 
-    // 2) name exact（兼容历史字段名）
     const byName = await supabase
       .from('cybersecurity_domain')
       .select('*')
