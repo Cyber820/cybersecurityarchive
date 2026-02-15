@@ -1,142 +1,114 @@
 // apps/web/src/securitydomain.js
-import { mountGlobalSearch } from './ui/globalSearch.js';
 
-const $ = (id) => document.getElementById(id);
+import { mountGlobalSearch } from './ui/global-search.js';
 
-function normalizeQ(raw) {
-  let q = String(raw ?? '').trim();
-  if (q.toLowerCase().endsWith('.html')) q = q.slice(0, -5);
-  return q;
-}
+injectBaseStyles();
+mountGlobalSearch(document.getElementById('globalSearch'));
 
-function getQFromPath() {
-  const parts = (location.pathname || '').split('/').filter(Boolean);
-  const idx = parts.indexOf('securitydomain');
-  if (idx < 0) return '';
-  const q = parts.slice(idx + 1).join('/');
-  try { return decodeURIComponent(q); } catch { return q; }
-}
-
-function setText(id, text) {
-  const el = $(id);
-  if (el) el.textContent = text;
-}
-
-function setKV(id, text) {
-  const el = $(id);
-  if (!el) return;
-  const v = String(text ?? '').trim();
-  if (!v) {
-    el.textContent = '（无）';
-    el.classList.add('empty');
-    return;
-  }
-  el.textContent = v;
-  el.classList.remove('empty');
-}
-
-function clearRelatedProducts() {
-  const box = $('relatedProducts');
-  if (box) box.innerHTML = '';
-  const empty = $('relatedProductsEmpty');
-  if (empty) empty.style.display = 'none';
-}
-
-function renderRelatedProducts(items) {
-  const box = $('relatedProducts');
-  const empty = $('relatedProductsEmpty');
-  if (!box || !empty) return;
-
-  box.innerHTML = '';
-  if (!Array.isArray(items) || items.length === 0) {
-    empty.style.display = 'block';
-    return;
-  }
-  empty.style.display = 'none';
-
-  for (const p of items) {
-    const name = p?.security_product_name || '（未命名产品）';
-    const slug = p?.security_product_slug || '';
-    const target = slug || name; // slug 优先，否则用 name（后端 /api/product 支持 name 精确匹配）
-    const url = `/securityproduct/${encodeURIComponent(target)}`;
-
-    const chip = document.createElement('div');
-    chip.className = 'chip';
-    chip.textContent = name;
-    chip.setAttribute('role', 'link');
-    chip.tabIndex = 0;
-    chip.addEventListener('click', () => { location.href = url; });
-    chip.addEventListener('keydown', (e) => { if (e.key === 'Enter') location.href = url; });
-
-    box.appendChild(chip);
-  }
-}
-
-async function loadDomain(qRaw) {
-  const q = normalizeQ(qRaw);
-  if (!q) {
-    setText('pageTitle', '网安领域：—');
-    setKV('domainAliases', '');
-    setKV('domainDesc', '');
-    setText('domainStatus', '请输入 /securitydomain/<slug 或领域名> 访问。');
-    clearRelatedProducts();
-    return;
-  }
-
-  setKV('domainAliases', '加载中…');
-  setKV('domainDesc', '加载中…');
-  setText('domainStatus', '');
-  clearRelatedProducts();
-
-  const url = `/api/domain/${encodeURIComponent(q)}`;
-
-  let res, text, data;
-  try {
-    res = await fetch(url);
-    text = await res.text();
-    try { data = JSON.parse(text); } catch { data = { raw: text }; }
-  } catch (e) {
-    setText('pageTitle', `网安领域：${q}`);
-    setKV('domainAliases', '');
-    setKV('domainDesc', '');
-    setText('domainStatus', `❌ 加载失败：网络错误：${String(e?.message || e)}`);
-    return;
-  }
-
-  if (!res.ok) {
-    setText('pageTitle', `网安领域：${q}`);
-    setKV('domainAliases', '');
-    setKV('domainDesc', '');
-    setText('domainStatus', `❌ 加载失败：HTTP ${res.status}（${data?.error || 'unknown'}）`);
-    return;
-  }
-
-  // 1) 标题：优先 domain_name（兼容两种字段名）
-  const domainName = data?.cybersecurity_domain_name || data?.security_domain_name || '（未命名领域）';
-  setText('pageTitle', `网安领域：${domainName}`);
-
-  // 4) aliases
-  const aliases = Array.isArray(data?.aliases) ? data.aliases : [];
-  setKV('domainAliases', aliases.length ? aliases.join('、') : '');
-
-  // 5) description（兼容两种字段名）
-  setKV('domainDesc', data?.security_domain_description || data?.cybersecurity_domain_description || '');
-
-  // 3) 关联安全产品
-  renderRelatedProducts(Array.isArray(data?.related_products) ? data.related_products : []);
-
-  // 如果用户输入了 .html，纠正地址栏
-  const qPath = getQFromPath();
-  const normalized = normalizeQ(qPath);
-  if (normalized && normalized !== qPath) {
-    history.replaceState(null, '', `/securitydomain/${encodeURIComponent(normalized)}`);
-  }
-}
-
-function init() {
-  mountGlobalSearch('globalSearch');
-  const q = normalizeQ(getQFromPath());
+const q = getPathTail('/securitydomain');
+if (!q) {
+  setText('#pageTitle', '网安领域');
+  setText('#aliases', '（缺少领域标识）');
+  setText('#description', '（缺少领域标识）');
+} else {
   loadDomain(q);
 }
 
-init();
+async function loadDomain(q) {
+  setText('#aliases', '（加载中）');
+  setText('#description', '（加载中）');
+  clearEl('#relatedProducts');
+
+  try {
+    const res = await fetch(`/api/domain/${encodeURIComponent(q)}`);
+    if (!res.ok) {
+      const t = await safeText(res);
+      throw new Error(`HTTP ${res.status}: ${t || res.statusText}`);
+    }
+    const data = await res.json();
+
+    const domain = data.domain || {};
+    const title = domain.security_domain_name || domain.cybersecurity_domain_slug || q;
+    setText('#pageTitle', `网安领域：${title}`);
+
+    // aliases
+    const aliases = Array.isArray(data.aliases) ? data.aliases : [];
+    setText('#aliases', aliases.length ? aliases.join('、') : '（无）');
+
+    // description
+    const desc = domain.security_domain_description || '';
+    setText('#description', desc.trim() ? desc : '（无）');
+
+    // related products chips
+    const products = Array.isArray(data.products) ? data.products : [];
+    if (!products.length) {
+      document.querySelector('#relatedProducts').innerHTML = '<div class="muted">（无）</div>';
+    } else {
+      for (const p of products) {
+        const name = p.security_product_name || p.security_product_slug || String(p.security_product_id || '');
+        const slug = p.security_product_slug;
+        const a = document.createElement('a');
+        a.className = 'chip chip-purple';
+        a.textContent = name;
+        a.href = slug ? `/securityproduct/${encodeURIComponent(slug)}` : '#';
+        document.querySelector('#relatedProducts').appendChild(a);
+      }
+    }
+  } catch (e) {
+    setText('#aliases', '（无）');
+    setText('#description', '（无）');
+    document.querySelector('#relatedProducts').innerHTML = '';
+    const err = document.createElement('div');
+    err.className = 'error';
+    err.textContent = `加载失败：${e?.message || e}`;
+    document.querySelector('main').insertAdjacentElement('afterbegin', err);
+  }
+}
+
+function getPathTail(prefix) {
+  const path = window.location.pathname || '';
+  const idx = path.indexOf(prefix);
+  if (idx === -1) return '';
+  const tail = path.slice(idx + prefix.length).replace(/^\/+/, '');
+  return decodeURIComponent(tail || '').trim();
+}
+
+function setText(sel, text) {
+  const el = document.querySelector(sel);
+  if (el) el.textContent = text;
+}
+
+function clearEl(sel) {
+  const el = document.querySelector(sel);
+  if (el) el.innerHTML = '';
+}
+
+async function safeText(res) {
+  try {
+    return await res.text();
+  } catch {
+    return '';
+  }
+}
+
+function injectBaseStyles() {
+  if (document.getElementById('baseStyles')) return;
+  const style = document.createElement('style');
+  style.id = 'baseStyles';
+  style.textContent = `
+    :root{--bg:#f6f7fb;--card:#fff;--border:#e6e8ef;--text:#111;--muted:#6b7280;--purple:#6d28d9;--purple2:#7c3aed;--blue:#2563eb;--blue2:#3b82f6;}
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background:var(--bg); color:var(--text);}
+    .page{max-width:980px;margin:32px auto;padding:0 16px 48px;}
+    .page-title{font-size:34px;letter-spacing:0.2px;margin:0 0 18px;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin:14px 0;}
+    .card-title{font-size:18px;margin:0 0 10px;}
+    .kv{line-height:1.7;white-space:pre-wrap;}
+    .muted{color:var(--muted);}
+    .chip-row{display:flex;flex-wrap:wrap;gap:10px;}
+    .chip{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;text-decoration:none;border:1px solid transparent;}
+    .chip-purple{background:rgba(124,58,237,0.12);border-color:rgba(124,58,237,0.22);color:#2a0a7a;}
+    .chip-purple:hover{background:rgba(124,58,237,0.18);}
+    .error{background:#fff5f5;border:1px solid #fecaca;color:#991b1b;border-radius:12px;padding:10px 12px;margin:0 0 14px;}
+  `;
+  document.head.appendChild(style);
+}
