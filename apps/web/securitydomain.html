@@ -1,127 +1,47 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Security Domain</title>
-  <style>
-    body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background:#f7f7f9; color:#111; }
-    .wrap{ max-width: 980px; margin: 22px auto; padding: 0 14px; }
-    h1{ font-size: 20px; margin: 0 0 14px; }
-    .card{ background:#fff; border:1px solid rgba(0,0,0,0.14); border-radius:14px; padding:14px; margin-top: 14px; }
-    .label{ font-weight:900; font-size: 13px; margin-bottom: 8px; }
-    .hint{ color: rgba(0,0,0,0.62); font-size: 12px; margin-top: 6px; }
-    .kv{ white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.6; }
-    .empty{ color: rgba(0,0,0,0.52); font-size: 13px; }
-    .status{ font-size: 12px; color: rgba(0,0,0,0.65); margin-top: 8px; }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>安全领域</title>
+  </head>
+  <body>
+    <main class="page">
+      <h1 id="pageTitle" class="page-title">网安领域</h1>
 
-    /* ===== global search basic styles ===== */
-    .gs-row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    .gs-input{
-      flex:1; min-width: 240px;
-      border:1px solid rgba(0,0,0,0.22);
-      border-radius:12px;
-      padding:10px 10px;
-      font-size:13px;
-      background:#fff;
-      color:#111;
-      box-sizing:border-box;
-    }
-    .gs-btn{
-      border:1px solid rgba(0,0,0,0.22);
-      background:#fff;
-      border-radius:999px;
-      padding:10px 14px;
-      font-size:13px;
-      cursor:pointer;
-    }
-    .gs-hint{ color: rgba(0,0,0,0.62); font-size: 12px; margin-top: 8px; }
-    .gs-list{ margin-top: 10px; display:grid; gap: 12px; }
-    .gs-group{ border:1px dashed rgba(0,0,0,0.18); border-radius:12px; padding:10px; }
-    .gs-group-title{ font-weight:900; font-size: 12px; margin-bottom: 8px; color: rgba(0,0,0,0.75); }
-    .gs-item{
-      border:1px solid rgba(0,0,0,0.12);
-      border-radius:10px;
-      padding:8px 10px;
-      font-size: 12px;
-      cursor:pointer;
-      background:#fff;
-      margin: 6px 0;
-    }
-    .gs-item:hover{ border-color: rgba(0,0,0,0.25); }
-    .gs-empty{ color: rgba(0,0,0,0.50); font-size: 12px; }
+      <section class="card" id="globalSearch"></section>
 
-    /* ===== product chips ===== */
-    .chips{ display:flex; flex-wrap:wrap; gap:10px; }
-    .chip{
-      display:inline-flex;
-      align-items:center;
-      padding: 8px 10px;
-      border-radius: 999px;
-      border: 1px solid rgba(80, 70, 255, 0.25);
-      background: rgba(80, 70, 255, 0.10);
-      color: rgba(40, 35, 160, 1);
-      font-size: 12px;
-      cursor:pointer;
-      user-select:none;
-    }
-    .chip:hover{
-      border-color: rgba(80, 70, 255, 0.45);
-      background: rgba(80, 70, 255, 0.14);
-    }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <!-- 1) 页面内标题：显示领域名，不加引号 -->
-    <h1 id="pageTitle">网安领域：—</h1>
+      <section class="card">
+        <h2 class="card-title">别称</h2>
+        <div id="aliases" class="kv">（加载中）</div>
+      </section>
 
-    <!-- 3) 全站搜索（通用组件） -->
-    <div class="card">
-      <div class="label">全站搜索</div>
-      <div id="globalSearch"></div>
-    </div>
+      <section class="card">
+        <h2 class="card-title">介绍</h2>
+        <div id="description" class="kv">（加载中）</div>
+      </section>
 
-    <!-- 4) 别称 -->
-    <div class="card">
-      <div class="label">别称：</div>
-      <div id="domainAliases" class="kv empty">加载中…</div>
-    </div>
+      <section class="card">
+        <h2 class="card-title">关联安全产品</h2>
+        <div id="relatedProducts" class="chip-row"></div>
+      </section>
 
-    <!-- 5) 介绍 -->
-    <div class="card">
-      <div class="label">介绍：</div>
-      <div id="domainDesc" class="kv empty">加载中…</div>
-      <div id="domainStatus" class="status"></div>
-    </div>
+      <section class="card">
+        <h2 class="card-title">推荐企业（占位）</h2>
+        <div class="muted">（后续：从 organization_product / 产品热度 / 关联产品等生成推荐）</div>
+      </section>
 
-    <!-- 3) 新增：关联安全产品 -->
-    <div class="card">
-      <div class="label">关联安全产品</div>
-      <div class="hint">&nbsp;</div>
-      <div id="relatedProducts" class="chips"></div>
-      <div id="relatedProductsEmpty" class="empty" style="display:none;">（无）</div>
-    </div>
+      <section class="card">
+        <h2 class="card-title">相关荣誉和资质（占位）</h2>
+        <div class="muted">（后续：荣誉/资质数据源接入）</div>
+      </section>
 
-    <!-- 6) 推荐企业（占位） -->
-    <div class="card">
-      <div class="label">推荐企业（占位）</div>
-      <div class="empty">（后续：根据领域与企业产品/产品领域关系生成推荐列表）</div>
-    </div>
+      <section class="card">
+        <h2 class="card-title">相关报告（占位）</h2>
+        <div class="muted">（后续：报告索引、引用、下载等）</div>
+      </section>
+    </main>
 
-    <!-- 7) 相关荣誉和资质（占位） -->
-    <div class="card">
-      <div class="label">相关荣誉和资质（占位）</div>
-      <div class="empty">（后续：从荣誉/资质表或外部来源聚合）</div>
-    </div>
-
-    <!-- 8) 相关报告（占位） -->
-    <div class="card">
-      <div class="label">相关报告（占位）</div>
-      <div class="empty">（后续：报告索引、引用、下载等）</div>
-    </div>
-  </div>
-
-  <script type="module" src="/src/securitydomain.js"></script>
-</body>
+    <script type="module" src="/src/securitydomain.js"></script>
+  </body>
 </html>
