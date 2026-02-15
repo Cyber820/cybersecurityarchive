@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Security Product</title>
+  <style>
+    body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background:#f7f7f9; color:#111; }
+    .wrap{ max-width: 980px; margin: 22px auto; padding: 0 14px; }
+    h1{ font-size: 20px; margin: 0 0 14px; }
+    .card{ background:#fff; border:1px solid rgba(0,0,0,0.14); border-radius:14px; padding:14px; margin-top: 14px; }
+    .label{ font-weight:800; font-size: 13px; margin-bottom: 6px; }
+    .hint{ color: rgba(0,0,0,0.62); font-size: 12px; margin-top: 6px; }
+    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    input{
+      flex: 1;
+      min-width: 220px;
+      border:1px solid rgba(0,0,0,0.22);
+      border-radius:12px;
+      padding:10px 10px;
+      font-size:13px;
+      background:#fff;
+      color:#111;
+    }
+    button{
+      border:1px solid rgba(0,0,0,0.22);
+      background:#fff;
+      border-radius: 999px;
+      padding:10px 14px;
+      font-size:13px;
+      cursor:pointer;
+    }
+    pre{
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 12px;
+      border: 1px dashed rgba(0,0,0,0.22);
+      border-radius: 12px;
+      padding: 10px;
+      background: rgba(0,0,0,0.02);
+      margin: 0;
+    }
+    code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>安全产品（Security Product）</h1>
+
+    <div class="card">
+      <div class="label">当前访问参数 q（来自路径 /securityproduct/q）</div>
+      <div class="hint"><code id="q"></code></div>
+      <div class="hint">API：<code id="apiUrl"></code></div>
+      <div class="hint">状态：<span id="status"></span></div>
+    </div>
+
+    <div class="card">
+      <div class="label">手动输入（可用产品名或 slug）</div>
+      <div class="row">
+        <input id="inputQ" placeholder="例如：产品名 或 product-slug" />
+        <button id="btnGo" type="button">打开</button>
+      </div>
+      <div class="hint">提示：如果 slug 是英文但你希望用户输入中文名，也可以直接输入中文名（按 name 精确匹配）。</div>
+    </div>
+
+    <div class="card">
+      <div class="label">cybersecurity_product 表记录（JSON）</div>
+      <pre id="output"></pre>
+    </div>
+  </div>
+
+  <script type="module" src="/src/securityproduct.js"></script>
+</body>
+</html>
