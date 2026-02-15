@@ -9,63 +9,118 @@
     .wrap{ max-width: 980px; margin: 22px auto; padding: 0 14px; }
     h1{ font-size: 20px; margin: 0 0 14px; }
     .card{ background:#fff; border:1px solid rgba(0,0,0,0.14); border-radius:14px; padding:14px; margin-top: 14px; }
-    .label{ font-weight:800; font-size: 13px; margin-bottom: 6px; }
+    .label{ font-weight:900; font-size: 13px; margin-bottom: 8px; }
     .hint{ color: rgba(0,0,0,0.62); font-size: 12px; margin-top: 6px; }
-    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    input{
-      flex: 1;
-      min-width: 220px;
+    .kv{ white-space: pre-wrap; word-break: break-word; font-size: 13px; line-height: 1.6; }
+    .empty{ color: rgba(0,0,0,0.52); font-size: 13px; }
+    .status{ font-size: 12px; color: rgba(0,0,0,0.65); margin-top: 8px; }
+
+    /* ===== global search basic styles ===== */
+    .gs-row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .gs-input{
+      flex:1; min-width: 240px;
       border:1px solid rgba(0,0,0,0.22);
       border-radius:12px;
       padding:10px 10px;
       font-size:13px;
       background:#fff;
       color:#111;
+      box-sizing:border-box;
     }
-    button{
+    .gs-btn{
       border:1px solid rgba(0,0,0,0.22);
       background:#fff;
-      border-radius: 999px;
+      border-radius:999px;
       padding:10px 14px;
       font-size:13px;
       cursor:pointer;
     }
-    pre{
-      white-space: pre-wrap;
-      word-break: break-word;
+    .gs-hint{ color: rgba(0,0,0,0.62); font-size: 12px; margin-top: 8px; }
+    .gs-list{ margin-top: 10px; display:grid; gap: 12px; }
+    .gs-group{ border:1px dashed rgba(0,0,0,0.18); border-radius:12px; padding:10px; }
+    .gs-group-title{ font-weight:900; font-size: 12px; margin-bottom: 8px; color: rgba(0,0,0,0.75); }
+    .gs-item{
+      border:1px solid rgba(0,0,0,0.12);
+      border-radius:10px;
+      padding:8px 10px;
       font-size: 12px;
-      border: 1px dashed rgba(0,0,0,0.22);
-      border-radius: 12px;
-      padding: 10px;
-      background: rgba(0,0,0,0.02);
-      margin: 0;
+      cursor:pointer;
+      background:#fff;
+      margin: 6px 0;
     }
-    code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .gs-item:hover{ border-color: rgba(0,0,0,0.25); }
+    .gs-empty{ color: rgba(0,0,0,0.50); font-size: 12px; }
+
+    /* ===== chips ===== */
+    .chips{ display:flex; flex-wrap:wrap; gap:10px; }
+    .chip{
+      display:inline-flex;
+      align-items:center;
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(80, 70, 255, 0.25);
+      background: rgba(80, 70, 255, 0.10);
+      color: rgba(40, 35, 160, 1);
+      font-size: 12px;
+      cursor:pointer;
+      user-select:none;
+    }
+    .chip:hover{
+      border-color: rgba(80, 70, 255, 0.45);
+      background: rgba(80, 70, 255, 0.14);
+    }
+
+    /* ===== 3/4 两列豆腐块 ===== */
+    .grid2{ display:grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    @media (max-width: 820px){ .grid2{ grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>安全产品（Security Product）</h1>
+    <h1 id="pageTitle">安全产品：—</h1>
 
+    <!-- 2) 全站搜索（复用组件） -->
     <div class="card">
-      <div class="label">当前访问参数 q（来自路径 /securityproduct/q）</div>
-      <div class="hint"><code id="q"></code></div>
-      <div class="hint">API：<code id="apiUrl"></code></div>
-      <div class="hint">状态：<span id="status"></span></div>
+      <div class="label">全站搜索</div>
+      <div id="globalSearch"></div>
     </div>
 
-    <div class="card">
-      <div class="label">手动输入（可用产品名或 slug）</div>
-      <div class="row">
-        <input id="inputQ" placeholder="例如：产品名 或 product-slug" />
-        <button id="btnGo" type="button">打开</button>
+    <!-- 3) 别称 + 4) 关联领域：同行两列 -->
+    <div class="grid2">
+      <div class="card">
+        <div class="label">别称：</div>
+        <div id="productAliases" class="kv empty">加载中…</div>
       </div>
-      <div class="hint">提示：如果 slug 是英文但你希望用户输入中文名，也可以直接输入中文名（按 name 精确匹配）。</div>
+
+      <div class="card">
+        <div class="label">关联领域</div>
+        <div class="hint">&nbsp;</div>
+        <div id="relatedDomains" class="chips"></div>
+        <div id="relatedDomainsEmpty" class="empty" style="display:none;">（无）</div>
+      </div>
     </div>
 
     <div class="card">
-      <div class="label">cybersecurity_product 表记录（JSON）</div>
-      <pre id="output"></pre>
+      <div class="label">状态</div>
+      <div id="productStatus" class="status"></div>
+    </div>
+
+    <!-- 5) 推荐企业（占位） -->
+    <div class="card">
+      <div class="label">推荐企业（占位）</div>
+      <div class="empty">（后续：从 organization_product / 产品热度 / 关联领域等生成推荐）</div>
+    </div>
+
+    <!-- 6) 相关荣誉与资质（占位） -->
+    <div class="card">
+      <div class="label">相关荣誉与资质（占位）</div>
+      <div class="empty">（后续：荣誉/资质数据源接入）</div>
+    </div>
+
+    <!-- 7) 相关报告（占位） -->
+    <div class="card">
+      <div class="label">相关报告（占位）</div>
+      <div class="empty">（后续：报告索引、引用、下载等）</div>
     </div>
   </div>
 
