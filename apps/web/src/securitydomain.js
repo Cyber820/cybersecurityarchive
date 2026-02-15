@@ -1,4 +1,6 @@
 // apps/web/src/securitydomain.js
+import { mountGlobalSearch } from './ui/globalSearch.js';
+
 const $ = (id) => document.getElementById(id);
 
 function normalizeQ(raw) {
@@ -15,34 +17,76 @@ function getQFromPath() {
   try { return decodeURIComponent(q); } catch { return q; }
 }
 
+function setText(id, text) {
+  const el = $(id);
+  if (el) el.textContent = text;
+}
+
+function setKV(id, text) {
+  const el = $(id);
+  if (!el) return;
+  const v = String(text ?? '').trim();
+  if (!v) {
+    el.textContent = '（无）';
+    el.classList.add('empty');
+    return;
+  }
+  el.textContent = v;
+  el.classList.remove('empty');
+}
+
 async function loadDomain(qRaw) {
   const q = normalizeQ(qRaw);
-  const url = `/api/domain/${encodeURIComponent(q)}`;
-
-  const qEl = $('q');
-  const apiEl = $('apiUrl');
-  const statusEl = $('status');
-  const outEl = $('output');
-
-  if (qEl) qEl.textContent = q || '(空)';
-  if (apiEl) apiEl.textContent = url;
-
-  if (statusEl) statusEl.textContent = '加载中…';
-  if (outEl) outEl.textContent = '';
-
-  const res = await fetch(url);
-  const text = await res.text();
-  let data;
-  try { data = JSON.parse(text); } catch { data = { raw: text }; }
-
-  if (!res.ok) {
-    if (statusEl) statusEl.textContent = `❌ 失败：HTTP ${res.status}`;
-    if (outEl) outEl.textContent = JSON.stringify(data, null, 2);
+  if (!q) {
+    setText('pageTitle', `网安领域：'—'`);
+    setKV('domainAliases', '');
+    setKV('domainDesc', '');
+    setText('domainStatus', '请输入 /securitydomain/<slug 或领域名> 访问。');
     return;
   }
 
-  if (statusEl) statusEl.textContent = '✅ 成功';
-  if (outEl) outEl.textContent = JSON.stringify(data, null, 2);
+  setKV('domainAliases', '加载中…');
+  setKV('domainDesc', '加载中…');
+  setText('domainStatus', '');
+
+  const url = `/api/domain/${encodeURIComponent(q)}`;
+
+  let res, text, data;
+  try {
+    res = await fetch(url);
+    text = await res.text();
+    try { data = JSON.parse(text); } catch { data = { raw: text }; }
+  } catch (e) {
+    setText('pageTitle', `网安领域：'${q}'`);
+    setKV('domainAliases', '');
+    setKV('domainDesc', '');
+    setText('domainStatus', `❌ 加载失败：网络错误：${String(e?.message || e)}`);
+    return;
+  }
+
+  if (!res.ok) {
+    setText('pageTitle', `网安领域：'${q}'`);
+    setKV('domainAliases', '');
+    setKV('domainDesc', '');
+    setText('domainStatus', `❌ 加载失败：HTTP ${res.status}（${data?.error || 'unknown'}）`);
+    return;
+  }
+
+  // 优先使用返回的 slug / name
+  const slug = data?.cybersecurity_domain_slug || q;
+  const name = data?.security_domain_name || '（未命名领域）';
+
+  setText('pageTitle', `网安领域：'${slug}'`);
+  setText('domainNameA', `（${name}）`);
+  setText('domainNameB', `（${name}）`);
+
+  // 4) aliases
+  const aliases = Array.isArray(data?.aliases) ? data.aliases : [];
+  const aliasText = aliases.length ? aliases.join('、') : '（无）';
+  setKV('domainAliases', aliasText);
+
+  // 5) description
+  setKV('domainDesc', data?.security_domain_description || '');
 
   // 如果用户输入了 .html，纠正地址栏
   const qPath = getQFromPath();
@@ -53,34 +97,10 @@ async function loadDomain(qRaw) {
 }
 
 function init() {
-  const qPath = getQFromPath();
-  const q = normalizeQ(qPath);
+  // 3) 全站搜索组件（每个页面都复用）
+  mountGlobalSearch('globalSearch');
 
-  const btn = $('btnGo');
-  const input = $('inputQ');
-
-  if (btn) {
-    btn.addEventListener('click', async () => {
-      const vRaw = (input?.value || '').trim();
-      if (!vRaw) return alert('请输入安全领域名或 slug');
-      const v = normalizeQ(vRaw);
-      history.replaceState(null, '', `/securitydomain/${encodeURIComponent(v)}`);
-      await loadDomain(v);
-    });
-  }
-
-  if (input) {
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') btn?.click();
-    });
-  }
-
-  if (!q) {
-    const statusEl = $('status');
-    if (statusEl) statusEl.textContent = '请输入 /securitydomain/xxx 或在下方输入框输入安全领域名/slug。';
-    return;
-  }
-
+  const q = normalizeQ(getQFromPath());
   loadDomain(q);
 }
 
