@@ -35,11 +35,15 @@ if (hasStatic) {
   // root
   app.get('/', (req, reply) => reply.sendFile('index.html'));
 
-  // /securitydomain/* always lands on securitydomain.html
+  // /securitydomain/* -> securitydomain.html
   app.get('/securitydomain', (req, reply) => reply.sendFile('securitydomain.html'));
   app.get('/securitydomain/*', (req, reply) => reply.sendFile('securitydomain.html'));
 
-  // /admin lands on admin.html
+  // ✅ 新增：/securityproduct/* -> securityproduct.html
+  app.get('/securityproduct', (req, reply) => reply.sendFile('securityproduct.html'));
+  app.get('/securityproduct/*', (req, reply) => reply.sendFile('securityproduct.html'));
+
+  // /admin -> admin.html
   app.get('/admin', (req, reply) => reply.sendFile('admin.html'));
   app.get('/admin/*', (req, reply) => reply.sendFile('admin.html'));
 } else {
@@ -74,7 +78,6 @@ app.setNotFoundHandler((req, reply) => {
   }
 
   if (hasStatic) {
-    // fallback to viewer.html
     reply.sendFile('viewer.html');
   } else {
     reply.code(404).send({
