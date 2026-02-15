@@ -2,6 +2,7 @@
 import Fastify from 'fastify';
 import path from 'node:path';
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import fastifyStatic from '@fastify/static';
 import fastifyCors from '@fastify/cors';
@@ -15,21 +16,16 @@ const app = Fastify({ logger: true });
 await app.register(fastifyCors, { origin: true });
 
 // ===== Static hosting (Vite build output) =====
-// Docker/railway 常见 cwd 是仓库根目录 /app
-const webDistPrimary = path.resolve(process.cwd(), 'apps/web/dist');
-// 兼容：如果未来以 apps/api 为 cwd 启动
-const webDistFallback = path.resolve(process.cwd(), '../../apps/web/dist');
+// server.js is at: apps/api/src/server.js
+// so __dirname = .../apps/api/src
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const hasPrimary = fs.existsSync(webDistPrimary);
-const hasFallback = fs.existsSync(webDistFallback);
+// => .../apps/web/dist
+const webDist = path.resolve(__dirname, '../../web/dist');
+const hasStatic = fs.existsSync(webDist);
 
-const webDist = hasPrimary ? webDistPrimary : webDistFallback;
-const hasStatic = hasPrimary || hasFallback;
-
-app.log.info(
-  { cwd: process.cwd(), webDistPrimary, hasPrimary, webDistFallback, hasFallback, webDist, hasStatic },
-  'Static dist check'
-);
+app.log.info({ webDist, hasStatic, cwd: process.cwd() }, 'Static dist check');
 
 if (hasStatic) {
   await app.register(fastifyStatic, {
@@ -40,25 +36,28 @@ if (hasStatic) {
   // root
   app.get('/', (req, reply) => reply.sendFile('index.html'));
 
-  // /securitydomain/*
+  // ✅ /securitydomain/* 落地到 securitydomain.html
   app.get('/securitydomain', (req, reply) => reply.sendFile('securitydomain.html'));
   app.get('/securitydomain/*', (req, reply) => reply.sendFile('securitydomain.html'));
 
-  // /securityproduct/*
+  // ✅ /securityproduct/* 落地到 securityproduct.html
   app.get('/securityproduct', (req, reply) => reply.sendFile('securityproduct.html'));
   app.get('/securityproduct/*', (req, reply) => reply.sendFile('securityproduct.html'));
 
-  // ✅ 新增：/company/*
+  // ✅ /company/* 落地到 company.html
   app.get('/company', (req, reply) => reply.sendFile('company.html'));
   app.get('/company/*', (req, reply) => reply.sendFile('company.html'));
+
+  // ✅ admin 访问落地（建议加，避免用户必须记 /admin.html）
+  app.get('/admin', (req, reply) => reply.sendFile('admin.html'));
+  app.get('/admin/*', (req, reply) => reply.sendFile('admin.html'));
 } else {
+  // Static missing: still expose / for diagnosis
   app.get('/', async () => ({
     ok: true,
-    hint:
-      'Static dist missing. Ensure build generates apps/web/dist (e.g. Dockerfile runs `npm run build` and Vite outputs to apps/web/dist).',
+    hint: 'Static dist missing. Ensure build outputs to apps/web/dist.',
+    webDist,
     cwd: process.cwd(),
-    webDistPrimary,
-    webDistFallback,
   }));
 }
 
@@ -70,13 +69,9 @@ app.get('/api/health', async () => ({ ok: true }));
 
 app.get('/api/_debug/static', async () => ({
   cwd: process.cwd(),
-  webDistPrimary,
-  hasPrimary,
-  webDistFallback,
-  hasFallback,
-  webDistSelected: webDist,
+  webDist,
   hasStatic,
-  files: hasStatic ? fs.readdirSync(webDist).slice(0, 50) : [],
+  files: hasStatic ? fs.readdirSync(webDist).slice(0, 80) : [],
 }));
 
 // ===== Not Found =====
@@ -89,14 +84,18 @@ app.setNotFoundHandler((req, reply) => {
   }
 
   if (hasStatic) {
-    reply.sendFile('viewer.html');
+    // SPA-like fallback for deep links
+    if (url.startsWith('/securitydomain')) return reply.sendFile('securitydomain.html');
+    if (url.startsWith('/securityproduct')) return reply.sendFile('securityproduct.html');
+    if (url.startsWith('/company')) return reply.sendFile('company.html');
+    if (url.startsWith('/admin')) return reply.sendFile('admin.html');
+    return reply.sendFile('viewer.html');
   } else {
     reply.code(404).send({
       error: 'Not Found',
       hint: 'Static dist missing, cannot serve pages. Check build output.',
+      webDist,
       cwd: process.cwd(),
-      webDistPrimary,
-      webDistFallback,
     });
   }
 });
