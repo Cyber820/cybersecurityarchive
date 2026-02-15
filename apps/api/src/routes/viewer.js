@@ -73,7 +73,7 @@ export async function viewerRoutes(app) {
 
   /**
    * GET /api/domain/:q
-   * - q: slug（优先）或 name（精确匹配兜底）
+   * - q: cybersecurity_domain_slug（优先）或 security_domain_name（精确匹配兜底）
    * - 返回：
    *   - domain 主记录字段
    *   - aliases: string[]
@@ -98,9 +98,9 @@ export async function viewerRoutes(app) {
         .map((r) => r.security_domain_alias_name)
         .filter(Boolean);
 
-      // domain -> product ids
+      // ✅ 关联表：cybersecurity_product_domain（不是 cybersecurity_domain_product）
       const relRes = await supabase
-        .from('cybersecurity_domain_product')
+        .from('cybersecurity_product_domain')
         .select('security_product_id')
         .eq('security_domain_id', domain.security_domain_id);
 
@@ -119,10 +119,14 @@ export async function viewerRoutes(app) {
 
         if (prodRes.error) return { error: prodRes.error };
 
-        // 保持稳定排序：按名称
         related_products = (prodRes.data || [])
           .slice()
-          .sort((a, b) => String(a.security_product_name || '').localeCompare(String(b.security_product_name || ''), 'zh-Hans-CN'));
+          .sort((a, b) =>
+            String(a.security_product_name || '').localeCompare(
+              String(b.security_product_name || ''),
+              'zh-Hans-CN'
+            )
+          );
       }
 
       return { data: { ...domain, aliases, related_products } };
@@ -142,11 +146,11 @@ export async function viewerRoutes(app) {
       return reply.send(out.data);
     }
 
-    // 2) name exact（兼容两种字段名）
+    // 2) name exact（兼容历史字段名）
     const byName = await supabase
       .from('cybersecurity_domain')
       .select('*')
-      .or(`cybersecurity_domain_name.eq.${q},security_domain_name.eq.${q}`)
+      .or(`security_domain_name.eq.${q},cybersecurity_domain_name.eq.${q}`)
       .maybeSingle();
 
     if (byName.error) return reply.code(500).send({ error: byName.error.message });
@@ -159,6 +163,7 @@ export async function viewerRoutes(app) {
     return reply.code(404).send({ error: 'domain not found' });
   });
 
+  // 全局搜索：organizations/products/domains by name or slug
   app.get('/search', async (req, reply) => {
     const q = String(req.query?.q || '').trim();
     if (!q) return reply.send({ q, companies: [], products: [], domains: [] });
@@ -176,8 +181,8 @@ export async function viewerRoutes(app) {
         .limit(30),
       supabase
         .from('cybersecurity_domain')
-        .select('security_domain_id, cybersecurity_domain_name, security_domain_name, cybersecurity_domain_slug')
-        .or(`cybersecurity_domain_name.ilike.%${q}%,security_domain_name.ilike.%${q}%,cybersecurity_domain_slug.ilike.%${q}%`)
+        .select('security_domain_id, security_domain_name, cybersecurity_domain_name, cybersecurity_domain_slug')
+        .or(`security_domain_name.ilike.%${q}%,cybersecurity_domain_name.ilike.%${q}%,cybersecurity_domain_slug.ilike.%${q}%`)
         .limit(30),
     ]);
 
