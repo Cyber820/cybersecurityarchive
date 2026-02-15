@@ -19,7 +19,6 @@ export async function viewerRoutes(app) {
     const q = normalizeQ(qRaw);
     if (!q) return reply.code(400).send({ error: 'company query is empty' });
 
-    // 1) slug exact
     const bySlug = await supabase
       .from('organization')
       .select('*')
@@ -29,7 +28,6 @@ export async function viewerRoutes(app) {
     if (bySlug.error) return reply.code(500).send({ error: bySlug.error.message });
     if (bySlug.data) return reply.send(bySlug.data);
 
-    // 2) short name exact
     const byShort = await supabase
       .from('organization')
       .select('*')
@@ -39,7 +37,6 @@ export async function viewerRoutes(app) {
     if (byShort.error) return reply.code(500).send({ error: byShort.error.message });
     if (byShort.data) return reply.send(byShort.data);
 
-    // 3) full name exact
     const byFull = await supabase
       .from('organization')
       .select('*')
@@ -63,7 +60,6 @@ export async function viewerRoutes(app) {
 
     if (!q) return reply.code(400).send({ error: 'product query is empty' });
 
-    // 1) slug exact
     const bySlug = await supabase
       .from('cybersecurity_product')
       .select('*')
@@ -73,7 +69,6 @@ export async function viewerRoutes(app) {
     if (bySlug.error) return reply.code(500).send({ error: bySlug.error.message });
     if (bySlug.data) return reply.send(bySlug.data);
 
-    // 2) name exact
     const byName = await supabase
       .from('cybersecurity_product')
       .select('*')
@@ -90,6 +85,7 @@ export async function viewerRoutes(app) {
    * GET /api/domain/:q
    * - q 可以是 cybersecurity_domain_slug（优先）
    * - 也可以是 security_domain_name（精确匹配兜底）
+   * - 返回中附带 aliases: string[]
    */
   app.get('/domain/:q', async (req, reply) => {
     const qRaw = req.params?.q;
@@ -97,7 +93,7 @@ export async function viewerRoutes(app) {
 
     if (!q) return reply.code(400).send({ error: 'domain query is empty' });
 
-    // 1) try slug exact match
+    // 1) slug exact
     const bySlug = await supabase
       .from('cybersecurity_domain')
       .select('*')
@@ -105,9 +101,20 @@ export async function viewerRoutes(app) {
       .maybeSingle();
 
     if (bySlug.error) return reply.code(500).send({ error: bySlug.error.message });
-    if (bySlug.data) return reply.send(bySlug.data);
+    if (bySlug.data) {
+      const domain = bySlug.data;
+      const aliasRes = await supabase
+        .from('cybersecurity_domain_alias')
+        .select('security_domain_alias_name')
+        .eq('security_domain_id', domain.security_domain_id);
 
-    // 2) try name exact match
+      if (aliasRes.error) return reply.code(500).send({ error: aliasRes.error.message });
+      const aliases = (aliasRes.data || []).map((r) => r.security_domain_alias_name).filter(Boolean);
+
+      return reply.send({ ...domain, aliases });
+    }
+
+    // 2) name exact
     const byName = await supabase
       .from('cybersecurity_domain')
       .select('*')
@@ -115,12 +122,23 @@ export async function viewerRoutes(app) {
       .maybeSingle();
 
     if (byName.error) return reply.code(500).send({ error: byName.error.message });
-    if (byName.data) return reply.send(byName.data);
+    if (byName.data) {
+      const domain = byName.data;
+      const aliasRes = await supabase
+        .from('cybersecurity_domain_alias')
+        .select('security_domain_alias_name')
+        .eq('security_domain_id', domain.security_domain_id);
+
+      if (aliasRes.error) return reply.code(500).send({ error: aliasRes.error.message });
+      const aliases = (aliasRes.data || []).map((r) => r.security_domain_alias_name).filter(Boolean);
+
+      return reply.send({ ...domain, aliases });
+    }
 
     return reply.code(404).send({ error: 'domain not found' });
   });
 
-  // Minimal search: query organizations/products/domains by name or slug
+  // 全局搜索：organizations/products/domains by name or slug
   app.get('/search', async (req, reply) => {
     const q = String(req.query?.q || '').trim();
     if (!q) return reply.send({ q, companies: [], products: [], domains: [] });
