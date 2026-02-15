@@ -1,6 +1,13 @@
 // apps/api/src/routes/viewer.js
 import { supabase } from '../supabase.js';
 
+function normalizeQ(raw) {
+  let q = String(raw ?? '').trim();
+  if (!q) return q;
+  if (q.toLowerCase().endsWith('.html')) q = q.slice(0, -5);
+  return q;
+}
+
 export async function viewerRoutes(app) {
   app.get('/company/:slug', async (req, reply) => {
     const { slug } = req.params;
@@ -16,18 +23,38 @@ export async function viewerRoutes(app) {
     return reply.send(data);
   });
 
-  app.get('/product/:slug', async (req, reply) => {
-    const { slug } = req.params;
+  /**
+   * GET /api/product/:q
+   * - q 可以是 security_product_slug（优先）
+   * - 也可以是 security_product_name（精确匹配兜底）
+   */
+  app.get('/product/:q', async (req, reply) => {
+    const qRaw = req.params?.q;
+    const q = normalizeQ(qRaw);
 
-    const { data, error } = await supabase
+    if (!q) return reply.code(400).send({ error: 'product query is empty' });
+
+    // 1) slug exact
+    const bySlug = await supabase
       .from('cybersecurity_product')
       .select('*')
-      .eq('security_product_slug', slug)
+      .eq('security_product_slug', q)
       .maybeSingle();
 
-    if (error) return reply.code(500).send({ error: error.message });
-    if (!data) return reply.code(404).send({ error: 'product not found' });
-    return reply.send(data);
+    if (bySlug.error) return reply.code(500).send({ error: bySlug.error.message });
+    if (bySlug.data) return reply.send(bySlug.data);
+
+    // 2) name exact
+    const byName = await supabase
+      .from('cybersecurity_product')
+      .select('*')
+      .eq('security_product_name', q)
+      .maybeSingle();
+
+    if (byName.error) return reply.code(500).send({ error: byName.error.message });
+    if (byName.data) return reply.send(byName.data);
+
+    return reply.code(404).send({ error: 'product not found' });
   });
 
   /**
@@ -37,7 +64,7 @@ export async function viewerRoutes(app) {
    */
   app.get('/domain/:q', async (req, reply) => {
     const qRaw = req.params?.q;
-    const q = String(qRaw ?? '').trim();
+    const q = normalizeQ(qRaw);
 
     if (!q) return reply.code(400).send({ error: 'domain query is empty' });
 
