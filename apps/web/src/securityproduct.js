@@ -1,4 +1,6 @@
 // apps/web/src/securityproduct.js
+import { mountGlobalSearch } from './ui/globalSearch.js';
+
 const $ = (id) => document.getElementById(id);
 
 function normalizeQ(raw) {
@@ -15,30 +17,110 @@ function getQFromPath() {
   try { return decodeURIComponent(q); } catch { return q; }
 }
 
+function setText(id, text) {
+  const el = $(id);
+  if (el) el.textContent = text;
+}
+
+function setKV(id, text) {
+  const el = $(id);
+  if (!el) return;
+  const v = String(text ?? '').trim();
+  if (!v) {
+    el.textContent = '（无）';
+    el.classList.add('empty');
+    return;
+  }
+  el.textContent = v;
+  el.classList.remove('empty');
+}
+
+function clearRelatedDomains() {
+  const box = $('relatedDomains');
+  if (box) box.innerHTML = '';
+  const empty = $('relatedDomainsEmpty');
+  if (empty) empty.style.display = 'none';
+}
+
+function renderRelatedDomains(items) {
+  const box = $('relatedDomains');
+  const empty = $('relatedDomainsEmpty');
+  if (!box || !empty) return;
+
+  box.innerHTML = '';
+  if (!Array.isArray(items) || items.length === 0) {
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  for (const d of items) {
+    const name = d?.security_domain_name || '（未命名领域）';
+    const slug = d?.cybersecurity_domain_slug || '';
+    const target = slug || name;
+    const url = `/securitydomain/${encodeURIComponent(target)}`;
+
+    const chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.textContent = name;
+    chip.setAttribute('role', 'link');
+    chip.tabIndex = 0;
+    chip.addEventListener('click', () => { location.href = url; });
+    chip.addEventListener('keydown', (e) => { if (e.key === 'Enter') location.href = url; });
+
+    box.appendChild(chip);
+  }
+}
+
 async function loadProduct(qRaw) {
   const q = normalizeQ(qRaw);
-  const url = `/api/product/${encodeURIComponent(q)}`;
-
-  $('q').textContent = q || '(空)';
-  $('apiUrl').textContent = url;
-  $('status').textContent = '加载中…';
-  $('output').textContent = '';
-
-  const res = await fetch(url);
-  const text = await res.text();
-  let data;
-  try { data = JSON.parse(text); } catch { data = { raw: text }; }
-
-  if (!res.ok) {
-    $('status').textContent = `❌ 失败：HTTP ${res.status}`;
-    $('output').textContent = JSON.stringify(data, null, 2);
+  if (!q) {
+    setText('pageTitle', '安全产品：—');
+    setKV('productAliases', '');
+    clearRelatedDomains();
+    setText('productStatus', '请输入 /securityproduct/<slug 或产品名> 访问。');
     return;
   }
 
-  $('status').textContent = '✅ 成功';
-  $('output').textContent = JSON.stringify(data, null, 2);
+  setKV('productAliases', '加载中…');
+  clearRelatedDomains();
+  setText('productStatus', '');
 
-  // 如果用户输入了 .html，纠正地址栏
+  const url = `/api/product/${encodeURIComponent(q)}`;
+
+  let res, text, data;
+  try {
+    res = await fetch(url);
+    text = await res.text();
+    try { data = JSON.parse(text); } catch { data = { raw: text }; }
+  } catch (e) {
+    setText('pageTitle', `安全产品：${q}`);
+    setKV('productAliases', '');
+    clearRelatedDomains();
+    setText('productStatus', `❌ 加载失败：网络错误：${String(e?.message || e)}`);
+    return;
+  }
+
+  if (!res.ok) {
+    setText('pageTitle', `安全产品：${q}`);
+    setKV('productAliases', '');
+    clearRelatedDomains();
+    setText('productStatus', `❌ 加载失败：HTTP ${res.status}（${data?.error || 'unknown'}）`);
+    return;
+  }
+
+  // 1) 标题：产品名称
+  const productName = data?.security_product_name || '（未命名产品）';
+  setText('pageTitle', `安全产品：${productName}`);
+
+  // 3) aliases
+  const aliases = Array.isArray(data?.aliases) ? data.aliases : [];
+  setKV('productAliases', aliases.length ? aliases.join('、') : '');
+
+  // 4) related domains chips
+  renderRelatedDomains(Array.isArray(data?.related_domains) ? data.related_domains : []);
+
+  // 纠正地址栏 .html
   const qPath = getQFromPath();
   const normalized = normalizeQ(qPath);
   if (normalized && normalized !== qPath) {
@@ -47,26 +129,8 @@ async function loadProduct(qRaw) {
 }
 
 function init() {
-  const qPath = getQFromPath();
-  const q = normalizeQ(qPath);
-
-  $('btnGo').addEventListener('click', async () => {
-    const vRaw = ($('inputQ')?.value || '').trim();
-    if (!vRaw) return alert('请输入安全产品名或 slug');
-    const v = normalizeQ(vRaw);
-    history.replaceState(null, '', `/securityproduct/${encodeURIComponent(v)}`);
-    await loadProduct(v);
-  });
-
-  $('inputQ').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') $('btnGo')?.click();
-  });
-
-  if (!q) {
-    $('status').textContent = '请输入 /securityproduct/xxx 或在下方输入框输入安全产品名/slug。';
-    return;
-  }
-
+  mountGlobalSearch('globalSearch');
+  const q = normalizeQ(getQFromPath());
   loadProduct(q);
 }
 
