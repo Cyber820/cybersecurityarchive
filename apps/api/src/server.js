@@ -39,9 +39,13 @@ if (hasStatic) {
   app.get('/securitydomain', (req, reply) => reply.sendFile('securitydomain.html'));
   app.get('/securitydomain/*', (req, reply) => reply.sendFile('securitydomain.html'));
 
-  // ✅ 新增：/securityproduct/* -> securityproduct.html
+  // /securityproduct/* -> securityproduct.html
   app.get('/securityproduct', (req, reply) => reply.sendFile('securityproduct.html'));
   app.get('/securityproduct/*', (req, reply) => reply.sendFile('securityproduct.html'));
+
+  // ✅ 新增：/company/* -> company.html
+  app.get('/company', (req, reply) => reply.sendFile('company.html'));
+  app.get('/company/*', (req, reply) => reply.sendFile('company.html'));
 
   // /admin -> admin.html
   app.get('/admin', (req, reply) => reply.sendFile('admin.html'));
