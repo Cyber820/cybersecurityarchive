@@ -85,9 +85,10 @@ export async function viewerRoutes(app) {
 
       let related_domains = [];
       if (domainIds.length) {
+        // ✅ schema 中不存在 cybersecurity_domain_name，不能 select
         const domRes = await supabase
           .from('cybersecurity_domain')
-          .select('security_domain_id, security_domain_name, cybersecurity_domain_slug, cybersecurity_domain_name')
+          .select('security_domain_id, security_domain_name, cybersecurity_domain_slug')
           .in('security_domain_id', domainIds);
 
         if (domRes.error) return { error: domRes.error };
@@ -95,7 +96,7 @@ export async function viewerRoutes(app) {
         related_domains = (domRes.data || [])
           .map((d) => ({
             security_domain_id: d.security_domain_id,
-            security_domain_name: d.security_domain_name || d.cybersecurity_domain_name || '',
+            security_domain_name: d.security_domain_name || '',
             cybersecurity_domain_slug: d.cybersecurity_domain_slug || '',
           }))
           .sort((a, b) =>
@@ -212,10 +213,11 @@ export async function viewerRoutes(app) {
       return reply.send(out.data);
     }
 
+    // ✅ schema 中没有 cybersecurity_domain_name，只用 security_domain_name
     const byName = await supabase
       .from('cybersecurity_domain')
       .select('*')
-      .or(`security_domain_name.eq.${q},cybersecurity_domain_name.eq.${q}`)
+      .eq('security_domain_name', q)
       .maybeSingle();
 
     if (byName.error) return reply.code(500).send({ error: byName.error.message });
@@ -244,10 +246,11 @@ export async function viewerRoutes(app) {
         .select('security_product_id, security_product_name, security_product_slug')
         .or(`security_product_name.ilike.%${q}%,security_product_slug.ilike.%${q}%`)
         .limit(30),
+      // ✅ schema 中没有 cybersecurity_domain_name
       supabase
         .from('cybersecurity_domain')
-        .select('security_domain_id, security_domain_name, cybersecurity_domain_name, cybersecurity_domain_slug')
-        .or(`security_domain_name.ilike.%${q}%,cybersecurity_domain_name.ilike.%${q}%,cybersecurity_domain_slug.ilike.%${q}%`)
+        .select('security_domain_id, security_domain_name, cybersecurity_domain_slug')
+        .or(`security_domain_name.ilike.%${q}%,cybersecurity_domain_slug.ilike.%${q}%`)
         .limit(30),
     ]);
 
