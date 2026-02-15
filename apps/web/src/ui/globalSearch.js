@@ -1,137 +1,123 @@
-// apps/web/src/ui/globalSearch.js
-const esc = (s) =>
-  String(s ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
+// apps/web/src/ui/global-search.js
 
-function el(tag, attrs = {}, children = []) {
-  const node = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (k === 'class') node.className = v;
-    else if (k === 'html') node.innerHTML = v;
-    else node.setAttribute(k, v);
-  }
-  for (const c of children) node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
-  return node;
-}
+export function mountGlobalSearch(mountEl) {
+  if (!mountEl) return;
+  mountEl.innerHTML = `
+    <div class="gs">
+      <div class="gs-title">全站搜索</div>
+      <div class="gs-row">
+        <input id="gsInput" class="gs-input" placeholder="全站搜索：企业 / 产品 / 领域（输入关键词后回车）" />
+        <button id="gsBtn" class="gs-btn">搜索</button>
+      </div>
+      <div id="gsHint" class="gs-hint">输入关键词开始搜索。</div>
+      <div id="gsResults" class="gs-results" style="display:none"></div>
+    </div>
+  `;
 
-/**
- * mountGlobalSearch
- * @param {HTMLElement|string} host - DOM 节点或其 id
- * @param {object} [opts]
- * @param {(url:string)=>void} [opts.onNavigate] - 默认 location.href = url
- */
-export function mountGlobalSearch(host, opts = {}) {
-  const root = typeof host === 'string' ? document.getElementById(host) : host;
-  if (!root) throw new Error('[globalSearch] host not found');
+  injectSearchStyles();
 
-  const onNavigate = typeof opts.onNavigate === 'function'
-    ? opts.onNavigate
-    : (url) => { location.href = url; };
+  const $input = mountEl.querySelector('#gsInput');
+  const $btn = mountEl.querySelector('#gsBtn');
+  const $hint = mountEl.querySelector('#gsHint');
+  const $results = mountEl.querySelector('#gsResults');
 
-  root.innerHTML = '';
-
-  const input = el('input', {
-    class: 'gs-input',
-    placeholder: '全站搜索：企业 / 产品 / 领域（输入关键词后回车）',
-    autocomplete: 'off',
-  });
-
-  const btn = el('button', { class: 'gs-btn', type: 'button' }, ['搜索']);
-  const status = el('div', { class: 'gs-hint' }, ['输入关键词开始搜索。']);
-  const list = el('div', { class: 'gs-list' });
-
-  const wrap = el('div', { class: 'gs-wrap' }, [
-    el('div', { class: 'gs-row' }, [input, btn]),
-    status,
-    list,
-  ]);
-
-  root.appendChild(wrap);
-
-  async function run() {
-    const q = input.value.trim();
-    list.innerHTML = '';
+  const run = async () => {
+    const q = String($input.value || '').trim();
+    $results.style.display = 'none';
+    $results.innerHTML = '';
     if (!q) {
-      status.textContent = '请输入关键词开始搜索。';
+      $hint.textContent = '输入关键词开始搜索。';
       return;
     }
-
-    status.textContent = '搜索中…';
-    let data = null;
+    $hint.textContent = '搜索中…';
 
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
-      const txt = await res.text();
-      try { data = JSON.parse(txt); } catch { data = { raw: txt }; }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const companies = Array.isArray(data.companies) ? data.companies : [];
+      const products = Array.isArray(data.products) ? data.products : [];
+      const domains = Array.isArray(data.domains) ? data.domains : [];
 
-      if (!res.ok) {
-        status.textContent = `❌ 搜索失败：HTTP ${res.status}`;
-        list.textContent = JSON.stringify(data, null, 2);
+      if (!companies.length && !products.length && !domains.length) {
+        $hint.textContent = '没有找到结果。';
         return;
       }
+
+      $hint.textContent = '搜索结果：';
+      $results.style.display = '';
+
+      $results.appendChild(renderGroup('企业/机构', companies.map((c) => ({
+        label: c.organization_short_name || c.organization_full_name || c.organization_slug,
+        href: `/company/${encodeURIComponent(c.organization_slug || c.organization_short_name || '')}`,
+      }))));
+      $results.appendChild(renderGroup('安全产品', products.map((p) => ({
+        label: p.security_product_name || p.security_product_slug,
+        href: `/securityproduct/${encodeURIComponent(p.security_product_slug || '')}`,
+      }))));
+      $results.appendChild(renderGroup('安全领域', domains.map((d) => ({
+        label: d.security_domain_name || d.cybersecurity_domain_slug,
+        href: `/securitydomain/${encodeURIComponent(d.cybersecurity_domain_slug || '')}`,
+      }))));
     } catch (e) {
-      status.textContent = '❌ 搜索失败：网络错误';
-      list.textContent = String(e?.message || e);
-      return;
+      $hint.textContent = `搜索失败：${e?.message || e}`;
     }
+  };
 
-    const companies = data?.companies || [];
-    const products = data?.products || [];
-    const domains = data?.domains || [];
+  $btn.addEventListener('click', run);
+  $input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') run();
+  });
+}
 
-    status.textContent = `✅ 结果：企业 ${companies.length} / 产品 ${products.length} / 领域 ${domains.length}`;
+function renderGroup(title, items) {
+  const wrap = document.createElement('div');
+  wrap.className = 'gs-group';
+  const h = document.createElement('div');
+  h.className = 'gs-group-title';
+  h.textContent = title;
+  wrap.appendChild(h);
 
-    function renderGroup(title, items, toUrl) {
-      const group = el('div', { class: 'gs-group' }, [
-        el('div', { class: 'gs-group-title' }, [title]),
-      ]);
-
-      if (!items.length) {
-        group.appendChild(el('div', { class: 'gs-empty' }, ['（无）']));
-        return group;
-      }
-
-      for (const it of items) {
-        const label = it.organization_slug
-          ? `${it.organization_short_name || it.organization_full_name || '(未命名)'}  ·  ${it.organization_slug}`
-          : it.security_product_slug
-            ? `${it.security_product_name || '(未命名)'}  ·  ${it.security_product_slug}`
-            : it.cybersecurity_domain_slug
-              ? `${it.security_domain_name || '(未命名)'}  ·  ${it.cybersecurity_domain_slug}`
-              : JSON.stringify(it);
-
-        const url = toUrl(it);
-        const row = el('div', { class: 'gs-item', role: 'button', tabindex: '0', html: esc(label) });
-        row.addEventListener('click', () => onNavigate(url));
-        row.addEventListener('keydown', (e) => { if (e.key === 'Enter') onNavigate(url); });
-        group.appendChild(row);
-      }
-      return group;
-    }
-
-    list.appendChild(renderGroup(
-      '企业 / 机构',
-      companies,
-      (it) => `/company/${encodeURIComponent(it.organization_slug || it.organization_short_name || it.organization_full_name || '')}`
-    ));
-    list.appendChild(renderGroup(
-      '安全产品',
-      products,
-      (it) => `/securityproduct/${encodeURIComponent(it.security_product_slug || it.security_product_name || '')}`
-    ));
-    list.appendChild(renderGroup(
-      '网安领域',
-      domains,
-      (it) => `/securitydomain/${encodeURIComponent(it.cybersecurity_domain_slug || it.security_domain_name || '')}`
-    ));
+  if (!items.length) {
+    const empty = document.createElement('div');
+    empty.className = 'gs-empty';
+    empty.textContent = '（无）';
+    wrap.appendChild(empty);
+    return wrap;
   }
 
-  btn.addEventListener('click', run);
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') run(); });
+  const row = document.createElement('div');
+  row.className = 'gs-chip-row';
+  for (const it of items.slice(0, 8)) {
+    const a = document.createElement('a');
+    a.className = 'gs-chip';
+    a.textContent = it.label || '（未命名）';
+    a.href = it.href || '#';
+    row.appendChild(a);
+  }
+  wrap.appendChild(row);
+  return wrap;
+}
 
-  return { run, input };
+function injectSearchStyles() {
+  if (document.getElementById('globalSearchStyles')) return;
+  const style = document.createElement('style');
+  style.id = 'globalSearchStyles';
+  style.textContent = `
+    .gs-title{font-size:18px;font-weight:700;margin:2px 0 10px;}
+    .gs-row{display:flex;gap:10px;align-items:center;}
+    .gs-input{flex:1;min-width:0;border:1px solid var(--border,#e6e8ef);border-radius:999px;padding:12px 14px;font-size:14px;outline:none;}
+    .gs-input:focus{border-color:rgba(124,58,237,0.45);box-shadow:0 0 0 3px rgba(124,58,237,0.12);}
+    .gs-btn{border:1px solid var(--border,#e6e8ef);background:#fff;border-radius:999px;padding:10px 14px;cursor:pointer;}
+    .gs-btn:hover{background:#f8fafc;}
+    .gs-hint{margin-top:10px;color:var(--muted,#6b7280);}
+    .gs-results{margin-top:10px;border-top:1px dashed var(--border,#e6e8ef);padding-top:10px;}
+    .gs-group{margin-top:10px;}
+    .gs-group-title{font-size:13px;color:var(--muted,#6b7280);margin:0 0 8px;}
+    .gs-chip-row{display:flex;flex-wrap:wrap;gap:8px;}
+    .gs-chip{display:inline-flex;align-items:center;padding:7px 10px;border-radius:999px;text-decoration:none;background:#eef2ff;border:1px solid rgba(99,102,241,0.22);color:#1f2937;}
+    .gs-chip:hover{background:#e0e7ff;}
+    .gs-empty{color:var(--muted,#6b7280);}
+  `;
+  document.head.appendChild(style);
 }
