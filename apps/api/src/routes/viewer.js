@@ -9,18 +9,47 @@ function normalizeQ(raw) {
 }
 
 export async function viewerRoutes(app) {
-  app.get('/company/:slug', async (req, reply) => {
-    const { slug } = req.params;
+  /**
+   * GET /api/company/:q
+   * - q 可以是 organization_slug（优先）
+   * - 或 company_short_name / company_full_name（精确匹配兜底）
+   */
+  app.get('/company/:q', async (req, reply) => {
+    const qRaw = req.params?.q;
+    const q = normalizeQ(qRaw);
+    if (!q) return reply.code(400).send({ error: 'company query is empty' });
 
-    const { data, error } = await supabase
+    // 1) slug exact
+    const bySlug = await supabase
       .from('organization')
       .select('*')
-      .eq('organization_slug', slug)
+      .eq('organization_slug', q)
       .maybeSingle();
 
-    if (error) return reply.code(500).send({ error: error.message });
-    if (!data) return reply.code(404).send({ error: 'company not found' });
-    return reply.send(data);
+    if (bySlug.error) return reply.code(500).send({ error: bySlug.error.message });
+    if (bySlug.data) return reply.send(bySlug.data);
+
+    // 2) short name exact
+    const byShort = await supabase
+      .from('organization')
+      .select('*')
+      .eq('company_short_name', q)
+      .maybeSingle();
+
+    if (byShort.error) return reply.code(500).send({ error: byShort.error.message });
+    if (byShort.data) return reply.send(byShort.data);
+
+    // 3) full name exact
+    const byFull = await supabase
+      .from('organization')
+      .select('*')
+      .eq('company_full_name', q)
+      .maybeSingle();
+
+    if (byFull.error) return reply.code(500).send({ error: byFull.error.message });
+    if (byFull.data) return reply.send(byFull.data);
+
+    return reply.code(404).send({ error: 'company not found' });
   });
 
   /**
