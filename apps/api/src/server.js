@@ -17,7 +17,7 @@ await app.register(fastifyCors, { origin: true });
 // ===== Static hosting (Vite build output) =====
 // Docker/railway 常见 cwd 是仓库根目录 /app
 const webDistPrimary = path.resolve(process.cwd(), 'apps/web/dist');
-// 兼容：如果未来以 apps/api 为 cwd 启动（例如 node src/server.js 且 cwd 在 apps/api）
+// 兼容：如果未来以 apps/api 为 cwd 启动
 const webDistFallback = path.resolve(process.cwd(), '../../apps/web/dist');
 
 const hasPrimary = fs.existsSync(webDistPrimary);
@@ -47,6 +47,10 @@ if (hasStatic) {
   // /securityproduct/*
   app.get('/securityproduct', (req, reply) => reply.sendFile('securityproduct.html'));
   app.get('/securityproduct/*', (req, reply) => reply.sendFile('securityproduct.html'));
+
+  // ✅ 新增：/company/*
+  app.get('/company', (req, reply) => reply.sendFile('company.html'));
+  app.get('/company/*', (req, reply) => reply.sendFile('company.html'));
 } else {
   app.get('/', async () => ({
     ok: true,
