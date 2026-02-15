@@ -13,6 +13,7 @@ export default defineConfig({
         admin: resolve(__dirname, 'admin.html'),
         securitydomain: resolve(__dirname, 'securitydomain.html'),
         securityproduct: resolve(__dirname, 'securityproduct.html'),
+        company: resolve(__dirname, 'company.html'),
       },
     },
   },
