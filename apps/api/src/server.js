@@ -15,10 +15,21 @@ const app = Fastify({ logger: true });
 await app.register(fastifyCors, { origin: true });
 
 // ===== Static hosting (Vite build output) =====
-const webDist = path.resolve(process.cwd(), '../../apps/web/dist');
-const hasStatic = fs.existsSync(webDist);
+// Docker/railway 常见 cwd 是仓库根目录 /app
+const webDistPrimary = path.resolve(process.cwd(), 'apps/web/dist');
+// 兼容：如果未来以 apps/api 为 cwd 启动（例如 node src/server.js 且 cwd 在 apps/api）
+const webDistFallback = path.resolve(process.cwd(), '../../apps/web/dist');
 
-app.log.info({ webDist, hasStatic }, 'Static dist check');
+const hasPrimary = fs.existsSync(webDistPrimary);
+const hasFallback = fs.existsSync(webDistFallback);
+
+const webDist = hasPrimary ? webDistPrimary : webDistFallback;
+const hasStatic = hasPrimary || hasFallback;
+
+app.log.info(
+  { cwd: process.cwd(), webDistPrimary, hasPrimary, webDistFallback, hasFallback, webDist, hasStatic },
+  'Static dist check'
+);
 
 if (hasStatic) {
   await app.register(fastifyStatic, {
@@ -33,14 +44,17 @@ if (hasStatic) {
   app.get('/securitydomain', (req, reply) => reply.sendFile('securitydomain.html'));
   app.get('/securitydomain/*', (req, reply) => reply.sendFile('securitydomain.html'));
 
-  // ✅ 新增：/securityproduct/*
+  // /securityproduct/*
   app.get('/securityproduct', (req, reply) => reply.sendFile('securityproduct.html'));
   app.get('/securityproduct/*', (req, reply) => reply.sendFile('securityproduct.html'));
 } else {
   app.get('/', async () => ({
     ok: true,
-    hint: 'Static dist missing. Ensure Railway Build Command runs `npm run build` and Vite outputs to apps/web/dist.',
-    webDist,
+    hint:
+      'Static dist missing. Ensure build generates apps/web/dist (e.g. Dockerfile runs `npm run build` and Vite outputs to apps/web/dist).',
+    cwd: process.cwd(),
+    webDistPrimary,
+    webDistFallback,
   }));
 }
 
@@ -52,7 +66,11 @@ app.get('/api/health', async () => ({ ok: true }));
 
 app.get('/api/_debug/static', async () => ({
   cwd: process.cwd(),
-  webDist,
+  webDistPrimary,
+  hasPrimary,
+  webDistFallback,
+  hasFallback,
+  webDistSelected: webDist,
   hasStatic,
   files: hasStatic ? fs.readdirSync(webDist).slice(0, 50) : [],
 }));
@@ -72,6 +90,9 @@ app.setNotFoundHandler((req, reply) => {
     reply.code(404).send({
       error: 'Not Found',
       hint: 'Static dist missing, cannot serve pages. Check build output.',
+      cwd: process.cwd(),
+      webDistPrimary,
+      webDistFallback,
     });
   }
 });
