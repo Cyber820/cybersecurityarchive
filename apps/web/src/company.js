@@ -1,174 +1,159 @@
 // apps/web/src/company.js
-import { mountGlobalSearch } from './ui/globalSearch.js';
 
-const $ = (id) => document.getElementById(id);
+import { mountGlobalSearch } from './ui/global-search.js';
 
-function normalizeQ(raw) {
-  let q = String(raw ?? '').trim();
-  if (q.toLowerCase().endsWith('.html')) q = q.slice(0, -5);
-  return q;
-}
+injectBaseStyles();
+mountGlobalSearch(document.getElementById('globalSearch'));
 
-function getQFromPath() {
-  const parts = (location.pathname || '').split('/').filter(Boolean);
-  const idx = parts.indexOf('company');
-  if (idx < 0) return '';
-  const q = parts.slice(idx + 1).join('/');
-  try { return decodeURIComponent(q); } catch { return q; }
-}
-
-function showModal(title = '开发中', body = '开发中') {
-  $('modalTitle').textContent = title;
-  $('modalBody').textContent = body;
-  $('modalOverlay').style.display = 'flex';
-}
-
-function hideModal() {
-  $('modalOverlay').style.display = 'none';
-}
-
-function renderBaseInfo(org) {
-  const fullName = org?.organization_full_name || '';
-  const establish = org?.establish_year ?? '';
-  const ipo = org?.if_ipo === true ? '已上市' : '';
-
-  const lines = [];
-  lines.push(`企业全称：${fullName || '（无）'}`);
-  lines.push(`成立时间：${String(establish || '（无）')}`);
-  if (ipo) lines.push(`最近融资：${ipo}`);
-
-  return lines.join('\n');
-}
-
-function renderTextOrEmpty(v) {
-  const t = String(v ?? '').trim();
-  return t ? t : '（无）';
-}
-
-function makeChip(label, onClick) {
-  const d = document.createElement('div');
-  d.className = 'chip-blue';
-  d.textContent = label;
-  d.tabIndex = 0;
-  d.role = 'button';
-  d.addEventListener('click', onClick);
-  d.addEventListener('keydown', (e) => { if (e.key === 'Enter') onClick(); });
-  return d;
-}
-
-async function loadCompany(qRaw) {
-  const q = normalizeQ(qRaw);
-  if (!q) return;
-
-  // 纠正地址栏：如果用户输入了 .html
-  const qPath = getQFromPath();
-  const normalized = normalizeQ(qPath);
-  if (normalized && normalized !== qPath) {
-    history.replaceState(null, '', `/company/${encodeURIComponent(normalized)}`);
-  }
-
-  const url = `/api/company/${encodeURIComponent(q)}`;
-
-  // loading 状态
-  $('pageTitle').textContent = '加载中…';
-  $('baseInfo').textContent = '加载中…';
-  $('baseInfo').classList.add('empty');
-  $('orgDesc').textContent = '加载中…';
-  $('orgDesc').classList.add('empty');
-
-  $('featuredProducts').innerHTML = '';
-  $('otherProducts').innerHTML = '';
-  $('featuredEmpty').style.display = 'none';
-  $('otherEmpty').style.display = 'none';
-
-  let res, data;
-  try {
-    res = await fetch(url);
-    const txt = await res.text();
-    try { data = JSON.parse(txt); } catch { data = { raw: txt }; }
-  } catch (e) {
-    $('pageTitle').textContent = q;
-    $('baseInfo').textContent = `❌ 加载失败：网络错误\n${String(e?.message || e)}`;
-    return;
-  }
-
-  if (!res.ok) {
-    $('pageTitle').textContent = q;
-    $('baseInfo').textContent = `❌ 加载失败：HTTP ${res.status}\n${JSON.stringify(data, null, 2)}`;
-    return;
-  }
-
-  const org = data?.organization || null;
-  const list = Array.isArray(data?.products) ? data.products : [];
-
-  const title = org?.organization_short_name || org?.organization_full_name || q;
-  $('pageTitle').textContent = title;
-
-  $('baseInfo').textContent = renderBaseInfo(org);
-  $('baseInfo').classList.remove('empty');
-
-  $('orgDesc').textContent = renderTextOrEmpty(org?.organization_description);
-  $('orgDesc').classList.remove('empty');
-
-  // 产品分组：recommendation_score >= 6 视为“特色产品”
-  const featured = [];
-  const others = [];
-
-  for (const row of list) {
-    const score = row?.recommendation_score;
-    const p = row?.product || null;
-
-    const name = p?.security_product_name || `#${row?.security_product_id ?? 'unknown'}`;
-    const slug = p?.security_product_slug || '';
-
-    const label = score != null ? `${name}（${score}）` : name;
-    const click = () => {
-      // 这里按你的要求：先不跳产品页，点击弹窗“开发中”
-      // 后续如果你要改成跳 /securityproduct/{slug}，把这里替换成 location.href 即可
-      showModal('开发中', `「${name}」详情弹窗：开发中`);
-    };
-
-    const item = { label, click, score, slug, name };
-    if (typeof score === 'number' && score >= 6) featured.push(item);
-    else others.push(item);
-  }
-
-  if (!featured.length) {
-    $('featuredEmpty').style.display = 'block';
-  } else {
-    for (const it of featured) $('featuredProducts').appendChild(makeChip(it.label, it.click));
-  }
-
-  if (!others.length) {
-    $('otherEmpty').style.display = 'block';
-  } else {
-    for (const it of others) $('otherProducts').appendChild(makeChip(it.label, it.click));
-  }
-}
-
-function init() {
-  // 全站搜索挂载
-  mountGlobalSearch('globalSearch');
-
-  // modal
-  $('modalClose').addEventListener('click', hideModal);
-  $('modalOverlay').addEventListener('click', (e) => {
-    if (e.target === $('modalOverlay')) hideModal();
-  });
-
-  const q = normalizeQ(getQFromPath());
-  if (!q) {
-    $('pageTitle').textContent = '（请从 /company/企业slug 进入，或用上方全站搜索）';
-    $('baseInfo').textContent = '（无）';
-    $('baseInfo').classList.remove('empty');
-    $('orgDesc').textContent = '（无）';
-    $('orgDesc').classList.remove('empty');
-    $('featuredEmpty').style.display = 'block';
-    $('otherEmpty').style.display = 'block';
-    return;
-  }
-
+const q = getPathTail('/company');
+if (!q) {
+  setText('#pageTitle', '企业/机构');
+  setText('#baseInfo', '（缺少企业标识）');
+  setText('#description', '（缺少企业标识）');
+} else {
   loadCompany(q);
 }
 
-init();
+// modal
+const $modal = document.getElementById('devModal');
+const $modalClose = document.getElementById('devModalClose');
+if ($modal && $modalClose) {
+  $modalClose.addEventListener('click', () => ($modal.style.display = 'none'));
+  $modal.addEventListener('click', (e) => {
+    if (e.target === $modal) $modal.style.display = 'none';
+  });
+}
+
+function openDevModal() {
+  if ($modal) $modal.style.display = '';
+}
+
+async function loadCompany(q) {
+  clearEl('#featuredProducts');
+  clearEl('#otherProducts');
+  setText('#baseInfo', '（加载中）');
+  setText('#description', '（加载中）');
+
+  try {
+    const res = await fetch(`/api/company/${encodeURIComponent(q)}`);
+    if (!res.ok) {
+      const t = await safeText(res);
+      throw new Error(`HTTP ${res.status}: ${t || res.statusText}`);
+    }
+    const data = await res.json();
+    const c = data.company || {};
+    const title = c.organization_short_name || c.organization_full_name || c.organization_slug || q;
+    setText('#pageTitle', title);
+
+    // base info
+    const lines = [];
+    lines.push(`企业全称：${c.organization_full_name || '（无）'}`);
+    lines.push(`成立时间：${c.establish_year ?? '（无）'}`);
+    // 需求：未上市就不显示“最近融资：”这一行
+    if (c.if_ipo === true) {
+      lines.push('最近融资：已上市');
+    }
+    setText('#baseInfo', lines.join('\n'));
+
+    // description
+    const desc = c.organization_description || '';
+    setText('#description', desc.trim() ? desc : '（无）');
+
+    // products
+    const products = Array.isArray(data.products) ? data.products : [];
+    const featured = products.filter((p) => (p.recommendation_score ?? 0) >= 6);
+    const other = products.filter((p) => (p.recommendation_score ?? 0) < 6);
+
+    renderProducts('#featuredProducts', featured, { color: 'blue', clickMode: 'modal' });
+    renderProducts('#otherProducts', other, { color: 'gray', clickMode: 'modal' });
+  } catch (e) {
+    setText('#baseInfo', '（无）');
+    setText('#description', '（无）');
+    const err = document.createElement('div');
+    err.className = 'error';
+    err.textContent = `加载失败：${e?.message || e}`;
+    document.querySelector('main').insertAdjacentElement('afterbegin', err);
+  }
+}
+
+function renderProducts(sel, items, { color, clickMode }) {
+  const el = document.querySelector(sel);
+  if (!el) return;
+  el.innerHTML = '';
+  if (!items.length) {
+    el.innerHTML = '<div class="muted">（无）</div>';
+    return;
+  }
+
+  for (const p of items) {
+    const name = p.security_product_name || p.security_product_slug || String(p.security_product_id || '');
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = `chip ${color === 'blue' ? 'chip-blue' : 'chip-gray'}`;
+    // 需求：不显示评分
+    chip.textContent = name;
+    chip.addEventListener('click', () => {
+      if (clickMode === 'modal') openDevModal();
+    });
+    el.appendChild(chip);
+  }
+}
+
+function getPathTail(prefix) {
+  const path = window.location.pathname || '';
+  const idx = path.indexOf(prefix);
+  if (idx === -1) return '';
+  const tail = path.slice(idx + prefix.length).replace(/^\/+/, '');
+  return decodeURIComponent(tail || '').trim();
+}
+
+function setText(sel, text) {
+  const el = document.querySelector(sel);
+  if (el) el.textContent = text;
+}
+
+function clearEl(sel) {
+  const el = document.querySelector(sel);
+  if (el) el.innerHTML = '';
+}
+
+async function safeText(res) {
+  try {
+    return await res.text();
+  } catch {
+    return '';
+  }
+}
+
+function injectBaseStyles() {
+  if (document.getElementById('baseStyles')) return;
+  const style = document.createElement('style');
+  style.id = 'baseStyles';
+  style.textContent = `
+    :root{--bg:#f6f7fb;--card:#fff;--border:#e6e8ef;--text:#111;--muted:#6b7280;--purple:#6d28d9;--purple2:#7c3aed;--blue:#2563eb;--blue2:#3b82f6;}
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background:var(--bg); color:var(--text);}
+    .page{max-width:980px;margin:32px auto;padding:0 16px 48px;}
+    .page-title{font-size:34px;letter-spacing:0.2px;margin:0 0 18px;}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin:14px 0;}
+    .card-title{font-size:18px;margin:0 0 10px;}
+    .kv{line-height:1.7;white-space:pre-wrap;}
+    .muted{color:var(--muted);}
+    .grid-2{display:grid;grid-template-columns:1fr;gap:14px;}
+    @media (min-width:860px){.grid-2{grid-template-columns:1fr 1fr;}}
+    .chip-row{display:flex;flex-wrap:wrap;gap:10px;}
+    .chip{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;text-decoration:none;border:1px solid transparent;cursor:pointer;background:#fff;}
+    .chip-blue{background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.22);color:#0a2c6a;}
+    .chip-blue:hover{background:rgba(59,130,246,0.18);}
+    .chip-gray{background:rgba(148,163,184,0.12);border-color:rgba(148,163,184,0.22);color:#1f2937;}
+    .chip-gray:hover{background:rgba(148,163,184,0.18);}
+    .error{background:#fff5f5;border:1px solid #fecaca;color:#991b1b;border-radius:12px;padding:10px 12px;margin:0 0 14px;}
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:99999;padding:16px;}
+    .modal{width:min(520px,100%);background:#fff;border:1px solid rgba(0,0,0,0.15);border-radius:14px;padding:14px;}
+    .modal-title{font-size:16px;font-weight:700;margin-bottom:8px;}
+    .modal-body{color:var(--muted);line-height:1.6;}
+    .modal-actions{display:flex;justify-content:flex-end;margin-top:12px;}
+    .btn{border:1px solid var(--border);background:#fff;border-radius:10px;padding:8px 12px;cursor:pointer;}
+    .btn:hover{background:#f8fafc;}
+  `;
+  document.head.appendChild(style);
+}
