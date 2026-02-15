@@ -9,11 +9,6 @@ function normalizeQ(raw) {
 }
 
 export async function viewerRoutes(app) {
-  /**
-   * GET /api/company/:q
-   * - q 可以是 organization_slug（优先）
-   * - 或 company_short_name / company_full_name（精确匹配兜底）
-   */
   app.get('/company/:q', async (req, reply) => {
     const qRaw = req.params?.q;
     const q = normalizeQ(qRaw);
@@ -49,11 +44,6 @@ export async function viewerRoutes(app) {
     return reply.code(404).send({ error: 'company not found' });
   });
 
-  /**
-   * GET /api/product/:q
-   * - q 可以是 security_product_slug（优先）
-   * - 也可以是 security_product_name（精确匹配兜底）
-   */
   app.get('/product/:q', async (req, reply) => {
     const qRaw = req.params?.q;
     const q = normalizeQ(qRaw);
@@ -83,15 +73,60 @@ export async function viewerRoutes(app) {
 
   /**
    * GET /api/domain/:q
-   * - q 可以是 cybersecurity_domain_slug（优先）
-   * - 也可以是 security_domain_name（精确匹配兜底）
-   * - 返回中附带 aliases: string[]
+   * - q: slug（优先）或 name（精确匹配兜底）
+   * - 返回：
+   *   - domain 主记录字段
+   *   - aliases: string[]
+   *   - related_products: {security_product_id, security_product_name, security_product_slug}[]
    */
   app.get('/domain/:q', async (req, reply) => {
     const qRaw = req.params?.q;
     const q = normalizeQ(qRaw);
 
     if (!q) return reply.code(400).send({ error: 'domain query is empty' });
+
+    async function enrich(domain) {
+      // aliases
+      const aliasRes = await supabase
+        .from('cybersecurity_domain_alias')
+        .select('security_domain_alias_name')
+        .eq('security_domain_id', domain.security_domain_id);
+
+      if (aliasRes.error) return { error: aliasRes.error };
+
+      const aliases = (aliasRes.data || [])
+        .map((r) => r.security_domain_alias_name)
+        .filter(Boolean);
+
+      // domain -> product ids
+      const relRes = await supabase
+        .from('cybersecurity_domain_product')
+        .select('security_product_id')
+        .eq('security_domain_id', domain.security_domain_id);
+
+      if (relRes.error) return { error: relRes.error };
+
+      const productIds = (relRes.data || [])
+        .map((r) => r.security_product_id)
+        .filter((v) => typeof v === 'number' || (typeof v === 'string' && v !== ''));
+
+      let related_products = [];
+      if (productIds.length) {
+        const prodRes = await supabase
+          .from('cybersecurity_product')
+          .select('security_product_id, security_product_name, security_product_slug')
+          .in('security_product_id', productIds);
+
+        if (prodRes.error) return { error: prodRes.error };
+
+        // 保持稳定排序：按名称
+        related_products = (prodRes.data || [])
+          .slice()
+          .sort((a, b) => String(a.security_product_name || '').localeCompare(String(b.security_product_name || ''), 'zh-Hans-CN'));
+      }
+
+      return { data: { ...domain, aliases, related_products } };
+    }
 
     // 1) slug exact
     const bySlug = await supabase
@@ -102,43 +137,28 @@ export async function viewerRoutes(app) {
 
     if (bySlug.error) return reply.code(500).send({ error: bySlug.error.message });
     if (bySlug.data) {
-      const domain = bySlug.data;
-      const aliasRes = await supabase
-        .from('cybersecurity_domain_alias')
-        .select('security_domain_alias_name')
-        .eq('security_domain_id', domain.security_domain_id);
-
-      if (aliasRes.error) return reply.code(500).send({ error: aliasRes.error.message });
-      const aliases = (aliasRes.data || []).map((r) => r.security_domain_alias_name).filter(Boolean);
-
-      return reply.send({ ...domain, aliases });
+      const out = await enrich(bySlug.data);
+      if (out.error) return reply.code(500).send({ error: out.error.message });
+      return reply.send(out.data);
     }
 
-    // 2) name exact
+    // 2) name exact（兼容两种字段名）
     const byName = await supabase
       .from('cybersecurity_domain')
       .select('*')
-      .eq('security_domain_name', q)
+      .or(`cybersecurity_domain_name.eq.${q},security_domain_name.eq.${q}`)
       .maybeSingle();
 
     if (byName.error) return reply.code(500).send({ error: byName.error.message });
     if (byName.data) {
-      const domain = byName.data;
-      const aliasRes = await supabase
-        .from('cybersecurity_domain_alias')
-        .select('security_domain_alias_name')
-        .eq('security_domain_id', domain.security_domain_id);
-
-      if (aliasRes.error) return reply.code(500).send({ error: aliasRes.error.message });
-      const aliases = (aliasRes.data || []).map((r) => r.security_domain_alias_name).filter(Boolean);
-
-      return reply.send({ ...domain, aliases });
+      const out = await enrich(byName.data);
+      if (out.error) return reply.code(500).send({ error: out.error.message });
+      return reply.send(out.data);
     }
 
     return reply.code(404).send({ error: 'domain not found' });
   });
 
-  // 全局搜索：organizations/products/domains by name or slug
   app.get('/search', async (req, reply) => {
     const q = String(req.query?.q || '').trim();
     if (!q) return reply.send({ q, companies: [], products: [], domains: [] });
@@ -156,8 +176,8 @@ export async function viewerRoutes(app) {
         .limit(30),
       supabase
         .from('cybersecurity_domain')
-        .select('security_domain_id, security_domain_name, cybersecurity_domain_slug')
-        .or(`security_domain_name.ilike.%${q}%,cybersecurity_domain_slug.ilike.%${q}%`)
+        .select('security_domain_id, cybersecurity_domain_name, security_domain_name, cybersecurity_domain_slug')
+        .or(`cybersecurity_domain_name.ilike.%${q}%,security_domain_name.ilike.%${q}%,cybersecurity_domain_slug.ilike.%${q}%`)
         .limit(30),
     ]);
 
