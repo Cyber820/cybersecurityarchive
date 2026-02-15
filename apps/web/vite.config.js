@@ -12,6 +12,7 @@ export default defineConfig({
         viewer: resolve(__dirname, 'viewer.html'),
         admin: resolve(__dirname, 'admin.html'),
         securitydomain: resolve(__dirname, 'securitydomain.html'),
+        securityproduct: resolve(__dirname, 'securityproduct.html'),
       },
     },
   },
