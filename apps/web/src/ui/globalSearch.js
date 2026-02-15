@@ -97,7 +97,7 @@ export function mountGlobalSearch(host, opts = {}) {
 
       for (const it of items) {
         const label = it.organization_slug
-          ? `${it.company_short_name || '(未命名)'}  ·  ${it.organization_slug}`
+          ? `${it.organization_short_name || it.organization_full_name || '(未命名)'}  ·  ${it.organization_slug}`
           : it.security_product_slug
             ? `${it.security_product_name || '(未命名)'}  ·  ${it.security_product_slug}`
             : it.cybersecurity_domain_slug
@@ -113,9 +113,21 @@ export function mountGlobalSearch(host, opts = {}) {
       return group;
     }
 
-    list.appendChild(renderGroup('企业 / 机构', companies, (it) => `/company/${encodeURIComponent(it.organization_slug || it.company_short_name || '')}`));
-    list.appendChild(renderGroup('安全产品', products, (it) => `/securityproduct/${encodeURIComponent(it.security_product_slug || it.security_product_name || '')}`));
-    list.appendChild(renderGroup('网安领域', domains, (it) => `/securitydomain/${encodeURIComponent(it.cybersecurity_domain_slug || it.security_domain_name || '')}`));
+    list.appendChild(renderGroup(
+      '企业 / 机构',
+      companies,
+      (it) => `/company/${encodeURIComponent(it.organization_slug || it.organization_short_name || it.organization_full_name || '')}`
+    ));
+    list.appendChild(renderGroup(
+      '安全产品',
+      products,
+      (it) => `/securityproduct/${encodeURIComponent(it.security_product_slug || it.security_product_name || '')}`
+    ));
+    list.appendChild(renderGroup(
+      '网安领域',
+      domains,
+      (it) => `/securitydomain/${encodeURIComponent(it.cybersecurity_domain_slug || it.security_domain_name || '')}`
+    ));
   }
 
   btn.addEventListener('click', run);
