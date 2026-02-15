@@ -16,11 +16,9 @@
     .status{ font-size: 12px; color: rgba(0,0,0,0.65); margin-top: 8px; }
 
     /* ===== global search basic styles ===== */
-    .gs-wrap{ }
     .gs-row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
     .gs-input{
-      flex:1;
-      min-width: 240px;
+      flex:1; min-width: 240px;
       border:1px solid rgba(0,0,0,0.22);
       border-radius:12px;
       padding:10px 10px;
@@ -52,12 +50,31 @@
     }
     .gs-item:hover{ border-color: rgba(0,0,0,0.25); }
     .gs-empty{ color: rgba(0,0,0,0.50); font-size: 12px; }
+
+    /* ===== product chips ===== */
+    .chips{ display:flex; flex-wrap:wrap; gap:10px; }
+    .chip{
+      display:inline-flex;
+      align-items:center;
+      padding: 8px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(80, 70, 255, 0.25);
+      background: rgba(80, 70, 255, 0.10);
+      color: rgba(40, 35, 160, 1);
+      font-size: 12px;
+      cursor:pointer;
+      user-select:none;
+    }
+    .chip:hover{
+      border-color: rgba(80, 70, 255, 0.45);
+      background: rgba(80, 70, 255, 0.14);
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <!-- 1) 页面内标题 -->
-    <h1 id="pageTitle">网安领域：'—'</h1>
+    <!-- 1) 页面内标题：显示领域名，不加引号 -->
+    <h1 id="pageTitle">网安领域：—</h1>
 
     <!-- 3) 全站搜索（通用组件） -->
     <div class="card">
@@ -67,15 +84,23 @@
 
     <!-- 4) 别称 -->
     <div class="card">
-      <div class="label"><span id="domainNameA">（—）</span> 别称：</div>
+      <div class="label">别称：</div>
       <div id="domainAliases" class="kv empty">加载中…</div>
     </div>
 
     <!-- 5) 介绍 -->
     <div class="card">
-      <div class="label"><span id="domainNameB">（—）</span> 介绍：</div>
+      <div class="label">介绍：</div>
       <div id="domainDesc" class="kv empty">加载中…</div>
       <div id="domainStatus" class="status"></div>
+    </div>
+
+    <!-- 3) 新增：关联安全产品 -->
+    <div class="card">
+      <div class="label">关联安全产品</div>
+      <div class="hint">&nbsp;</div>
+      <div id="relatedProducts" class="chips"></div>
+      <div id="relatedProductsEmpty" class="empty" style="display:none;">（无）</div>
     </div>
 
     <!-- 6) 推荐企业（占位） -->
