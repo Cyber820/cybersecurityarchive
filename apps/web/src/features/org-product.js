@@ -1,239 +1,133 @@
-// apps/web/src/features/org-product-edit.js
-console.log('[orgProductEdit] version = 2026-02-16-orgProductScore-A')
+// apps/web/src/features/org-product.js
+console.log('[orgProduct] version = 2026-02-16-orgProductScore-A')
 
-export function mountOrgProductEditAdmin(ctx) {
+export function mountOrgProductAdmin(ctx) {
   const { $, toast, apiFetchJson } = ctx
 
-  const btnOpen = $('orgProductEditOpen')
-  const modal = $('orgProductEditModal')
-  const closeBtn = $('orgProductEditClose')
+  const btnOpen = $('orgProductOpen')
+  const modal = $('orgProductModal')
+  const closeBtn = $('orgProductClose')
 
-  const orgIdEl = $('orgProductEditOrgId')
-  const orgErr = $('orgProductEditOrgIdErr')
+  const orgIdEl = $('orgProductOrgId')
+  const orgErr = $('orgProductOrgIdErr')
 
-  const listStatus = $('orgProductEditStatus')
-  const listEl = $('orgProductEditList')
+  const productIdEl = $('orgProductProductId')
+  const prodErr = $('orgProductProductIdErr')
 
-  const itemModal = $('orgProductEditItemModal')
-  const itemClose = $('orgProductEditItemClose')
-  const itemPreview = $('orgProductEditItemPreview')
-  const itemSave = $('orgProductEditItemSave')
-  const itemDelete = $('orgProductEditItemDelete')
+  const releaseYearEl = $('orgProductReleaseYear')
+  const releaseYearErr = $('orgProductReleaseYearErr')
 
-  const releaseYearEl = $('orgProductEditItemReleaseYear')
-  const releaseYearErr = $('orgProductEditItemReleaseYearErr')
-  const endYearEl = $('orgProductEditItemEndYear')
-  const endYearErr = $('orgProductEditItemEndYearErr')
-  const scoreEl = $('orgProductEditItemScore')
+  const endYearEl = $('orgProductEndYear')
+  const endYearErr = $('orgProductEndYearErr')
 
-  if (!btnOpen || !modal || !closeBtn || !orgErr || !listStatus || !listEl || !itemModal || !scoreEl) {
-    console.warn('[orgProductEdit] missing DOM nodes, mount skipped.')
+  const scoreEl = $('orgProductScore')
+
+  const resetBtn = $('orgProductReset')
+  const submitBtn = $('orgProductSubmit')
+
+  if (!btnOpen || !modal || !closeBtn || !resetBtn || !submitBtn || !releaseYearEl || !endYearEl || !scoreEl) {
+    console.warn('[orgProduct] missing DOM nodes, mount skipped.')
     return
   }
 
-  let editingRow = null
-
   btnOpen.addEventListener('click', () => {
     modal.style.display = 'block'
-    listEl.innerHTML = ''
-    listStatus.textContent = '请输入 organization_id 后点击“加载”'
   })
   closeBtn.addEventListener('click', () => {
     modal.style.display = 'none'
   })
+  resetBtn.addEventListener('click', resetForm)
+  submitBtn.addEventListener('click', runSubmit)
 
-  const btnLoad = $('orgProductEditLoad')
-  btnLoad.addEventListener('click', loadOrgProducts)
+  function resetForm() {
+    orgIdEl.value = ''
+    productIdEl.value = ''
+    releaseYearEl.value = ''
+    endYearEl.value = ''
+    scoreEl.value = ''
+    clearErrors()
+  }
 
-  itemClose.addEventListener('click', () => {
-    itemModal.style.display = 'none'
-    editingRow = null
-  })
-
-  itemSave.addEventListener('click', submitEdit)
-  itemDelete.addEventListener('click', submitDelete)
-
-  // 外部创建后刷新
-  window.addEventListener('orgProduct:changed', () => {
-    if (modal.style.display === 'block') loadOrgProducts()
-  })
-
-  async function loadOrgProducts() {
-    const orgId = Number(orgIdEl.value)
-    if (!Number.isFinite(orgId) || orgId <= 0) {
-      orgErr.textContent = '请输入 organization_id（正整数）'
-      return
-    }
+  function clearErrors() {
     orgErr.textContent = ''
-
-    listStatus.textContent = '加载中...'
-    listEl.innerHTML = ''
-
-    try {
-      const res = await apiFetchJson(`/api/admin/org_product?organization_id=${orgId}`)
-      const items = res?.items || []
-      if (!items.length) {
-        listStatus.textContent = '暂无关联记录'
-        return
-      }
-      listStatus.textContent = `共 ${items.length} 条`
-      renderList(items)
-    } catch (err) {
-      listStatus.textContent = '加载失败'
-      toast(String(err?.message || err), { type: 'error' })
-    }
-  }
-
-  function renderList(items) {
-    listEl.innerHTML = items.map((r) => {
-      const orgName = String(r.organization_id ?? '')
-      const prodName = String(r.product?.security_product_name ?? r.security_product_id ?? '')
-      const y1 = r.product_release_year ?? ''
-      const y2 = r.product_end_year ?? ''
-      const score = r.recommendation_score ?? ''
-      return `
-        <div class="op-row"
-          data-id="${esc(r.organization_product_id)}"
-          data-org="${esc(orgName)}"
-          data-prod="${esc(prodName)}"
-          data-y1="${esc(y1)}" data-y2="${esc(y2)}" data-score="${esc(score)}">
-          <div class="op-title">${esc(prodName)}</div>
-          <div class="op-sub">release=${esc(y1)} end=${esc(y2)}</div>
-          <button class="btn op-edit" data-action="edit">编辑</button>
-        </div>
-      `
-    }).join('')
-
-    listEl.querySelectorAll('[data-action="edit"]').forEach((btn) => {
-      btn.addEventListener('click', (e) => {
-        const rowEl = e.target.closest('.op-row')
-        openEditItemModalFromRowEl(rowEl)
-      })
-    })
-  }
-
-  function openEditItemModalFromRowEl(el) {
-    if (!el) return
-
-    const id = Number(el.dataset?.id)
-    const orgName = el.dataset?.org ?? ''
-    const prodName = el.dataset?.prod ?? ''
-
-    const y1 = el.dataset?.y1 ?? ''
-    const y2 = el.dataset?.y2 ?? ''
-    const s0 = el.dataset?.score ?? ''
-
-    editingRow = {
-      organization_product_id: id,
-      organization_id: Number(orgIdEl.value),
-      product_name: prodName,
-      old_release_year: y1 === '' ? null : Number(y1),
-      old_end_year: y2 === '' ? null : Number(y2),
-      old_score: s0 === '' ? null : Number(s0),
-    }
-
-    releaseYearEl.value = (y1 ?? '') === '' ? '' : String(y1)
-    endYearEl.value = (y2 ?? '') === '' ? '' : String(y2)
-    scoreEl.value = (s0 ?? '') === '' ? '' : String(s0)
-
+    prodErr.textContent = ''
     releaseYearErr.textContent = ''
     endYearErr.textContent = ''
-
-    itemPreview.textContent = `企业=${orgName}\n产品=${prodName}\nrelease=${y1 || '(空)'}\nend=${y2 || '(空)'}`
-    itemModal.style.display = 'block'
   }
 
-  async function submitEdit() {
-    if (!editingRow) return
+  function validate() {
+    clearErrors()
 
-    const patch = validateEditYears(releaseYearEl.value, endYearEl.value)
-    if (!patch) return
-
-    // 如果用户只改了评分，也要允许提交；如果完全没变化，就提示
-    const oldY1 = editingRow.old_release_year ?? null
-    const oldY2 = editingRow.old_end_year ?? null
-    const oldS = editingRow.old_score ?? null
-
-    const newY1 = patch.product_release_year ?? null
-    const newY2 = patch.product_end_year ?? null
-    const newS = patch.recommendation_score ?? null
-
-    if (oldY1 === newY1 && oldY2 === newY2 && oldS === newS) {
-      toast('没有任何修改', { type: 'info' })
-      return
-    }
-
-    itemSave.disabled = true
-    itemDelete.disabled = true
-
-    try {
-      await apiFetchJson(`/api/admin/org_product/${editingRow.organization_product_id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(patch),
-      })
-
-      toast('已更新')
-      itemModal.style.display = 'none'
-      editingRow = null
-      await loadOrgProducts()
-    } catch (err) {
-      toast(String(err?.message || err), { type: 'error' })
-    } finally {
-      itemSave.disabled = false
-      itemDelete.disabled = false
-    }
-  }
-
-  async function submitDelete() {
-    if (!editingRow) return
-    const ok = window.confirm('确定删除这条企业产品关联吗？')
-    if (!ok) return
-
-    itemSave.disabled = true
-    itemDelete.disabled = true
-
-    try {
-      await apiFetchJson(`/api/admin/org_product/${editingRow.organization_product_id}`, {
-        method: 'DELETE',
-      })
-
-      toast('已删除')
-      itemModal.style.display = 'none'
-      editingRow = null
-      await loadOrgProducts()
-    } catch (err) {
-      toast(String(err?.message || err), { type: 'error' })
-    } finally {
-      itemSave.disabled = false
-      itemDelete.disabled = false
-    }
-  }
-
-  function validateEditYears(releaseYearRaw, endYearRaw) {
-    releaseYearErr.textContent = ''
-    endYearErr.textContent = ''
+    let ok = true
+    const orgId = Number(orgIdEl.value)
+    const prodId = Number(productIdEl.value)
+    if (!Number.isFinite(orgId) || orgId <= 0) { showErr(orgErr, '请输入 organization_id（正整数）'); ok = false }
+    if (!Number.isFinite(prodId) || prodId <= 0) { showErr(prodErr, '请输入 security_product_id（正整数）'); ok = false }
 
     const now = new Date().getFullYear()
 
-    const r = validateYearRange(releaseYearRaw, { min: 1990, max: now })
-    if (!r.ok) {
-      releaseYearErr.textContent = r.msg
-      return null
-    }
+    const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
+    if (!r.ok) { showErr(releaseYearErr, r.msg); ok = false }
 
-    const e = validateYearRange(endYearRaw, { min: 1990, max: now })
-    if (!e.ok) {
-      endYearErr.textContent = e.msg
-      return null
-    }
+    const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
+    if (!e.ok) { showErr(endYearErr, e.msg); ok = false }
 
     const s = validateScore(scoreEl.value)
-    if (s === '__invalid__') {
-      toast('评分必须是 1-10 的整数（或留空）', { type: 'error' })
-      return null
-    }
+    if (s === '__invalid__') { showErr(endYearErr, '评分必须是 1-10 的整数，或留空'); ok = false }
 
-    return { product_release_year: r.value, product_end_year: e.value, recommendation_score: s }
+    return ok
+  }
+
+  function collectPayload() {
+    const orgId = Number(orgIdEl.value)
+    const prodId = Number(productIdEl.value)
+    const now = new Date().getFullYear()
+
+    const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
+    const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
+    if (!r.ok || !e.ok) throw new Error('invalid year')
+
+    const s = validateScore(scoreEl.value)
+    if (s === '__invalid__') throw new Error('recommendation_score must be an integer 1-10')
+
+    return {
+      organization_id: orgId,
+      security_product_id: prodId,
+      product_release_year: r.value,
+      product_end_year: e.value,
+      recommendation_score: s,
+    }
+  }
+
+  async function runSubmit() {
+    if (!validate()) return
+
+    try {
+      submitBtn.disabled = true
+
+      const payload = collectPayload()
+      await apiFetchJson('/api/admin/org_product', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+
+      toast('已添加企业产品关联')
+      modal.style.display = 'none'
+      resetForm()
+
+      // 让“编辑企业产品”列表刷新（如果已挂载）
+      window.dispatchEvent(new CustomEvent('orgProduct:changed'))
+
+    } catch (err) {
+      toast(String(err?.message || err), { type: 'error' })
+    } finally {
+      submitBtn.disabled = false
+    }
+  }
+
+  function showErr(el, msg) {
+    if (!el) return
+    el.textContent = msg
   }
 }
 
@@ -254,13 +148,4 @@ function validateScore(raw) {
   if (!Number.isFinite(n) || !Number.isInteger(n)) return '__invalid__'
   if (n < 1 || n > 10) return '__invalid__'
   return n
-}
-
-function esc(v) {
-  return String(v ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;')
 }
