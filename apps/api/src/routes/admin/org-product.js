@@ -1,31 +1,54 @@
 // apps/api/src/routes/admin/org-product.js
+import { supabase } from '../../supabase.js'
+import { requireAdmin } from './auth.js'
+
+console.log('[orgProduct] version = 2026-02-16-score-A')
+
 /**
- * organization_product admin routes
- *
- * Table: organization_product
- * - organization_product_id (pk, int8)
- * - organization_id (fk, int8)
- * - security_product_id (fk, int8)
+ * organization_product
+ * Columns:
+ * - organization_product_id (int8)
+ * - organization_id (int8)
+ * - security_product_id (int8)  FK -> cybersecurity_product.security_product_id
  * - product_release_year (int4, nullable)
  * - product_end_year (int4, nullable)
- * - recommendation_score (int2, nullable, 1-10)
+ * - recommendation_score (int2/int4, nullable) 1~10
+ *
+ * Routes:
+ * - POST   /api/admin/org_product                         create
+ * - GET    /api/admin/org_product?organization_id=123      list by org
+ * - PATCH  /api/admin/org_product/:id                     update years + score
+ * - DELETE /api/admin/org_product/:id                     delete row
  */
-
-export async function orgProductAdminRoutes(app, { supabase }) {
-  // Create
+export function registerOrgProductAdmin(app) {
+  /**
+   * POST /api/admin/org_product
+   *
+   * Body:
+   * {
+   *   organization_id: number,
+   *   security_product_id: number,
+   *   product_release_year?: number|null,
+   *   product_end_year?: number|null,
+   *   recommendation_score?: number|null
+   * }
+   */
   app.post('/org_product', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return
+
     const body = req.body || {}
-    const nowYear = new Date().getFullYear()
 
     const organization_id = Number(body.organization_id)
     const security_product_id = Number(body.security_product_id)
 
-    if (!Number.isFinite(organization_id) || !Number.isInteger(organization_id)) {
-      return reply.code(400).send({ error: 'organization_id must be an integer' })
+    if (!Number.isFinite(organization_id)) {
+      return reply.code(400).send({ error: 'organization_id must be a number' })
     }
-    if (!Number.isFinite(security_product_id) || !Number.isInteger(security_product_id)) {
-      return reply.code(400).send({ error: 'security_product_id must be an integer' })
+    if (!Number.isFinite(security_product_id)) {
+      return reply.code(400).send({ error: 'security_product_id must be a number' })
     }
+
+    const nowYear = new Date().getFullYear()
 
     const product_release_year = normalizeYear(body.product_release_year, nowYear)
     if (product_release_year === '__invalid__') {
@@ -56,19 +79,36 @@ export async function orgProductAdminRoutes(app, { supabase }) {
       .select('*')
       .single()
 
-    if (error) {
-      return reply.code(500).send({ error: error.message })
-    }
-    return reply.send({ data })
+    // 这里沿用你项目一直以来的风格：把 Supabase 错误作为 400 返回（不是 500）
+    if (error) return reply.code(400).send({ error: error.message })
+
+    return reply.send({ organization_product: data })
   })
 
-  // List for an organization
+  /**
+   * GET /api/admin/org_product?organization_id=123
+   *
+   * Return:
+   * {
+   *   items: [
+   *     {
+   *       organization_product_id,
+   *       organization_id,
+   *       security_product_id,
+   *       product_release_year,
+   *       product_end_year,
+   *       recommendation_score,
+   *       product: { security_product_name, security_product_slug }
+   *     }, ...
+   *   ]
+   * }
+   */
   app.get('/org_product', async (req, reply) => {
-    const q = req.query || {}
-    const organization_id = Number(q.organization_id)
+    if (!requireAdmin(req, reply)) return
 
-    if (!Number.isFinite(organization_id) || !Number.isInteger(organization_id)) {
-      return reply.code(400).send({ error: 'organization_id query param must be an integer' })
+    const organization_id = Number(req.query?.organization_id)
+    if (!Number.isFinite(organization_id)) {
+      return reply.code(400).send({ error: 'organization_id must be a number' })
     }
 
     const { data, error } = await supabase
@@ -86,11 +126,12 @@ export async function orgProductAdminRoutes(app, { supabase }) {
         )
       `)
       .eq('organization_id', organization_id)
-      .order('organization_product_id', { ascending: false })
+      .order('organization_product_id', { ascending: true })
+      .limit(500)
 
-    if (error) return reply.code(500).send({ error: error.message })
+    if (error) return reply.code(400).send({ error: error.message })
 
-    const rows = (data || []).map((r) => ({
+    const items = (data || []).map((r) => ({
       organization_product_id: r.organization_product_id,
       organization_id: r.organization_id,
       security_product_id: r.security_product_id,
@@ -105,11 +146,13 @@ export async function orgProductAdminRoutes(app, { supabase }) {
         : null
     }))
 
-    return reply.send(rows)
+    return reply.send({ items })
   })
 
   /**
-   * Patch:
+   * PATCH /api/admin/org_product/:id
+   *
+   * Body:
    * {
    *   product_release_year?: number|null,
    *   product_end_year?: number|null,
@@ -117,13 +160,14 @@ export async function orgProductAdminRoutes(app, { supabase }) {
    * }
    */
   app.patch('/org_product/:id', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return
+
     const id = Number(req.params?.id)
-    if (!Number.isFinite(id) || !Number.isInteger(id)) {
-      return reply.code(400).send({ error: 'id must be an integer' })
-    }
+    if (!Number.isFinite(id)) return reply.code(400).send({ error: 'Invalid organization_product id' })
 
     const body = req.body || {}
     const nowYear = new Date().getFullYear()
+
     const patch = {}
 
     if ('product_release_year' in body) {
@@ -143,15 +187,15 @@ export async function orgProductAdminRoutes(app, { supabase }) {
     }
 
     if ('recommendation_score' in body) {
-      const sc = normalizeScore(body.recommendation_score)
-      if (sc === '__invalid__') {
+      const v = normalizeScore(body.recommendation_score)
+      if (v === '__invalid__') {
         return reply.code(400).send({ error: 'recommendation_score must be an integer between 1 and 10' })
       }
-      patch.recommendation_score = sc === undefined ? null : sc
+      patch.recommendation_score = v === undefined ? null : v
     }
 
-    if (Object.keys(patch).length === 0) {
-      return reply.code(400).send({ error: 'No patch fields provided' })
+    if (!Object.keys(patch).length) {
+      return reply.code(400).send({ error: 'No updatable fields in body' })
     }
 
     const { data, error } = await supabase
@@ -161,8 +205,26 @@ export async function orgProductAdminRoutes(app, { supabase }) {
       .select('*')
       .single()
 
-    if (error) return reply.code(500).send({ error: error.message })
-    return reply.send({ data })
+    if (error) return reply.code(400).send({ error: error.message })
+    return reply.send({ organization_product: data })
+  })
+
+  /**
+   * DELETE /api/admin/org_product/:id
+   */
+  app.delete('/org_product/:id', async (req, reply) => {
+    if (!requireAdmin(req, reply)) return
+
+    const id = Number(req.params?.id)
+    if (!Number.isFinite(id)) return reply.code(400).send({ error: 'Invalid organization_product id' })
+
+    const { error } = await supabase
+      .from('organization_product')
+      .delete()
+      .eq('organization_product_id', id)
+
+    if (error) return reply.code(400).send({ error: error.message })
+    return reply.send({ ok: true })
   })
 }
 
