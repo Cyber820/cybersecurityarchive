@@ -298,6 +298,8 @@
               <div id="orgProductProdList" style="margin-top:10px;"></div>
               <div id="orgProductProdErr" class="err"></div>
             </div>
+            
+
 
             <div class="hint">写入时保存归一后的主产品 ID（security_product_id）。</div>
           </div>
@@ -319,6 +321,20 @@
           <div id="orgProductEndYearErr" class="err"></div>
         </div>
       </div>
+
+      <div class="row">
+  <div class="label">评分</div>
+  <div>
+    <select id="orgProductScore" class="select">
+      <option value="">（不填写）</option>
+      <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+      <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+      <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+      <option value="10">10</option>
+    </select>
+    <div class="hint">选填：1-10，用于后端推荐逻辑（前端不展示分数）。</div>
+  </div>
+</div>
 
       <div class="modal-actions">
         <button id="orgProductReset" class="btn" type="button">清空</button>
@@ -399,6 +415,21 @@
         </div>
       </div>
 
+      <div class="row">
+  <div class="label">评分</div>
+  <div>
+    <select id="orgProductEditItemScore" class="select">
+      <option value="">（不填写）</option>
+      <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+      <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+      <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+      <option value="10">10</option>
+    </select>
+    <div class="hint">选填：1-10。</div>
+  </div>
+</div>
+
+      
       <div id="orgProductEditItemPreview" class="prelike" style="display:none;"></div>
 
       <div class="modal-actions">
