@@ -11,7 +11,6 @@ console.log('[orgProduct] version = 2026-02-13-orgProductEdit-A')
  * - security_product_id (int8)  FK -> cybersecurity_product.security_product_id
  * - product_release_year (int4, nullable)
  * - product_end_year (int4, nullable)
- * - recommendation_score (int2, nullable, 1~10)
  *
  * Routes:
  * - POST   /api/admin/org_product                         create
@@ -28,8 +27,7 @@ export function registerOrgProductAdmin(app) {
    *   organization_id: number,
    *   security_product_id: number,
    *   product_release_year?: number|null,
- *   product_end_year?: number|null,
- *   recommendation_score?: number|null
+   *   product_end_year?: number|null
    * }
    */
   app.post('/org_product', async (req, reply) => {
@@ -59,17 +57,11 @@ export function registerOrgProductAdmin(app) {
       return reply.code(400).send({ error: `product_end_year must be an integer between 1990 and ${nowYear}` })
     }
 
-    const recommendation_score = normalizeScore(body.recommendation_score)
-    if (recommendation_score === '__invalid__') {
-      return reply.code(400).send({ error: 'recommendation_score must be an integer between 1 and 10 (or null)' })
-    }
-
     const payload = {
       organization_id,
       security_product_id,
       product_release_year: product_release_year === undefined ? null : product_release_year,
-      product_end_year: product_end_year === undefined ? null : product_end_year,
-      recommendation_score: recommendation_score === undefined ? null : recommendation_score
+      product_end_year: product_end_year === undefined ? null : product_end_year
     }
 
     const { data, error } = await supabase
@@ -117,7 +109,6 @@ export function registerOrgProductAdmin(app) {
         security_product_id,
         product_release_year,
         product_end_year,
-        recommendation_score,
         cybersecurity_product:cybersecurity_product (
           security_product_name,
           security_product_slug
@@ -135,7 +126,6 @@ export function registerOrgProductAdmin(app) {
       security_product_id: r.security_product_id,
       product_release_year: r.product_release_year ?? null,
       product_end_year: r.product_end_year ?? null,
-      recommendation_score: r.recommendation_score ?? null,
       product: r.cybersecurity_product
         ? {
             security_product_name: r.cybersecurity_product.security_product_name,
@@ -152,8 +142,7 @@ export function registerOrgProductAdmin(app) {
    * Body:
    * {
    *   product_release_year?: number|null,
-   *   product_end_year?: number|null,
-   *   recommendation_score?: number|null
+   *   product_end_year?: number|null
    * }
    */
   app.patch('/org_product/:id', async (req, reply) => {
@@ -182,14 +171,6 @@ export function registerOrgProductAdmin(app) {
         return reply.code(400).send({ error: `product_end_year must be an integer between 1990 and ${nowYear}` })
       }
       patch.product_end_year = v === undefined ? null : v
-    }
-
-    if ('recommendation_score' in body) {
-      const v = normalizeScore(body.recommendation_score)
-      if (v === '__invalid__') {
-        return reply.code(400).send({ error: 'recommendation_score must be an integer between 1 and 10 (or null)' })
-      }
-      patch.recommendation_score = v === undefined ? null : v
     }
 
     if (!Object.keys(patch).length) {
@@ -231,13 +212,5 @@ function normalizeYear(v, nowYear) {
   const n = Number(v)
   if (!Number.isFinite(n) || !Number.isInteger(n)) return '__invalid__'
   if (n < 1990 || n > nowYear) return '__invalid__'
-  return n
-}
-
-function normalizeScore(v) {
-  if (v === null || v === undefined || v === '') return undefined
-  const n = Number(v)
-  if (!Number.isFinite(n) || !Number.isInteger(n)) return '__invalid__'
-  if (n < 1 || n > 10) return '__invalid__'
   return n
 }
