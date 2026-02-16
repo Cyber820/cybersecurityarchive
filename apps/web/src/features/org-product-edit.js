@@ -1,48 +1,66 @@
 // apps/web/src/features/org-product-edit.js
 import { createSingleSelectPicker } from '../ui/single-select-picker.js'
 
+function esc(s) {
+  return String(s ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+function showErr(el, msg) {
+  if (!el) return
+  el.textContent = msg || ''
+}
+
 function validateYearRange(val, { min = 1990, max = new Date().getFullYear() } = {}) {
-  const s = String(val || '').trim()
+  const s = String(val ?? '').trim()
   if (!s) return { ok: true, value: null }
   const n = Number(s)
-  if (!Number.isFinite(n) || !Number.isInteger(n)) return { ok: false, msg: '必须为整数年份。' }
-  if (n < min || n > max) return { ok: false, msg: `年份范围：${min} ~ ${max}。` }
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return { ok: false, msg: `年份必须为整数。` }
+  if (n < min || n > max) return { ok: false, msg: `年份范围为 ${min} ~ ${max}。` }
   return { ok: true, value: n }
 }
 
 function validateScore(val) {
-  const s = String(val || '').trim()
+  const s = String(val ?? '').trim()
   if (!s) return { ok: true, value: null }
   const n = Number(s)
-  if (!Number.isFinite(n) || !Number.isInteger(n)) return { ok: false, msg: '必须为 1~10 的整数。' }
-  if (n < 1 || n > 10) return { ok: false, msg: '范围：1 ~ 10。' }
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return { ok: false, msg: '评分必须为 1-10 的整数。' }
+  if (n < 1 || n > 10) return { ok: false, msg: '评分范围为 1-10。' }
   return { ok: true, value: n }
 }
 
-function esc(s) {
-  return String(s ?? '').replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]))
-}
+export function mountOrgProductEditAdmin(ctx) {
+  const $ = (id) => document.getElementById(id)
 
-export function mountOrgProductEdit(ctx) {
-  const { $, openModal, closeModal, apiFetch, getToken, showConfirmFlow } = ctx
-
-  const btnOpen = $('btnOpenOrgProductEdit')
+  // open/close main modal
+  const btnOpen = $('btnOrgProductEditOpen')
   const modal = $('orgProductEditModal')
   const closeBtn = $('orgProductEditClose')
 
-  const listEl = $('orgProductEditList')
-  const refreshBtn = $('orgProductEditRefresh')
-
+  // organization selector
+  const orgPicked = $('orgProductEditOrgPicked')
+  const orgClear = $('orgProductEditOrgClear')
+  const orgSearch = $('orgProductEditOrgSearch')
+  const orgStatus = $('orgProductEditOrgStatus')
+  const orgList = $('orgProductEditOrgList')
   const orgErr = $('orgProductEditOrgErr')
 
-  // edit-item modal
+  // list area
+  const listStatus = $('orgProductEditListStatus')
+  const listEl = $('orgProductEditList')
+
+  // edit item modal
   const itemModal = $('orgProductEditItemModal')
-  const itemCloseBtn = $('orgProductEditItemClose')
-  const itemResetBtn = $('orgProductEditItemReset')
-  const itemSubmitBtn = $('orgProductEditItemSubmit')
+  const editModalTitle = $('orgProductEditItemTitle')
+  const editModalSubtitle = $('orgProductEditItemSubtitle')
   const previewEl = $('orgProductEditItemPreview')
+  const itemCloseBtn = $('orgProductEditItemClose')
+  const cancelBtn = $('orgProductEditItemCancel')
+  const submitBtn = $('orgProductEditItemSubmit')
 
   const releaseYearEl = $('orgProductEditItemReleaseYear')
   const releaseYearErr = $('orgProductEditItemReleaseYearErr')
@@ -52,161 +70,210 @@ export function mountOrgProductEdit(ctx) {
   const scoreEl = $('orgProductEditItemScore')
   const scoreErr = $('orgProductEditItemScoreErr')
 
-  if (!btnOpen || !modal || !closeBtn || !listEl || !refreshBtn || !itemModal) {
+  if (!btnOpen || !modal || !closeBtn || !orgErr || !listStatus || !listEl || !itemModal || !scoreEl) {
     console.warn('[orgProductEdit] mount skipped: missing required DOM nodes.')
     return
   }
 
-  function showErr(el, msg) {
-    if (!el) return
-    el.textContent = msg || ''
-    el.style.display = msg ? '' : 'none'
-  }
-
-  function clearErrors() {
-    showErr(orgErr, '')
-    showErr(releaseYearErr, '')
-    showErr(endYearErr, '')
-    showErr(scoreErr, '')
-    showErr(scoreErr, '')
-  }
-
-  closeBtn.addEventListener('click', () => closeModal(modal))
-  itemCloseBtn?.addEventListener('click', () => closeModal(itemModal))
-
   const orgPicker = createSingleSelectPicker({
-    pickedEl: $('orgProductEditOrgPicked'),
-    clearBtn: $('orgProductEditOrgClear'),
-    inputEl: $('orgProductEditOrgSearch'),
-    statusEl: $('orgProductEditOrgStatus'),
-    listEl: $('orgProductEditOrgList'),
-    errEl: orgErr,
-    emptyText: '未选择（请先选择一个企业/机构）',
-    searchFn: async (q) => {
-      const token = getToken()
-      return await apiFetch(`/api/admin/organization/search?q=${encodeURIComponent(q)}`, { token })
+    pickedEl: orgPicked,
+    clearEl: orgClear,
+    searchEl: orgSearch,
+    statusEl: orgStatus,
+    listEl: orgList,
+    loader: async (q) => {
+      const res = await fetch(`/api/admin/organization/search?q=${encodeURIComponent(q || '')}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return await res.json()
     },
-    renderItem: (it) => ({
-      title: it.display_name || it.organization_short_name || '（未命名）',
-      subtitle: [
-        it.organization_full_name ? `全称：${it.organization_full_name}` : null,
-        it.organization_slug ? `slug：${it.organization_slug}` : null,
-        `ID：${it.organization_id}`,
-      ].filter(Boolean).join(' · ')
+    mapItem: (row) => ({
+      id: `o:${row.organization_id}`,
+      label: row.organization_short_name || row.organization_full_name || `(id:${row.organization_id})`,
+      raw: row,
     }),
-    getId: (it) => it.organization_id,
-    getLabel: (it, rendered) => rendered?.title ?? String(it.organization_id),
   })
 
+  function openModal() { modal.style.display = 'flex' }
+  function closeModal() { modal.style.display = 'none' }
+
+  function openItemModal() { itemModal.style.display = 'flex' }
+  function closeItemModal() { itemModal.style.display = 'none' }
+
   let editingRow = null
+  let previewArmed = false
 
   function resetEditModalState() {
     editingRow = null
-    releaseYearEl.value = ''
-    endYearEl.value = ''
+    previewArmed = false
+    if (releaseYearEl) releaseYearEl.value = ''
+    if (endYearEl) endYearEl.value = ''
     if (scoreEl) scoreEl.value = ''
-    clearErrors()
-    if (previewEl) previewEl.textContent = ''
-  }
-
-  function openEditModalFromRow(el) {
-    const opId = Number(el.dataset?.opId || NaN)
-    if (!Number.isFinite(opId)) return
-
-    const y1 = el.dataset?.y1 ?? ''
-    const y2 = el.dataset?.y2 ?? ''
-    const sc = el.dataset?.score ?? ''
-
-    editingRow = {
-      organization_product_id: opId,
-      organization_id: Number(el.dataset?.orgId || NaN),
-      security_product_id: Number(el.dataset?.spId || NaN),
-      old_release_year: y1 === '' ? null : Number(y1),
-      old_end_year: y2 === '' ? null : Number(y2),
-      old_score: sc === '' ? null : Number(sc),
+    if (previewEl) {
+      previewEl.textContent = ''
+      previewEl.style.display = 'none'
     }
-
-    resetEditModalState()
-
-    releaseYearEl.value = (y1 ?? '') === '' ? '' : String(y1)
-    endYearEl.value = (y2 ?? '') === '' ? '' : String(y2)
-    if (scoreEl) scoreEl.value = (sc ?? '') === '' ? '' : String(sc)
-
-    openModal(itemModal)
+    showErr(releaseYearErr, '')
+    showErr(endYearErr, '')
+    showErr(scoreErr, '')
+    if (submitBtn) submitBtn.textContent = '确定（预览修改）'
   }
 
-  async function loadList() {
+  async function loadOrgProducts(orgId) {
+    listStatus.textContent = '加载中...'
     listEl.innerHTML = ''
-    clearErrors()
 
-    const sel = orgPicker.getSelected()
-    const orgId = Number(sel?.raw?.organization_id ?? sel?.id ?? NaN)
-    if (!Number.isFinite(orgId)) {
-      showErr(orgErr, '请先选择企业/机构。')
-      return
+    const res = await fetch(`/api/admin/org_product?organization_id=${encodeURIComponent(orgId)}`)
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      const msg = data?.error || `HTTP ${res.status}`
+      throw new Error(msg)
     }
 
-    const token = getToken()
-    const res = await apiFetch(`/api/admin/org_product?organization_id=${encodeURIComponent(orgId)}`, { token })
-    const rows = res?.items ?? []
+    const rows = Array.isArray(data) ? data : (data?.data || [])
+    listStatus.textContent = rows.length ? `共 ${rows.length} 条` : '（空）'
+    listEl.innerHTML = renderList(rows)
 
-    if (!rows.length) {
-      listEl.innerHTML = `<div class="picker-item"><div class="t">（空）</div><div class="s">该企业暂无企业产品记录</div></div>`
-      return
-    }
-
-    listEl.innerHTML = rows.map((r) => {
-      const t = esc(r.security_product_name || '（未命名产品）')
-      const s = [
-        r.security_product_slug ? `slug：${esc(r.security_product_slug)}` : null,
-        `organization_product_id：${esc(r.organization_product_id)}`,
-        r.product_release_year ? `发布：${esc(r.product_release_year)}` : null,
-        r.product_end_year ? `终止：${esc(r.product_end_year)}` : null,
-      ].filter(Boolean).join(' · ')
-
-      return `
-        <div class="picker-item"
-          data-op-id="${esc(r.organization_product_id)}"
-          data-org-id="${esc(r.organization_id)}"
-          data-sp-id="${esc(r.security_product_id)}"
-          data-y1="${esc(r.product_release_year ?? '')}"
-          data-y2="${esc(r.product_end_year ?? '')}"
-          data-score="${esc(r.recommendation_score ?? '')}"
-          >
-          <div class="t">${t}</div>
-          <div class="s">${esc(s)}</div>
-        </div>
-      `
-    }).join('')
-
-    listEl.querySelectorAll('.picker-item').forEach((it) => {
-      it.addEventListener('click', () => openEditModalFromRow(it))
+    // wire edit buttons
+    listEl.querySelectorAll('[data-action="edit"]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const el = btn.closest('.es-item')
+        if (!el) return
+        openEditModalFromRow(el)
+      })
     })
   }
 
-  function validateEditYears() {
-    clearErrors()
-    const now = new Date().getFullYear()
+  function renderList(rows) {
+    if (!rows || !rows.length) return ''
 
+    return rows.map((r) => {
+      const name = r.product?.security_product_name || r.product_name || `product_id:${r.security_product_id}`
+      const slug = r.product?.security_product_slug ? `slug:${r.product.security_product_slug}` : ''
+      const y1 = r.product_release_year == null ? '' : String(r.product_release_year)
+      const y2 = r.product_end_year == null ? '' : String(r.product_end_year)
+
+      return `
+        <div class="es-item" data-opid="${esc(r.organization_product_id)}" data-spid="${esc(r.security_product_id)}"
+             data-name="${esc(name)}" data-slug="${esc(r.product?.security_product_slug || '')}"
+             data-y1="${esc(r.product_release_year ?? '')}" data-y2="${esc(r.product_end_year ?? '')}"
+             data-score="${esc(r.recommendation_score ?? '')}">
+          <div class="es-title">${esc(name)}</div>
+          <div class="es-subtitle">
+            ${[slug, `发布：${esc(y1)}`, `终止：${esc(y2)}`, `op_id：${esc(r.organization_product_id)}`].filter(Boolean).join(' · ')}
+          </div>
+          <div class="es-actions">
+            <button class="btn" data-action="edit">编辑</button>
+          </div>
+        </div>
+      `
+    }).join('')
+  }
+
+  function openEditModalFromRow(el) {
+    resetEditModalState()
+
+    const opId = el.dataset?.opid
+    const spId = el.dataset?.spid
+    const prodName = el.dataset?.name || ''
+    const y1 = el.dataset?.y1 ?? ''
+    const y2 = el.dataset?.y2 ?? ''
+    const sc0 = el.dataset?.score ?? ''
+
+    if (!opId) {
+      alert('缺少 organization_product_id')
+      return
+    }
+
+    const orgSel = orgPicker.getSelected()
+    const orgLabel = orgSel?.label || '(未知企业)'
+
+    editingRow = {
+      organization_product_id: opId,
+      organization_name: orgLabel,
+      product_name: prodName,
+      old_release_year: y1 === '' ? null : Number(y1),
+      old_end_year: y2 === '' ? null : Number(y2),
+      old_score: sc0 === '' ? null : Number(sc0),
+    }
+
+    editModalTitle.textContent = '编辑企业产品'
+    editModalSubtitle.textContent = `${orgLabel} · ${prodName} · op_id:${opId}`
+
+    releaseYearEl.value = (y1 ?? '') === '' ? '' : String(y1)
+    endYearEl.value = (y2 ?? '') === '' ? '' : String(y2)
+    scoreEl.value = (sc0 ?? '') === '' ? '' : String(sc0)
+
+    openItemModal()
+  }
+
+  function validateEditFields() {
+    showErr(releaseYearErr, '')
+    showErr(endYearErr, '')
+    showErr(scoreErr, '')
+
+    const now = new Date().getFullYear()
     const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
     if (!r.ok) { showErr(releaseYearErr, r.msg); return null }
 
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
     if (!e.ok) { showErr(endYearErr, e.msg); return null }
 
-    const s = validateScore(scoreEl ? scoreEl.value : '')
-    if (!s.ok) { showErr(scoreErr, s.msg); return null }
+    const sc = validateScore(scoreEl.value)
+    if (!sc.ok) { showErr(scoreErr, sc.msg); return null }
 
-    return { product_release_year: r.value, product_end_year: e.value, recommendation_score: s.value }
+    return { product_release_year: r.value, product_end_year: e.value, recommendation_score: sc.value }
   }
 
-  async function submitEdit() {
+  btnOpen.addEventListener('click', async () => {
+    resetEditModalState()
+    orgPicker.clear()
+    listStatus.textContent = '请选择企业以加载其企业产品列表。'
+    listEl.innerHTML = ''
+    openModal()
+  })
+
+  closeBtn.addEventListener('click', closeModal)
+
+  // when org changes, load list
+  orgSearch.addEventListener('keydown', async (e) => {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+
+    const sel = orgPicker.getSelected()
+    if (!sel?.raw?.organization_id) return
+    try {
+      await loadOrgProducts(sel.raw.organization_id)
+    } catch (err) {
+      listStatus.textContent = `加载失败：${err?.message || err}`
+    }
+  })
+
+  // also when user picks in list (picker sets selection), let them click search button in UI; easiest is:
+  orgList.addEventListener('click', async () => {
+    const sel = orgPicker.getSelected()
+    if (!sel?.raw?.organization_id) return
+    try {
+      await loadOrgProducts(sel.raw.organization_id)
+    } catch (err) {
+      listStatus.textContent = `加载失败：${err?.message || err}`
+    }
+  })
+
+  itemCloseBtn?.addEventListener('click', () => {
+    closeItemModal()
+    resetEditModalState()
+  })
+  cancelBtn?.addEventListener('click', () => {
+    closeItemModal()
+    resetEditModalState()
+  })
+
+  submitBtn?.addEventListener('click', async () => {
     if (!editingRow) return
 
-    const patch = validateEditYears()
+    const patch = validateEditFields()
     if (!patch) return
 
-    const opId = editingRow.organization_product_id
     const newY1 = patch.product_release_year ?? null
     const newY2 = patch.product_end_year ?? null
     const newSc = patch.recommendation_score ?? null
@@ -215,72 +282,59 @@ export function mountOrgProductEdit(ctx) {
     const oldY2 = editingRow.old_end_year ?? null
     const oldSc = editingRow.old_score ?? null
 
-    const previewText = [
-      '将提交更新：',
-      `organization_product_id：${opId}`,
-      `发布年份：${oldY1 ?? '—'}  ->  ${newY1 ?? '—'}`,
-      `终止年份：${oldY2 ?? '—'}  ->  ${newY2 ?? '—'}`,
-      `评分：${oldSc ?? '—'}  ->  ${newSc ?? '—'}`,
-    ].join('\n')
-    if (previewEl) previewEl.textContent = previewText
+    if (!previewArmed) {
+      // first click: preview
+      previewEl.style.display = 'block'
+      previewEl.textContent = [
+        '预览修改：',
+        '',
+        `企业：${editingRow.organization_name}`,
+        `产品：${editingRow.product_name}`,
+        '',
+        `发布年份：${oldY1 ?? '—'}  ->  ${newY1 ?? '—'}`,
+        `终止年份：${oldY2 ?? '—'}  ->  ${newY2 ?? '—'}`,
+        `评分：${oldSc ?? '—'}  ->  ${newSc ?? '—'}`,
+        '',
+        '请再次点击“再次确定提交”以真正写入数据库。'
+      ].join('\n')
 
-    const token = getToken()
-    const action = async () => {
-      const res = await apiFetch(`/api/admin/org_product/${encodeURIComponent(opId)}`, { method: 'PATCH', token, body: patch })
-      const row = res?.organization_product ?? res
-
-      alert([
-        '✅ 更新成功：organization_product',
-        `organization_product_id = ${opId}`,
-        `product_release_year = ${(row?.product_release_year ?? patch.product_release_year) ?? '—'}`,
-        `product_end_year = ${(row?.product_end_year ?? patch.product_end_year) ?? '—'}`,
-        `recommendation_score = ${(row?.recommendation_score ?? patch.recommendation_score) ?? '—'}`,
-      ].join('\n'))
-
-      closeModal(itemModal)
-      await loadList()
+      previewArmed = true
+      submitBtn.textContent = '再次确定提交'
+      return
     }
 
-    if (typeof showConfirmFlow === 'function') {
-      await showConfirmFlow({
-        titleLoading: '更新中',
-        bodyLoading: '写入更新…',
-        action,
+    // second click: submit
+    try {
+      submitBtn.disabled = true
+      submitBtn.textContent = '提交中...'
+
+      const res = await fetch(`/api/admin/org_product/${encodeURIComponent(editingRow.organization_product_id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
       })
-    } else {
-      await action()
-    }
-  }
 
-  refreshBtn.addEventListener('click', async () => {
-    refreshBtn.disabled = true
-    try { await loadList() }
-    finally { refreshBtn.disabled = false }
-  })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        const msg = data?.error || `HTTP ${res.status}`
+        throw new Error(msg)
+      }
 
-  btnOpen.addEventListener('click', () => {
-    orgPicker.clear()
-    listEl.innerHTML = ''
-    clearErrors()
-    openModal(modal)
-    orgPicker.focus()
-  })
+      alert('✅ 更新成功')
+      closeItemModal()
+      resetEditModalState()
 
-  itemResetBtn?.addEventListener('click', () => {
-    if (!editingRow) return
-    releaseYearEl.value = (editingRow.old_release_year ?? '') === '' ? '' : String(editingRow.old_release_year ?? '')
-    endYearEl.value = (editingRow.old_end_year ?? '') === '' ? '' : String(editingRow.old_end_year ?? '')
-    if (scoreEl) scoreEl.value = (editingRow.old_score ?? '') === '' ? '' : String(editingRow.old_score ?? '')
-    clearErrors()
-  })
-
-  itemSubmitBtn?.addEventListener('click', async () => {
-    itemSubmitBtn.disabled = true
-    itemResetBtn.disabled = true
-    try { await submitEdit() }
-    finally {
-      itemSubmitBtn.disabled = false
-      itemResetBtn.disabled = false
+      // reload list for current org
+      const sel = orgPicker.getSelected()
+      if (sel?.raw?.organization_id) {
+        await loadOrgProducts(sel.raw.organization_id)
+      }
+    } catch (err) {
+      alert(`❌ 更新失败：${err?.message || err}`)
+    } finally {
+      submitBtn.disabled = false
+      submitBtn.textContent = '确定（预览修改）'
+      previewArmed = false
     }
   })
 }
