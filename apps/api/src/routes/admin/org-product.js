@@ -1,59 +1,40 @@
 // apps/api/src/routes/admin/org-product.js
-import { supabase } from '../../supabase.js'
-import { requireAdmin } from './auth.js'
+
 console.log('[orgProduct] version = 2026-02-16-orgProductScore-A')
 
-/**
- * organization_product
- * Columns (per your ERD / current implementation):
- * - organization_product_id (int8)
- * - organization_id (int8)
- * - security_product_id (int8)  FK -> cybersecurity_product.security_product_id
- * - product_release_year (int4, nullable)
- * - product_end_year (int4, nullable)
- * - recommendation_score (int2, nullable, 1~10)
- *
- * Routes:
- * - POST   /api/admin/org_product                         create
- * - GET    /api/admin/org_product?organization_id=123      list by org
- * - PATCH  /api/admin/org_product/:id                     update years + score
- * - DELETE /api/admin/org_product/:id                     delete row
- */
+function normalizeScore(v) {
+  if (v === undefined || v === null || v === '') return undefined
+  const n = Number(v)
+  if (!Number.isInteger(n) || n < 1 || n > 10) return '__invalid__'
+  return n
+}
+
+function normalizeYear(v, nowYear) {
+  if (v === undefined || v === null || v === '') return undefined
+  const n = Number(v)
+  if (!Number.isInteger(n) || n < 1990 || n > nowYear) return '__invalid__'
+  return n
+}
+
 export function registerOrgProductAdmin(app) {
-  /**
-   * POST /api/admin/org_product
-   *
-   * Body:
-   * {
-   *   organization_id: number,
-   *   security_product_id: number,
-   *   product_release_year?: number|null,
-   *   product_end_year?: number|null,
-   *   recommendation_score?: number|null
-   * }
-   */
-  app.post('/org_product', async (req, reply) => {
-    if (!requireAdmin(req, reply)) return
-
+  // CREATE
+  app.post('/api/admin/org_product', async (req, reply) => {
+    const db = req.db
     const body = req.body || {}
-
-    const organization_id = Number(body.organization_id)
-    const security_product_id = Number(body.security_product_id)
-
-    if (!Number.isFinite(organization_id)) {
-      return reply.code(400).send({ error: 'organization_id must be a number' })
-    }
-    if (!Number.isFinite(security_product_id)) {
-      return reply.code(400).send({ error: 'security_product_id must be a number' })
-    }
 
     const nowYear = new Date().getFullYear()
 
+    // required
+    const organization_slug = String(body.organization_slug || '').trim()
+    const security_product_slug = String(body.security_product_slug || '').trim()
+    if (!organization_slug) return reply.code(400).send({ error: 'organization_slug required' })
+    if (!security_product_slug) return reply.code(400).send({ error: 'security_product_slug required' })
+
+    // years optional
     const product_release_year = normalizeYear(body.product_release_year, nowYear)
     if (product_release_year === '__invalid__') {
       return reply.code(400).send({ error: `product_release_year must be an integer between 1990 and ${nowYear}` })
     }
-
     const product_end_year = normalizeYear(body.product_end_year, nowYear)
     if (product_end_year === '__invalid__') {
       return reply.code(400).send({ error: `product_end_year must be an integer between 1990 and ${nowYear}` })
@@ -64,107 +45,83 @@ export function registerOrgProductAdmin(app) {
       return reply.code(400).send({ error: 'recommendation_score must be an integer between 1 and 10' })
     }
 
+    // lookup org/product
+    const org = await db('organization')
+      .select('organization_id')
+      .where({ organization_slug })
+      .first()
+
+    if (!org) return reply.code(404).send({ error: 'organization not found' })
+
+    const product = await db('cybersecurity_product')
+      .select('security_product_id')
+      .where({ security_product_slug })
+      .first()
+
+    if (!product) return reply.code(404).send({ error: 'product not found' })
+
     const payload = {
-      organization_id,
-      security_product_id,
+      organization_id: org.organization_id,
+      security_product_id: product.security_product_id,
       product_release_year: product_release_year === undefined ? null : product_release_year,
       product_end_year: product_end_year === undefined ? null : product_end_year,
-      recommendation_score: recommendation_score === undefined ? null : recommendation_score
+      recommendation_score: recommendation_score === undefined ? null : recommendation_score,
     }
 
-    const { data, error } = await supabase
-      .from('organization_product')
-      .insert(payload)
-      .select('*')
-      .single()
+    try {
+      const [row] = await db('organization_product')
+        .insert(payload)
+        .returning(['organization_product_id'])
 
-    if (error) return reply.code(400).send({ error: error.message })
-
-    return reply.send({ organization_product: data })
+      return reply.send({ ok: true, organization_product_id: row?.organization_product_id })
+    } catch (e) {
+      return reply.code(500).send({ error: String(e?.message || e) })
+    }
   })
 
-  /**
-   * GET /api/admin/org_product?organization_id=123
-   *
-   * Return:
-   * {
-   *   items: [
-   *     {
-   *       organization_product_id,
-   *       organization_id,
-   *       security_product_id,
-   *       product_release_year,
-   *       product_end_year,
-   *       recommendation_score,
-   *       product: { security_product_name, security_product_slug }
-   *     }, ...
-   *   ]
-   * }
-   */
-  app.get('/org_product', async (req, reply) => {
-    if (!requireAdmin(req, reply)) return
+  // SEARCH (for edit list)
+  app.get('/api/admin/org_product/search', async (req, reply) => {
+    const db = req.db
+    const q = String(req.query?.q || '').trim()
 
-    const organization_id = Number(req.query?.organization_id)
-    if (!Number.isFinite(organization_id)) {
-      return reply.code(400).send({ error: 'organization_id must be a number' })
+    // 简单策略：允许空 q（返回最近一些）或按企业/产品 slug/name 模糊
+    const base = db('organization_product as op')
+      .leftJoin('organization as o', 'o.organization_id', 'op.organization_id')
+      .leftJoin('cybersecurity_product as p', 'p.security_product_id', 'op.security_product_id')
+      .select([
+        'op.organization_product_id',
+        'op.product_release_year',
+        'op.product_end_year',
+        'op.recommendation_score',
+        'o.organization_short_name',
+        'o.organization_slug',
+        'p.security_product_name',
+        'p.security_product_slug',
+      ])
+      .orderBy('op.organization_product_id', 'desc')
+      .limit(50)
+
+    if (q) {
+      base.where((w) => {
+        w.whereILike('o.organization_slug', `%${q}%`)
+          .orWhereILike('o.organization_short_name', `%${q}%`)
+          .orWhereILike('p.security_product_slug', `%${q}%`)
+          .orWhereILike('p.security_product_name', `%${q}%`)
+      })
     }
 
-    const { data, error } = await supabase
-      .from('organization_product')
-      .select(`
-        organization_product_id,
-        organization_id,
-        security_product_id,
-        product_release_year,
-        product_end_year,
-        recommendation_score,
-        cybersecurity_product:cybersecurity_product (
-          security_product_name,
-          security_product_slug
-        )
-      `)
-      .eq('organization_id', organization_id)
-      .order('organization_product_id', { ascending: true })
-      .limit(500)
-
-    if (error) return reply.code(400).send({ error: error.message })
-
-    const items = (data || []).map((r) => ({
-      organization_product_id: r.organization_product_id,
-      organization_id: r.organization_id,
-      security_product_id: r.security_product_id,
-      product_release_year: r.product_release_year ?? null,
-      product_end_year: r.product_end_year ?? null,
-      recommendation_score: r.recommendation_score ?? null,
-      product: r.cybersecurity_product
-        ? {
-            security_product_name: r.cybersecurity_product.security_product_name,
-            security_product_slug: r.cybersecurity_product.security_product_slug
-          }
-        : null
-    }))
-
-    return reply.send({ items })
+    const rows = await base
+    return reply.send({ ok: true, data: rows })
   })
 
-  /**
-   * PATCH /api/admin/org_product/:id
-   * Body:
-   * {
-   *   product_release_year?: number|null,
-   *   product_end_year?: number|null,
-   *   recommendation_score?: number|null
-   * }
-   */
-  app.patch('/org_product/:id', async (req, reply) => {
-    if (!requireAdmin(req, reply)) return
-
-    const id = Number(req.params?.id)
-    if (!Number.isFinite(id)) return reply.code(400).send({ error: 'Invalid organization_product id' })
+  // PATCH
+  app.patch('/api/admin/org_product/:organization_product_id', async (req, reply) => {
+    const db = req.db
+    const id = Number(req.params.organization_product_id)
+    if (!Number.isInteger(id)) return reply.code(400).send({ error: 'invalid id' })
 
     const body = req.body || {}
     const nowYear = new Date().getFullYear()
-
     const patch = {}
 
     if ('product_release_year' in body) {
@@ -174,7 +131,6 @@ export function registerOrgProductAdmin(app) {
       }
       patch.product_release_year = v === undefined ? null : v
     }
-
     if ('product_end_year' in body) {
       const v = normalizeYear(body.product_end_year, nowYear)
       if (v === '__invalid__') {
@@ -191,57 +147,19 @@ export function registerOrgProductAdmin(app) {
       patch.recommendation_score = v === undefined ? null : v
     }
 
-    if (!Object.keys(patch).length) {
-      return reply.code(400).send({ error: 'No updatable fields in body' })
+    if (Object.keys(patch).length === 0) {
+      return reply.code(400).send({ error: 'no fields to patch' })
     }
 
-    const { data, error } = await supabase
-      .from('organization_product')
-      .update(patch)
-      .eq('organization_product_id', id)
-      .select('*')
-      .single()
+    try {
+      const n = await db('organization_product')
+        .where({ organization_product_id: id })
+        .update(patch)
 
-    if (error) return reply.code(400).send({ error: error.message })
-    return reply.send({ organization_product: data })
+      if (!n) return reply.code(404).send({ error: 'not found' })
+      return reply.send({ ok: true })
+    } catch (e) {
+      return reply.code(500).send({ error: String(e?.message || e) })
+    }
   })
-
-  /**
-   * DELETE /api/admin/org_product/:id
-   */
-  app.delete('/org_product/:id', async (req, reply) => {
-    if (!requireAdmin(req, reply)) return
-
-    const id = Number(req.params?.id)
-    if (!Number.isFinite(id)) return reply.code(400).send({ error: 'Invalid organization_product id' })
-
-    const { error } = await supabase
-      .from('organization_product')
-      .delete()
-      .eq('organization_product_id', id)
-
-    if (error) return reply.code(400).send({ error: error.message })
-    return reply.send({ ok: true })
-  })
-}
-
-// 兼容旧命名（你提到之前用的是 export async function orgProductAdminRoutes(app) ）
-export async function orgProductAdminRoutes(app) {
-  registerOrgProductAdmin(app)
-}
-
-function normalizeYear(v, nowYear) {
-  if (v === null || v === undefined || v === '') return undefined
-  const n = Number(v)
-  if (!Number.isFinite(n) || !Number.isInteger(n)) return '__invalid__'
-  if (n < 1990 || n > nowYear) return '__invalid__'
-  return n
-}
-
-function normalizeScore(v) {
-  if (v === null || v === undefined || v === '') return undefined
-  const n = Number(v)
-  if (!Number.isFinite(n) || !Number.isInteger(n)) return '__invalid__'
-  if (n < 1 || n > 10) return '__invalid__'
-  return n
 }
