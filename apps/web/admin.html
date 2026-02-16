@@ -1,452 +1,587 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Industry Archive Admin</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin</title>
   <style>
-    :root{
-      --bg:#f7f7f9;
-      --card:#fff;
-      --txt:#111;
-      --muted:rgba(0,0,0,0.62);
-      --bd:rgba(0,0,0,0.14);
-      --bd2:rgba(0,0,0,0.22);
-      --pri:#111;
+    :root {
+      --border: rgba(0,0,0,0.18);
+      --muted: rgba(0,0,0,0.55);
+      --bg: #f6f7f9;
+      --card: #fff;
+      --primary: #2563eb;
+      --danger: #dc2626;
     }
-    body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background:var(--bg); color:var(--txt); }
-    .wrap{ max-width: 980px; margin: 22px auto; padding: 0 14px; }
-    h1{ font-size: 20px; margin: 0 0 14px; }
-    .toolbar{ display:flex; gap:10px; flex-wrap:wrap; margin: 12px 0; }
-    .card{ background:var(--card); border:1px solid var(--bd); border-radius:14px; padding: 14px; margin-top: 14px; }
-    .label{ font-weight:800; font-size: 13px; margin-bottom: 6px; }
-    .hint{ color:var(--muted); font-size: 12px; margin-top: 6px; }
-    .err{ color:#b00020; font-size: 12px; margin-top: 6px; display:none; }
-    .input, .textarea, .select{
-      width:100%;
-      box-sizing:border-box;
-      border:1px solid var(--bd2);
-      border-radius:12px;
-      padding: 10px 10px;
-      font-size: 13px;
-      background:#fff;
-      color:var(--txt);
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: #111;
     }
-    .textarea{ min-height: 110px; resize: vertical; }
-    .row{ display:grid; grid-template-columns: 160px 1fr; gap: 12px; align-items:start; margin: 12px 0; }
-    @media (max-width: 720px){ .row{ grid-template-columns: 1fr; } }
-    .btn{
-      appearance:none;
-      border: 1px solid var(--bd2);
-      background:#fff;
-      color:var(--txt);
-      border-radius: 999px;
-      padding: 10px 14px;
-      font-size: 13px;
-      cursor:pointer;
-    }
-    .btn:hover{ border-color: rgba(0,0,0,0.35); }
-    .btn:disabled{ opacity: .6; cursor:not-allowed; }
-    .btn-primary{
-      background: var(--pri);
-      color:#fff;
-      border-color: var(--pri);
-    }
-    .btn-primary:hover{ opacity:.9; }
-
-    .modal-overlay{
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.35);
-      display:none;
-      align-items:center;
-      justify-content:center;
-      z-index: 9999;
-      padding: 16px;
-    }
-    .modal{
-      width: min(920px, 100%);
-      max-height: 85vh;
-      overflow:auto;
-      background:#fff;
-      border: 1px solid rgba(0,0,0,0.20);
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 18px; }
+    h1 { margin: 8px 0 16px; font-size: 22px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
       border-radius: 14px;
       padding: 14px;
-      box-sizing:border-box;
+      margin: 12px 0;
+      box-shadow: 0 1px 0 rgba(0,0,0,0.03);
     }
-    .modal-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom: 10px; }
-    .modal-title{ font-size: 15px; font-weight: 900; }
-    .modal-actions{ display:flex; gap:10px; justify-content:flex-end; margin-top: 14px; flex-wrap:wrap; }
+    .row { display: grid; grid-template-columns: 160px 1fr; gap: 10px; margin: 10px 0; align-items: start; }
+    .label { font-size: 13px; color: var(--muted); padding-top: 8px; }
+    .input, .textarea, select.input {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+      background: #fff;
+      outline: none;
+    }
+    .textarea { resize: vertical; min-height: 96px; line-height: 1.5; }
+    .err { color: var(--danger); font-size: 12px; margin-top: 6px; min-height: 14px; }
+    .hint { color: var(--muted); font-size: 12px; margin-top: 6px; min-height: 14px; }
+    .actions { display: flex; gap: 10px; justify-content: flex-end; padding-top: 8px; }
+    .btn {
+      border: 1px solid var(--border);
+      background: #fff;
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+    .inline { display: flex; gap: 10px; align-items: center; }
+    .picked {
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: rgba(0,0,0,0.75);
+      background: rgba(0,0,0,0.02);
+      min-height: 18px;
+    }
+    .preview {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: rgba(0,0,0,0.02);
+      white-space: pre-wrap;
+      font-size: 13px;
+      line-height: 1.55;
+      color: rgba(0,0,0,0.85);
+    }
+    .list { border: 1px solid var(--border); border-radius: 12px; padding: 8px; max-height: 240px; overflow: auto; background: #fff; }
+    .list .item {
+      padding: 8px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    .list .item:hover { background: rgba(37,99,235,0.08); }
 
-    .confirm-overlay {
+    /* modal */
+    .af-modal-overlay {
       position: fixed;
       inset: 0;
       background: rgba(0,0,0,0.35);
-      display: none;
+      display: flex;
       align-items: center;
       justify-content: center;
       z-index: 99999;
       padding: 16px;
     }
-    .confirm {
-      width: min(520px, 100%);
+    .af-modal {
+      width: min(920px, 100%);
+      max-height: 88vh;
+      overflow: auto;
       background: #fff;
       border: 1px solid rgba(0,0,0,0.20);
       border-radius: 14px;
-      padding: 14px;
+      padding: 12px;
       box-sizing: border-box;
     }
-    .confirm-title { font-size: 15px; font-weight: 800; margin-bottom: 8px; }
-    .confirm-body { font-size: 13px; color: var(--txt); white-space: pre-wrap; }
-    .confirm-actions { display:flex; justify-content:flex-end; gap: 10px; margin-top: 12px; }
-
-    .es-item{
-      border:1px solid rgba(0,0,0,0.12);
-      border-radius:12px;
-      padding:10px;
-      cursor:pointer;
-      background:#fff;
-      margin:8px 0;
+    .af-modal-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(0,0,0,0.10);
+      margin-bottom: 10px;
     }
-    .es-item:hover{ border-color: rgba(0,0,0,0.25); }
-    .es-title{ font-weight:800; font-size:14px; }
-    .es-subtitle{ margin-top:4px; font-size:12px; color: rgba(0,0,0,0.65); }
-
-    .prelike{
-      white-space: pre-wrap;
-      font-size: 12px;
-      border: 1px dashed rgba(0,0,0,0.22);
-      border-radius: 12px;
-      padding: 10px;
-      background: rgba(0,0,0,0.02);
+    .af-modal-title { font-size: 15px; font-weight: 700; }
+    .af-btn { border: 1px solid var(--border); background: #fff; border-radius: 999px; padding: 8px 12px; cursor: pointer; }
+    .af-primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .af-row { margin: 10px 0; }
+    .af-label { font-size: 13px; color: var(--muted); margin: 0 0 6px; }
+    .af-input, .af-textarea {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+      background: #fff;
+      outline: none;
     }
+    .af-textarea { resize: vertical; min-height: 96px; line-height: 1.5; }
+    .af-err { color: var(--danger); font-size: 12px; margin-top: 6px; min-height: 14px; }
+    .af-hint { color: var(--muted); font-size: 12px; margin-top: 6px; min-height: 14px; }
+    .af-actions { display: flex; gap: 10px; justify-content: flex-end; padding-top: 8px; }
+    .af-inline { display:flex; gap:10px; align-items:center; }
+    .af-picked { border: 1px dashed var(--border); border-radius: 10px; padding: 10px 12px; background: rgba(0,0,0,0.02); }
+    .af-preview { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; background: rgba(0,0,0,0.02); white-space: pre-wrap; font-size: 13px; line-height: 1.55; }
+    .af-list { border: 1px solid var(--border); border-radius: 12px; padding: 8px; max-height: 240px; overflow: auto; background: #fff; }
   </style>
 </head>
 
 <body>
   <div class="wrap">
-    <h1>Industry Archive Admin</h1>
+    <h1>Admin</h1>
 
-    <div class="toolbar">
-      <button id="btnOpenOrg" class="btn" type="button">添加企业/机构</button>
-      <button id="btnOpenDomain" class="btn" type="button">添加安全领域</button>
-      <button id="btnOpenProduct" class="btn" type="button">添加安全产品</button>
-      <button id="btnOpenOrgProduct" class="btn" type="button">添加企业产品</button>
-    </div>
-
-    <div class="toolbar">
-      <button id="btnOpenOrgEdit" class="btn" type="button">编辑企业/机构</button>
-      <button id="btnOpenDomainEdit" class="btn" type="button">编辑安全领域</button>
-      <button id="btnOpenProductEdit" class="btn" type="button">编辑安全产品</button>
-      <!-- ✅ 新增：编辑企业产品（在编辑安全产品右侧） -->
-      <button id="btnOpenOrgProductEdit" class="btn" type="button">编辑企业产品</button>
+    <div class="card">
+      <div class="inline" style="justify-content: space-between;">
+        <div>
+          <div style="font-weight:700;">基础管理</div>
+          <div class="hint">安全领域 / 安全产品 / 企业 / 企业产品 的添加与编辑</div>
+        </div>
+        <div class="inline">
+          <button id="btnOpenDomain" class="btn">添加安全领域</button>
+          <button id="btnOpenDomainEdit" class="btn">编辑安全领域</button>
+          <button id="btnOpenProduct" class="btn">添加安全产品</button>
+          <button id="btnOpenProductEdit" class="btn">编辑安全产品</button>
+        </div>
+      </div>
     </div>
 
     <div class="card">
-      <div class="label">Token（只需输入一次，可连续录入）</div>
-      <input id="tokenInput" class="input" type="password" placeholder="输入 token（留空则按匿名/默认策略）" />
-      <div class="hint">token 会被缓存到 localStorage（仅本浏览器）。</div>
+      <div class="inline" style="justify-content: space-between;">
+        <div>
+          <div style="font-weight:700;">企业</div>
+          <div class="hint">添加企业 / 编辑企业</div>
+        </div>
+        <div class="inline">
+          <button id="btnOpenOrg" class="btn">添加企业</button>
+          <button id="btnOpenOrgEdit" class="btn">编辑企业</button>
+        </div>
+      </div>
     </div>
-  </div>
 
-  <!-- ======（以下：你现有的所有 modal —— 原样保留；为节省篇幅我不再逐段注释）====== -->
-
-  <!-- Organization: Create/Edit Modal -->
-  <div id="orgModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="企业/机构">
-      <div class="modal-head">
-        <div id="orgModalTitle" class="modal-title">添加企业/机构</div>
-        <button id="orgClose" class="btn" type="button">关闭</button>
-      </div>
-
-      <div class="row">
-        <div class="label">企业简称 *</div>
+    <div class="card">
+      <div class="inline" style="justify-content: space-between;">
         <div>
-          <input id="orgShortName" class="input" type="text" placeholder="必填：organization_short_name" />
-          <div id="orgShortNameErr" class="err"></div>
+          <div style="font-weight:700;">企业产品（organization_product）</div>
+          <div class="hint">添加企业产品 / 编辑企业产品（年份 + 评分 recommendation_score）</div>
         </div>
-      </div>
-
-      <div class="row">
-        <div class="label">企业全称</div>
-        <div>
-          <input id="orgFullName" class="input" type="text" placeholder="选填：organization_full_name" />
-          <div class="hint">可为空。</div>
+        <div class="inline">
+          <button id="btnOpenOrgProduct" class="btn">添加企业产品</button>
+          <button id="btnOpenOrgProductEdit" class="btn">编辑企业产品</button>
         </div>
-      </div>
-
-      <div class="row">
-        <div class="label">成立时间</div>
-        <div>
-          <input id="orgEstablishYear" class="input" type="text" inputmode="numeric" placeholder="选填：1990 ~ 当前年份" />
-          <div id="orgEstablishYearErr" class="err"></div>
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="label">slug *</div>
-        <div>
-          <input id="orgSlug" class="input" type="text" placeholder="必填：organization_slug（英文/数字/连字符）" />
-          <div id="orgSlugErr" class="err"></div>
-          <div class="hint">规则：仅允许 a-z / 0-9 / 连字符 -（建议小写）。</div>
-        </div>
-      </div>
-
-      <div class="row">
-        <div class="label">企业/机构描述</div>
-        <div>
-          <textarea id="orgDescription" class="textarea" rows="6" placeholder="选填：organization_description"></textarea>
-          <div class="hint">可为空。</div>
-        </div>
-      </div>
-
-      <div class="modal-actions" id="orgActionsCreate">
-        <button id="orgReset" class="btn" type="button">清空</button>
-        <button id="orgSubmit" class="btn btn-primary" type="button">添加</button>
-      </div>
-
-      <div class="modal-actions" id="orgActionsEdit" style="display:none;">
-        <button id="orgEditReset" class="btn" type="button">重置</button>
-        <button id="orgEditCancel" class="btn" type="button">取消</button>
-        <button id="orgEditSubmit" class="btn btn-primary" type="button">确定更新</button>
       </div>
     </div>
   </div>
 
-  <!-- Organization: Search Modal -->
-  <div id="orgSearchModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="搜索企业/机构">
-      <div class="modal-head">
-        <div class="modal-title">编辑企业/机构（搜索）</div>
-        <button id="orgSearchClose" class="btn" type="button">关闭</button>
+  <!-- =========================================================
+       下面是关键：补齐 domain / product / orgProduct 的所有 modal DOM
+       ========================================================= -->
+
+  <!-- 安全领域（添加） -->
+  <div class="af-modal-overlay" id="domainModal" style="display:none;">
+    <div class="af-modal">
+      <div class="af-modal-head">
+        <div class="af-modal-title">添加安全领域</div>
+        <button class="af-btn" id="domainClose" type="button">关闭</button>
       </div>
 
-      <div class="row" style="grid-template-columns: 1fr;">
-        <div>
-          <input id="orgSearchInput" class="input" type="text" placeholder="搜索 short_name / full_name / slug ..." />
-          <div class="hint">点击结果进入详情。</div>
-        </div>
+      <div class="af-row">
+        <div class="af-label">领域名称（必填）</div>
+        <input class="af-input" id="domainName" placeholder="例如：应用安全 / AppSec" />
+        <div class="af-err" id="domainNameErr"></div>
       </div>
 
-      <div class="card" style="margin-top:12px;">
-        <div class="label">搜索结果</div>
-        <div id="orgSearchStatus" class="hint" style="margin-top:6px;">请输入关键字开始搜索。</div>
-        <div id="orgSearchList" style="margin-top:10px;"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Organization: Info Modal -->
-  <div id="orgInfoModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="企业信息">
-      <div class="modal-head">
-        <div class="modal-title">企业/机构信息</div>
-        <button id="orgInfoClose" class="btn" type="button">关闭</button>
+      <div class="af-row">
+        <div class="af-label">slug（必填）</div>
+        <input class="af-input" id="domainSlug" placeholder="例如：appsec（小写英数字-）" />
+        <div class="af-err" id="domainSlugErr"></div>
       </div>
 
-      <div id="orgInfoBody"></div>
+      <div class="af-row" id="domainDescRow">
+        <div class="af-label">介绍（选填）</div>
+        <textarea class="af-textarea" id="domainDesc" rows="5" placeholder="领域简介..."></textarea>
+        <div class="af-err" id="domainDescErr"></div>
+      </div>
 
-      <div class="modal-actions">
-        <button id="orgInfoCancel" class="btn" type="button">取消</button>
-        <button id="orgInfoEdit" class="btn btn-primary" type="button">编辑</button>
+      <div class="af-actions">
+        <button class="af-btn" id="domainReset" type="button">重置</button>
+        <button class="af-btn af-primary" id="domainSubmit" type="button">提交</button>
       </div>
     </div>
   </div>
 
-  <!-- Domain/Product/OrgProduct（添加）/编辑安全领域/编辑安全产品：你现有内容保持不变 -->
-  <!-- ……（中间大段保持不变：你本地直接用你现有 admin.html 替换成我给的整文件即可）…… -->
-
-  <!-- OrgProduct: Create Modal（你已有） -->
-  <div id="orgProductModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="企业产品">
-      <div class="modal-head">
-        <div class="modal-title">添加企业产品</div>
-        <button id="orgProductClose" class="btn" type="button">关闭</button>
+  <!-- 安全领域（编辑） -->
+  <div class="af-modal-overlay" id="domainEditModal" style="display:none;">
+    <div class="af-modal">
+      <div class="af-modal-head">
+        <div class="af-modal-title">编辑安全领域</div>
+        <button class="af-btn" id="domainEditClose" type="button">关闭</button>
       </div>
 
-      <div class="row">
-        <div class="label">企业名称 *</div>
-        <div>
-          <div class="card" style="margin-top:0;">
-            <div class="label">选择企业/机构（单选）</div>
-            <div class="hint" id="orgProductOrgPicked" style="margin-top:6px;">未选择（请在下方搜索并点击一个企业/机构）</div>
-            <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
-              <button id="orgProductOrgClear" class="btn" type="button" style="display:none;">清除已选择</button>
-            </div>
-            <div style="margin-top:10px;">
-              <input id="orgProductOrgSearch" class="input" type="text" placeholder="搜索 short_name / full_name / slug ..." />
-              <div id="orgProductOrgStatus" class="hint" style="margin-top:6px;">输入关键字开始搜索。</div>
-              <div id="orgProductOrgList" style="margin-top:10px;"></div>
-              <div id="orgProductOrgErr" class="err"></div>
-            </div>
-          </div>
+      <div class="af-row">
+        <div class="af-label">搜索（slug 或 名称）</div>
+        <div class="af-inline">
+          <input class="af-input" id="domainSearch" placeholder="例如：appsec / 应用安全" />
+          <button class="af-btn" id="domainSearchBtn" type="button">搜索</button>
         </div>
+        <div class="af-hint" id="domainSearchHint"></div>
       </div>
 
-      <div class="row">
-        <div class="label">产品名称 *</div>
-        <div>
-          <div class="card" style="margin-top:0;">
-            <div class="label">选择安全产品 / 别名（单选）</div>
-            <div class="hint" id="orgProductProdPicked" style="margin-top:6px;">未选择（请在下方搜索并点击一个安全产品/别名）</div>
-            <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
-              <button id="orgProductProdClear" class="btn" type="button" style="display:none;">清除已选择</button>
-            </div>
-            <div style="margin-top:10px;">
-              <input id="orgProductProdSearch" class="input" type="text" placeholder="搜索产品名 / 别名 / slug ..." />
-              <div id="orgProductProdStatus" class="hint" style="margin-top:6px;">输入关键字开始搜索。</div>
-              <div id="orgProductProdList" style="margin-top:10px;"></div>
-              <div id="orgProductProdErr" class="err"></div>
-            </div>
-            
-
-
-            <div class="hint">写入时保存归一后的主产品 ID（security_product_id）。</div>
-          </div>
-        </div>
+      <div class="af-row">
+        <div class="af-label">已选</div>
+        <div class="af-picked" id="domainEditPicked">(未选择)</div>
       </div>
 
-      <div class="row">
-        <div class="label">产品发布年份</div>
-        <div>
-          <input id="orgProductReleaseYear" class="input" type="text" inputmode="numeric" placeholder="选填：1990 ~ 当前年份" />
-          <div id="orgProductReleaseYearErr" class="err"></div>
-        </div>
+      <div class="af-row">
+        <div class="af-label">预览</div>
+        <div class="af-preview" id="domainEditPreview"></div>
       </div>
 
-      <div class="row">
-        <div class="label">产品终止年份</div>
-        <div>
-          <input id="orgProductEndYear" class="input" type="text" inputmode="numeric" placeholder="选填：1990 ~ 当前年份" />
-          <div id="orgProductEndYearErr" class="err"></div>
-        </div>
-      </div>
-
-      <div class="row">
-  <div class="label">评分</div>
-  <div>
-    <select id="orgProductScore" class="select">
-      <option value="">（不填写）</option>
-      <option value="1">1</option><option value="2">2</option><option value="3">3</option>
-      <option value="4">4</option><option value="5">5</option><option value="6">6</option>
-      <option value="7">7</option><option value="8">8</option><option value="9">9</option>
-      <option value="10">10</option>
-    </select>
-    <div class="hint">选填：1-10，用于后端推荐逻辑（前端不展示分数）。</div>
-  </div>
-</div>
-
-      <div class="modal-actions">
-        <button id="orgProductReset" class="btn" type="button">清空</button>
-        <button id="orgProductSubmit" class="btn btn-primary" type="button">添加</button>
+      <div class="af-actions" id="domainActionsEdit">
+        <button class="af-btn" id="domainEditReset" type="button">重置</button>
+        <button class="af-btn" id="domainEditCancel" type="button">取消</button>
+        <button class="af-btn af-primary" id="domainEditSubmit" type="button">保存</button>
       </div>
     </div>
   </div>
 
-  <!-- =========================
-       ✅ 新增：OrgProduct Edit Modal（选企业 + 列表）
-       ========================= -->
-  <div id="orgProductEditModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="编辑企业产品">
-      <div class="modal-head">
-        <div class="modal-title">编辑企业产品</div>
-        <button id="orgProductEditClose" class="btn" type="button">关闭</button>
+  <!-- 安全产品（添加） -->
+  <div class="af-modal-overlay" id="productModal" style="display:none;">
+    <div class="af-modal">
+      <div class="af-modal-head">
+        <div class="af-modal-title">添加安全产品</div>
+        <button class="af-btn" id="productClose" type="button">关闭</button>
       </div>
 
-      <div class="row">
-        <div class="label">企业 *</div>
-        <div>
-          <div class="card" style="margin-top:0;">
-            <div class="label">选择企业/机构（单选）</div>
-            <div class="hint" id="orgProductEditOrgPicked" style="margin-top:6px;">未选择（请在下方搜索并点击一个企业/机构）</div>
+      <div class="af-row">
+        <div class="af-label">产品名称（必填）</div>
+        <input class="af-input" id="productName" placeholder="例如：SCA / RASP / IAST" />
+        <div class="af-err" id="productNameErr"></div>
+      </div>
 
-            <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
-              <button id="orgProductEditOrgClear" class="btn" type="button" style="display:none;">清除已选择</button>
-            </div>
+      <div class="af-row">
+        <div class="af-label">是否为别称/同义项（必填）</div>
+        <select class="af-input" id="productIsAlias">
+          <option value="false">否</option>
+          <option value="true">是</option>
+        </select>
+        <div class="af-err" id="productIsAliasErr"></div>
+      </div>
 
-            <div style="margin-top:10px;">
-              <input id="orgProductEditOrgSearch" class="input" type="text" placeholder="搜索 short_name / full_name / slug ..." />
-              <div id="orgProductEditOrgStatus" class="hint" style="margin-top:6px;">输入关键字开始搜索。</div>
-              <div id="orgProductEditOrgList" style="margin-top:10px;"></div>
-              <div id="orgProductEditOrgErr" class="err"></div>
-            </div>
-          </div>
+      <div class="af-row" id="productSlugRow">
+        <div class="af-label">slug（必填）</div>
+        <input class="af-input" id="productSlug" placeholder="例如：iast（小写英数字-）" />
+        <div class="af-err" id="productSlugErr"></div>
+      </div>
+
+      <div class="af-row" id="productDomainsRow">
+        <div class="af-label">关联领域（选填）</div>
+        <input class="af-input" id="productDomains" placeholder="输入领域名/slug，用逗号分隔（或后续做选择器）" />
+        <div class="af-err" id="productDomainsErr"></div>
+      </div>
+
+      <div class="af-row" id="productDescRow">
+        <div class="af-label">介绍（选填）</div>
+        <textarea class="af-textarea" id="productDesc" rows="5" placeholder="产品简介..."></textarea>
+      </div>
+
+      <!-- 作为别称时：选择主产品 -->
+      <div class="af-row" id="productAliasTargetRow" style="display:none;">
+        <div class="af-label">别称指向的主产品（必选）</div>
+        <div class="af-picked" id="productAliasTargetPicked">(未选择)</div>
+        <div class="af-inline">
+          <button class="af-btn" id="productAliasTargetClear" type="button">清除</button>
+          <input class="af-input" id="productAliasTargetSearch" placeholder="搜索主产品（名称/slug）" />
         </div>
+        <div class="af-hint" id="productAliasTargetStatus"></div>
+        <div class="af-list" id="productAliasTargetList"></div>
+        <div class="af-err" id="productAliasTargetErr"></div>
       </div>
 
-      <div class="card" style="margin-top:12px;">
-        <div class="label">该企业已录入的产品</div>
-        <div id="orgProductEditListStatus" class="hint" style="margin-top:6px;">请选择企业后查看该企业已录入的产品。</div>
-        <div id="orgProductEditList" style="margin-top:10px;"></div>
+      <div class="af-actions">
+        <button class="af-btn" id="productReset" type="button">重置</button>
+        <button class="af-btn af-primary" id="productSubmit" type="button">提交</button>
       </div>
     </div>
   </div>
 
-  <!-- =========================
-       ✅ 新增：OrgProduct Edit Item Modal（编辑年份，两步确认）
-       ========================= -->
-  <div id="orgProductEditItemModal" class="modal-overlay" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="编辑企业产品（年份）">
-      <div class="modal-head">
-        <div class="modal-title">编辑企业产品（年份）</div>
-        <button id="orgProductEditItemClose" class="btn" type="button">关闭</button>
+  <!-- 安全产品（编辑） -->
+  <div class="af-modal-overlay" id="productEditModal" style="display:none;">
+    <div class="af-modal">
+      <div class="af-modal-head">
+        <div class="af-modal-title">编辑安全产品</div>
+        <button class="af-btn" id="productEditClose" type="button">关闭</button>
       </div>
 
-      <div class="card" style="margin-top:0;">
-        <div class="label">企业</div>
-        <div id="orgProductEditItemOrgName" class="hint" style="margin-top:6px;"></div>
-        <div class="label" style="margin-top:10px;">产品</div>
-        <div id="orgProductEditItemProdName" class="hint" style="margin-top:6px;"></div>
-      </div>
-
-      <div class="row">
-        <div class="label">发布年份</div>
-        <div>
-          <input id="orgProductEditItemReleaseYear" class="input" type="text" inputmode="numeric" placeholder="选填：1990 ~ 当前年份" />
-          <div id="orgProductEditItemReleaseYearErr" class="err"></div>
+      <div class="af-row">
+        <div class="af-label">搜索（slug 或 名称）</div>
+        <div class="af-inline">
+          <input class="af-input" id="productSearch" placeholder="例如：iast / SCA" />
+          <button class="af-btn" id="productSearchBtn" type="button">搜索</button>
         </div>
+        <div class="af-hint" id="productSearchHint"></div>
       </div>
 
-      <div class="row">
-        <div class="label">终止年份</div>
-        <div>
-          <input id="orgProductEditItemEndYear" class="input" type="text" inputmode="numeric" placeholder="选填：1990 ~ 当前年份" />
-          <div id="orgProductEditItemEndYearErr" class="err"></div>
-        </div>
+      <div class="af-row">
+        <div class="af-label">已选</div>
+        <div class="af-picked" id="productEditPicked">(未选择)</div>
       </div>
 
-      <div class="row">
-  <div class="label">评分</div>
-  <div>
-    <select id="orgProductEditItemScore" class="select">
-      <option value="">（不填写）</option>
-      <option value="1">1</option><option value="2">2</option><option value="3">3</option>
-      <option value="4">4</option><option value="5">5</option><option value="6">6</option>
-      <option value="7">7</option><option value="8">8</option><option value="9">9</option>
-      <option value="10">10</option>
-    </select>
-    <div class="hint">选填：1-10。</div>
-  </div>
-</div>
+      <div class="af-row">
+        <div class="af-label">预览</div>
+        <div class="af-preview" id="productEditPreview"></div>
+      </div>
 
-      
-      <div id="orgProductEditItemPreview" class="prelike" style="display:none;"></div>
-
-      <div class="modal-actions">
-        <button id="orgProductEditItemCancel" class="btn" type="button">取消</button>
-        <button id="orgProductEditItemSubmit" class="btn btn-primary" type="button">确定（预览修改）</button>
+      <div class="af-actions" id="productActionsEdit">
+        <button class="af-btn" id="productEditReset" type="button">重置</button>
+        <button class="af-btn" id="productEditCancel" type="button">取消</button>
+        <button class="af-btn af-primary" id="productEditSubmit" type="button">保存</button>
       </div>
     </div>
   </div>
 
-  <!-- Confirm overlay -->
-  <div id="confirmOverlay" class="confirm-overlay" aria-hidden="true">
-    <div class="confirm" role="dialog" aria-modal="true" aria-label="状态">
-      <div id="confirmTitle" class="confirm-title">处理中</div>
-      <div id="confirmBody" class="confirm-body">请稍候…</div>
-      <div class="confirm-actions">
-        <button id="confirmOk" class="btn btn-primary" type="button">确定</button>
+  <!-- Organization Modal（你原本就有，保留你的 feature 需要的 id） -->
+  <div class="af-modal-overlay" id="orgModal" style="display:none;">
+    <div class="af-modal">
+      <div class="af-modal-head">
+        <div class="af-modal-title" id="orgModalTitle">添加企业</div>
+        <button class="af-btn" id="orgClose" type="button">关闭</button>
       </div>
+
+      <div class="af-row">
+        <div class="af-label">企业简称（必填）</div>
+        <input class="af-input" id="orgShortName" placeholder="例如：安恒 / 奇安信" />
+        <div class="af-err" id="orgShortNameErr"></div>
+      </div>
+
+      <div class="af-row">
+        <div class="af-label">企业全称（选填）</div>
+        <input class="af-input" id="orgFullName" placeholder="例如：xxx股份有限公司" />
+      </div>
+
+      <div class="af-row">
+        <div class="af-label">slug（必填）</div>
+        <input class="af-input" id="orgSlug" placeholder="例如：ahtech（小写英数字-）" />
+        <div class="af-err" id="orgSlugErr"></div>
+      </div>
+
+      <div class="af-row">
+        <div class="af-label">成立年份（选填）</div>
+        <input class="af-input" id="orgEstablishYear" placeholder="例如：2007" />
+        <div class="af-err" id="orgEstablishYearErr"></div>
+      </div>
+
+      <div class="af-row">
+        <div class="af-label">是否上市（必填）</div>
+        <select class="af-input" id="orgIfIpo">
+          <option value="true">是</option>
+          <option value="false">否</option>
+        </select>
+        <div class="af-err" id="orgIfIpoErr"></div>
+      </div>
+
+      <div class="af-row">
+        <div class="af-label">描述（选填）</div>
+        <textarea class="af-textarea" id="orgDescription" rows="5" placeholder="企业简介..."></textarea>
+      </div>
+
+      <div class="af-actions" id="orgActionsCreate">
+        <button class="af-btn" id="orgReset" type="button">重置</button>
+        <button class="af-btn af-primary" id="orgSubmit" type="button">提交</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Organization Edit Modal（保留你已有的 id） -->
+  <div class="af-modal-overlay" id="orgEditModal" style="display:none;">
+    <div class="af-modal">
+      <div class="af-modal-head">
+        <div class="af-modal-title">编辑企业</div>
+        <button class="af-btn" id="orgEditClose" type="button">关闭</button>
+      </div>
+
+      <div class="af-row">
+        <div class="af-label">搜索（slug 或 名称）</div>
+        <div class="af-inline">
+          <input class="af-input" id="orgSearch" placeholder="例如：ahtech / 安恒" />
+          <button class="af-btn" id="orgSearchBtn" type="button">搜索</button>
+        </div>
+        <div class="af-hint" id="orgSearchHint"></div>
+      </div>
+
+      <div class="af-row">
+        <div class="af-label">已选</div>
+        <div class="af-picked" id="orgEditPicked">(未选择)</div>
+      </div>
+
+      <div class="af-row">
+        <div class="af-label">预览</div>
+        <div class="af-preview" id="orgEditPreview"></div>
+      </div>
+
+      <div class="af-actions" id="orgActionsEdit">
+        <button class="af-btn" id="orgEditReset" type="button">重置</button>
+        <button class="af-btn" id="orgEditCancel" type="button">取消</button>
+        <button class="af-btn af-primary" id="orgEditSubmit" type="button">保存</button>
+      </div>
+
+      <!-- 以下是你已有的 edit 相关 id（如果你原本有按钮，也保留） -->
+      <div class="af-actions" style="display:none;">
+        <button class="af-btn" id="orgEditReset" type="button">重置</button>
+        <button class="af-btn" id="orgEditCancel" type="button">取消</button>
+        <button class="af-btn af-primary" id="orgEditSubmit" type="button">保存</button>
+      </div>
+
+      <div style="display:none;">
+        <button id="orgEditReset" type="button"></button>
+        <button id="orgEditCancel" type="button"></button>
+        <button id="orgEditSubmit" type="button"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OrgProduct: Create Modal -->
+  <div class="af-modal-overlay" id="orgProductModal" style="display:none;">
+    <div class="af-modal">
+      <div class="af-modal-head">
+        <div class="af-modal-title">添加企业产品</div>
+        <button class="af-btn" id="orgProductClose" type="button">关闭</button>
+      </div>
+
+      <div class="af-row">
+        <div class="af-label">企业 slug（必填）</div>
+        <input class="af-input" id="orgProductOrgSlug" placeholder="例如：ahtech" />
+        <div class="af-err" id="orgProductOrgSlugErr"></div>
+      </div>
+
+      <div class="af-row">
+        <div class="af-label">产品 slug（必填）</div>
+        <input class="af-input" id="orgProductProductSlug" placeholder="例如：iast" />
+        <div class="af-err" id="orgProductProductSlugErr"></div>
+      </div>
+
+      <div class="af-row">
+        <div class="af-label">产品发布年份（选填）</div>
+        <input class="af-input" id="orgProductReleaseYear" placeholder="例如：2020" />
+        <div class="af-err" id="orgProductReleaseYearErr"></div>
+      </div>
+
+      <div class="af-row">
+        <div class="af-label">产品终止年份（选填）</div>
+        <input class="af-input" id="orgProductEndYear" placeholder="例如：2024" />
+        <div class="af-err" id="orgProductEndYearErr"></div>
+      </div>
+
+      <div class="row">
+        <div class="label">评分（1-10，选填）</div>
+        <div>
+          <select id="orgProductScore" class="input">
+            <option value="">（不填写）</option>
+            <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+            <option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option>
+          </select>
+          <div id="orgProductScoreErr" class="err"></div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" id="orgProductReset" type="button">重置</button>
+        <button class="btn primary" id="orgProductSubmit" type="button">提交</button>
+      </div>
+
+      <div class="hint" id="orgProductStatus"></div>
+    </div>
+  </div>
+
+  <!-- OrgProduct: Edit Modal -->
+  <div class="af-modal-overlay" id="orgProductEditModal" style="display:none;">
+    <div class="af-modal">
+      <div class="af-modal-head">
+        <div class="af-modal-title">编辑企业产品</div>
+        <button class="af-btn" id="orgProductEditClose" type="button">关闭</button>
+      </div>
+
+      <div class="af-row">
+        <div class="af-label">搜索（企业 slug / 产品 slug）</div>
+        <div class="af-inline">
+          <input class="af-input" id="orgProductEditSearch" placeholder="例如：ahtech iast" />
+          <button class="af-btn" id="orgProductEditSearchBtn" type="button">搜索</button>
+        </div>
+        <div class="af-hint" id="orgProductEditHint"></div>
+      </div>
+
+      <div class="af-row">
+        <div class="af-label">列表</div>
+        <div class="af-list" id="orgProductEditList"></div>
+      </div>
+
+      <div class="af-actions">
+        <button class="af-btn" id="orgProductEditReset" type="button">重置</button>
+        <button class="af-btn" id="orgProductEditCancel" type="button">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OrgProduct: Edit Item Modal -->
+  <div class="af-modal-overlay" id="orgProductEditItemModal" style="display:none;">
+    <div class="af-modal">
+      <div class="af-modal-head">
+        <div class="af-modal-title">编辑企业产品（单条）</div>
+        <button class="af-btn" id="orgProductEditItemClose" type="button">关闭</button>
+      </div>
+
+      <div class="af-row">
+        <div class="af-label">已选</div>
+        <div class="af-picked" id="orgProductEditItemPicked">(未选择)</div>
+      </div>
+
+      <div class="af-row">
+        <div class="af-label">产品发布年份（选填）</div>
+        <input class="af-input" id="orgProductEditItemReleaseYear" placeholder="例如：2020" />
+        <div class="af-err" id="orgProductEditItemReleaseYearErr"></div>
+      </div>
+
+      <div class="af-row">
+        <div class="af-label">产品终止年份（选填）</div>
+        <input class="af-input" id="orgProductEditItemEndYear" placeholder="例如：2024" />
+        <div class="af-err" id="orgProductEditItemEndYearErr"></div>
+      </div>
+
+      <div class="row">
+        <div class="label">评分（1-10，选填）</div>
+        <div>
+          <select id="orgProductEditItemScore" class="input">
+            <option value="">（不填写）</option>
+            <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option>
+            <option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option>
+          </select>
+          <div id="orgProductEditItemScoreErr" class="err"></div>
+        </div>
+      </div>
+
+      <div class="af-row">
+        <div class="af-label">预览</div>
+        <div class="af-preview" id="orgProductEditItemPreview"></div>
+      </div>
+
+      <div class="actions">
+        <button class="btn" id="orgProductEditItemReset" type="button">重置</button>
+        <button class="btn" id="orgProductEditItemCancel" type="button">取消</button>
+        <button class="btn primary" id="orgProductEditItemSubmit" type="button">保存</button>
+      </div>
+
+      <div class="hint" id="orgProductEditItemStatus"></div>
     </div>
   </div>
 
