@@ -1,38 +1,18 @@
 // apps/web/src/features/org-product.js
-import { createSingleSelectPicker } from '../ui/single-select-picker.js'
-import { makeProductUnionSearch } from '../core/dropdowns.js'
-
-function toIntStrict(v) {
-  const n = typeof v === 'number' ? v : Number(String(v ?? '').trim())
-  if (!Number.isFinite(n) || !Number.isInteger(n)) return null
-  return n
-}
-
-function validateYearRange(val, { min = 1990, max = new Date().getFullYear() } = {}) {
-  const s = String(val || '').trim()
-  if (!s) return { ok: true, value: null }
-  const n = Number(s)
-  if (!Number.isFinite(n) || !Number.isInteger(n)) return { ok: false, msg: '必须为整数年份。' }
-  if (n < min || n > max) return { ok: false, msg: `年份范围：${min} ~ ${max}。` }
-  return { ok: true, value: n }
-}
+console.log('[orgProduct] version = 2026-02-16-orgProductScore-A')
 
 export function mountOrgProductAdmin(ctx) {
-  const {
-    $,
-    openModal,
-    closeModal,
-    apiFetch,
-    getToken,
-    showConfirmFlow,
-  } = ctx
+  const { $, toast, apiFetchJson } = ctx
 
-  const btnOpen = $('btnOpenOrgProduct')
+  const btnOpen = $('orgProductOpen')
   const modal = $('orgProductModal')
   const closeBtn = $('orgProductClose')
 
-  const orgErr = $('orgProductOrgErr')
-  const prodErr = $('orgProductProdErr')
+  const orgIdEl = $('orgProductOrgId')
+  const orgErr = $('orgProductOrgIdErr')
+
+  const productIdEl = $('orgProductProductId')
+  const prodErr = $('orgProductProductIdErr')
 
   const releaseYearEl = $('orgProductReleaseYear')
   const releaseYearErr = $('orgProductReleaseYearErr')
@@ -40,99 +20,49 @@ export function mountOrgProductAdmin(ctx) {
   const endYearEl = $('orgProductEndYear')
   const endYearErr = $('orgProductEndYearErr')
 
+  const scoreEl = $('orgProductScore')
+
   const resetBtn = $('orgProductReset')
   const submitBtn = $('orgProductSubmit')
 
-  // guard（避免 silent failure）
-  if (!btnOpen || !modal || !closeBtn || !resetBtn || !submitBtn || !releaseYearEl || !endYearEl) {
-    console.warn('[orgProduct] mount skipped: missing required DOM nodes.')
+  if (!btnOpen || !modal || !closeBtn || !resetBtn || !submitBtn || !releaseYearEl || !endYearEl || !scoreEl) {
+    console.warn('[orgProduct] missing DOM nodes, mount skipped.')
     return
   }
 
-  function showErr(el, msg) {
-    if (!el) return
-    el.textContent = msg || ''
-    el.style.display = msg ? '' : 'none'
+  btnOpen.addEventListener('click', () => {
+    modal.style.display = 'block'
+  })
+  closeBtn.addEventListener('click', () => {
+    modal.style.display = 'none'
+  })
+  resetBtn.addEventListener('click', resetForm)
+  submitBtn.addEventListener('click', runSubmit)
+
+  function resetForm() {
+    orgIdEl.value = ''
+    productIdEl.value = ''
+    releaseYearEl.value = ''
+    endYearEl.value = ''
+    scoreEl.value = ''
+    clearErrors()
   }
 
   function clearErrors() {
-    showErr(orgErr, '')
-    showErr(prodErr, '')
-    showErr(releaseYearErr, '')
-    showErr(endYearErr, '')
-  }
-
-  closeBtn.addEventListener('click', () => closeModal(modal))
-
-  const orgPicker = createSingleSelectPicker({
-    pickedEl: $('orgProductOrgPicked'),
-    clearBtn: $('orgProductOrgClear'),
-    inputEl: $('orgProductOrgSearch'),
-    statusEl: $('orgProductOrgStatus'),
-    listEl: $('orgProductOrgList'),
-    errEl: orgErr,
-    emptyText: '未选择（请在下方搜索并点击一个企业/机构）',
-    searchFn: async (q) => {
-      const token = getToken()
-      return await apiFetch(`/api/admin/organization/search?q=${encodeURIComponent(q)}`, { token })
-    },
-    renderItem: (it) => ({
-      title: it.display_name || it.organization_short_name || '（未命名）',
-      subtitle: [
-        it.organization_full_name ? `全称：${it.organization_full_name}` : null,
-        it.organization_short_name ? `简称：${it.organization_short_name}` : null,
-        it.organization_slug ? `slug：${it.organization_slug}` : null,
-      ].filter(Boolean).join(' · ')
-    }),
-    getId: (it) => it.organization_id,
-    getLabel: (it, rendered) => rendered?.title ?? String(it.organization_id),
-  })
-
-  const productPicker = createSingleSelectPicker({
-    pickedEl: $('orgProductProdPicked'),
-    clearBtn: $('orgProductProdClear'),
-    inputEl: $('orgProductProdSearch'),
-    statusEl: $('orgProductProdStatus'),
-    listEl: $('orgProductProdList'),
-    errEl: prodErr,
-    emptyText: '未选择（请在下方搜索并点击一个安全产品/别名）',
-    // union: cybersecurity_product + cybersecurity_product_alias
-    // NOTE: 后端返回的 product_id 是“归一后的主产品 id”（FK 指向 cybersecurity_product.security_product_id）。
-    searchFn: makeProductUnionSearch({ apiFetch, getToken }),
-    renderItem: (it) => ({
-      title: it.name || it.security_product_name || it.security_product_alias_name || '（未命名产品）',
-      subtitle: [
-        it.type ? `类型：${it.type}` : null,
-        it.security_product_slug ? `slug：${it.security_product_slug}` : null,
-        (it.product_id ?? it.security_product_id ?? it.id) ? `ID：${it.product_id ?? it.security_product_id ?? it.id}` : null,
-      ].filter(Boolean).join(' · ')
-    }),
-    // IMPORTANT:
-    // - union 结果会带前缀 id（比如 p:7 / a:12），但 insert FK 需要主产品的数字 ID。
-    // - 因此优先使用 product_id（归一后的主产品 id）。
-    getId: (it) =>
-      it.product_id ??
-      it.security_product_id ??
-      it.normalized_id ??
-      it.normalized_security_product_id ??
-      it.id,
-    getLabel: (it, rendered) => rendered?.title ?? String(it.product_id ?? it.security_product_id ?? it.id ?? ''),
-  })
-
-  function resetForm() {
-    orgPicker.clear()
-    productPicker.clear()
-    releaseYearEl.value = ''
-    endYearEl.value = ''
-    clearErrors()
+    orgErr.textContent = ''
+    prodErr.textContent = ''
+    releaseYearErr.textContent = ''
+    endYearErr.textContent = ''
   }
 
   function validate() {
     clearErrors()
-    let ok = true
 
-    if (!orgPicker.validateRequired('请选择企业/机构。')) ok = false
-    if (!productPicker.validateRequired('请选择安全产品/别名。')) ok = false
+    let ok = true
+    const orgId = Number(orgIdEl.value)
+    const prodId = Number(productIdEl.value)
+    if (!Number.isFinite(orgId) || orgId <= 0) { showErr(orgErr, '请输入 organization_id（正整数）'); ok = false }
+    if (!Number.isFinite(prodId) || prodId <= 0) { showErr(prodErr, '请输入 security_product_id（正整数）'); ok = false }
 
     const now = new Date().getFullYear()
 
@@ -142,112 +72,80 @@ export function mountOrgProductAdmin(ctx) {
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
     if (!e.ok) { showErr(endYearErr, e.msg); ok = false }
 
-    // ID 强制要求是整数
-    // organization search 的 id 通常就是 organization_id，但我们仍然优先读 raw.organization_id。
-    const orgSel = orgPicker.getSelected()
-    const orgId = toIntStrict(orgSel?.raw?.organization_id ?? orgSel?.id)
-    if (orgId === null) { showErr(orgErr, '企业 ID 无效（必须为数字）。请重新选择。'); ok = false }
-
-    // product union 的返回里：
-    // - kind=product: product_id = cybersecurity_product.security_product_id
-    // - kind=alias:  product_id = alias 归一后的主产品 id（同样指向 cybersecurity_product）
-    // selected.id 可能是 'p:7' 这种前缀形式，因此必须优先读 raw.product_id。
-    const prodSel = productPicker.getSelected()
-    const prodId = toIntStrict(
-      prodSel?.raw?.product_id ??
-      prodSel?.raw?.security_product_id ??
-      (typeof prodSel?.id === 'string' && prodSel.id.includes(':') ? prodSel.id.split(':')[1] : prodSel?.id)
-    )
-    if (prodId === null) { showErr(prodErr, '产品 ID 无效（必须为数字）。请重新选择。'); ok = false }
+    const s = validateScore(scoreEl.value)
+    if (s === '__invalid__') { showErr(endYearErr, '评分必须是 1-10 的整数，或留空'); ok = false }
 
     return ok
   }
 
   function collectPayload() {
+    const orgId = Number(orgIdEl.value)
+    const prodId = Number(productIdEl.value)
     const now = new Date().getFullYear()
-
-    const orgSel = orgPicker.getSelected()
-    const prodSel = productPicker.getSelected()
-
-    const orgId = toIntStrict(orgSel?.raw?.organization_id ?? orgSel?.id)
-    const prodId = toIntStrict(
-      prodSel?.raw?.product_id ??
-      prodSel?.raw?.security_product_id ??
-      (typeof prodSel?.id === 'string' && prodSel.id.includes(':') ? prodSel.id.split(':')[1] : prodSel?.id)
-    )
-
-    if (orgId === null) throw new Error('organization_id must be a number')
-    if (prodId === null) throw new Error('security_product_id must be a number')
 
     const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
+    if (!r.ok || !e.ok) throw new Error('invalid year')
+
+    const s = validateScore(scoreEl.value)
+    if (s === '__invalid__') throw new Error('recommendation_score must be an integer 1-10')
 
     return {
       organization_id: orgId,
       security_product_id: prodId,
       product_release_year: r.value,
       product_end_year: e.value,
+      recommendation_score: s,
     }
   }
 
   async function runSubmit() {
     if (!validate()) return
 
-    const token = getToken()
-    const payload = collectPayload()
+    try {
+      submitBtn.disabled = true
 
-    const action = async () => {
-      // ✅ 正确路由：POST /api/admin/org_product
-      const res = await apiFetch('/api/admin/org_product', { method: 'POST', token, body: payload })
-      const row = res?.organization_product ?? res
-
-      const msg = [
-        '✅ 添加成功：organization_product',
-        `organization_id = ${row?.organization_id ?? payload.organization_id}`,
-        `security_product_id = ${row?.security_product_id ?? payload.security_product_id}`,
-        `product_release_year = ${(row?.product_release_year ?? payload.product_release_year) ?? '—'}`,
-        `product_end_year = ${(row?.product_end_year ?? payload.product_end_year) ?? '—'}`,
-      ].join('\n')
-
-      closeModal(modal)
-      resetForm()
-      return msg
-    }
-
-    if (typeof showConfirmFlow === 'function') {
-      await showConfirmFlow({
-        titleLoading: '添加中',
-        bodyLoading: '写入企业产品中…',
-        action,
+      const payload = collectPayload()
+      await apiFetchJson('/api/admin/org_product', {
+        method: 'POST',
+        body: JSON.stringify(payload),
       })
-    } else {
-      // 兜底：confirm 初始化失败也不会“没反应”
-      const msg = await action()
-      alert(msg)
+
+      toast('已添加企业产品关联')
+      modal.style.display = 'none'
+      resetForm()
+
+      // 让“编辑企业产品”列表刷新（如果已挂载）
+      window.dispatchEvent(new CustomEvent('orgProduct:changed'))
+
+    } catch (err) {
+      toast(String(err?.message || err), { type: 'error' })
+    } finally {
+      submitBtn.disabled = false
     }
   }
 
-  resetBtn.addEventListener('click', () => resetForm())
+  function showErr(el, msg) {
+    if (!el) return
+    el.textContent = msg
+  }
+}
 
-  submitBtn.addEventListener('click', async () => {
-    submitBtn.disabled = true
-    resetBtn.disabled = true
-    try {
-      await runSubmit()
-    } catch (e) {
-      console.error('[orgProduct] submit failed:', e)
-      const msg = e?.message || String(e)
-      // 优先显示在产品错误位（用户最容易看到）
-      showErr(prodErr, `❌ 失败：${msg}`)
-    } finally {
-      submitBtn.disabled = false
-      resetBtn.disabled = false
-    }
-  })
+function validateYearRange(raw, { min, max }) {
+  const s = String(raw ?? '').trim()
+  if (!s) return { ok: true, value: null }
 
-  btnOpen.addEventListener('click', () => {
-    resetForm()
-    openModal(modal)
-    orgPicker.focus()
-  })
+  const n = Number(s)
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return { ok: false, msg: '必须是整数，或留空' }
+  if (n < min || n > max) return { ok: false, msg: `范围：${min} ~ ${max}` }
+  return { ok: true, value: n }
+}
+
+function validateScore(raw) {
+  const s = String(raw ?? '').trim()
+  if (!s) return null
+  const n = Number(s)
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return '__invalid__'
+  if (n < 1 || n > 10) return '__invalid__'
+  return n
 }
