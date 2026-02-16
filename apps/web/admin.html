@@ -136,8 +136,8 @@
 
     <div class="toolbar">
       <button id="btnOpenOrgEdit" class="btn" type="button">编辑企业/机构</button>
-      <button id="btnOpenDomainEdit" class="btn" type="button">编辑安全领域</button>
-      <button id="btnOpenProductEdit" class="btn" type="button">编辑安全产品</button>
+      <button id="btnEditDomain" class="btn" type="button">编辑安全领域</button>
+      <button id="btnEditProduct" class="btn" type="button">编辑安全产品</button>
       <!-- ✅ 新增：编辑企业产品（在编辑安全产品右侧） -->
       <button id="btnOpenOrgProductEdit" class="btn" type="button">编辑企业产品</button>
     </div>
@@ -446,6 +446,250 @@
       <div class="modal-actions">
         <button id="orgProductEditItemCancel" class="btn" type="button">取消</button>
         <button id="orgProductEditItemSubmit" class="btn btn-primary" type="button">确定（预览修改）</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Domain: Create ===== -->
+  <div id="domainModal" class="af-modal-overlay" style="display:none" role="dialog" aria-modal="true">
+    <div class="af-modal">
+      <div class="af-modal-head">
+        <div class="af-modal-title">添加安全领域</div>
+        <button id="domainClose" class="btn btn-ghost" type="button">关闭</button>
+      </div>
+      <div class="af-form">
+        <div class="af-row">
+          <label class="af-label" for="domainName">领域名称</label>
+          <input id="domainName" class="af-input" type="text" placeholder="例如：应用安全" />
+          <div id="domainNameErr" class="af-err"></div>
+        </div>
+        <div class="af-row">
+          <label class="af-label" for="domainSlug">Slug</label>
+          <input id="domainSlug" class="af-input" type="text" placeholder="例如：appsec" />
+          <div id="domainSlugErr" class="af-err"></div>
+        </div>
+        <div id="domainDescRow" class="af-row">
+          <label class="af-label" for="domainDesc">介绍</label>
+          <textarea id="domainDesc" class="af-textarea" rows="4" placeholder="可选"></textarea>
+        </div>
+        <div class="af-actions">
+          <button id="domainReset" class="btn" type="button">重置</button>
+          <button id="domainSubmit" class="btn btn-primary" type="button">提交</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Domain: Edit Search ===== -->
+  <div id="domainEditSearchModal" class="af-modal-overlay" style="display:none" role="dialog" aria-modal="true">
+    <div class="af-modal">
+      <div class="af-modal-head">
+        <div class="af-modal-title">编辑安全领域：搜索</div>
+        <button id="domainEditSearchClose" class="btn btn-ghost" type="button">关闭</button>
+      </div>
+      <div class="af-form">
+        <div class="af-row">
+          <label class="af-label" for="domainEditSearchInput">搜索</label>
+          <input id="domainEditSearchInput" class="af-input" type="text" placeholder="输入领域名称或 slug，回车搜索" />
+        </div>
+        <div class="af-row">
+          <button id="domainEditSearchBtn" class="btn btn-primary" type="button">搜索</button>
+        </div>
+        <div id="domainEditSearchStatus" class="af-help"></div>
+        <div id="domainEditSearchErr" class="af-err"></div>
+        <div id="domainEditSearchList" class="af-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Domain: Edit Main ===== -->
+  <div id="domainEditModal" class="af-modal-overlay" style="display:none" role="dialog" aria-modal="true">
+    <div class="af-modal">
+      <div class="af-modal-head">
+        <div class="af-modal-title">编辑安全领域</div>
+        <button id="domainEditClose" class="btn btn-ghost" type="button">关闭</button>
+      </div>
+      <div class="af-form">
+        <div class="af-row">
+          <label class="af-label" for="domainEditName">领域名称</label>
+          <input id="domainEditName" class="af-input" type="text" />
+          <div id="domainEditNameErr" class="af-err"></div>
+        </div>
+        <div class="af-row">
+          <label class="af-label" for="domainEditSlug">Slug</label>
+          <input id="domainEditSlug" class="af-input" type="text" />
+          <div id="domainEditSlugErr" class="af-err"></div>
+        </div>
+        <div id="domainEditDescRow" class="af-row">
+          <label class="af-label" for="domainEditDesc">介绍</label>
+          <textarea id="domainEditDesc" class="af-textarea" rows="4"></textarea>
+        </div>
+        <div class="af-row">
+          <label class="af-label">别称</label>
+          <div id="domainEditAliasList" class="af-list"></div>
+          <button id="domainEditAddAlias" class="btn" type="button">添加别称</button>
+        </div>
+        <div class="af-actions">
+          <button id="domainEditReset" class="btn" type="button">重置</button>
+          <button id="domainEditSubmit" class="btn btn-primary" type="button">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Domain: Add Alias ===== -->
+  <div id="domainEditAliasModal" class="af-modal-overlay" style="display:none" role="dialog" aria-modal="true">
+    <div class="af-modal">
+      <div class="af-modal-head">
+        <div class="af-modal-title">添加领域别称</div>
+        <button id="domainEditAliasClose" class="btn btn-ghost" type="button">关闭</button>
+      </div>
+      <div class="af-form">
+        <div class="af-row">
+          <label class="af-label" for="domainEditAliasName">别称</label>
+          <input id="domainEditAliasName" class="af-input" type="text" placeholder="例如：应用安全" />
+          <div id="domainEditAliasNameErr" class="af-err"></div>
+        </div>
+        <div class="af-actions">
+          <button id="domainEditAliasReset" class="btn" type="button">重置</button>
+          <button id="domainEditAliasSubmit" class="btn btn-primary" type="button">提交</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Product: Create ===== -->
+  <div id="productModal" class="af-modal-overlay" style="display:none" role="dialog" aria-modal="true">
+    <div class="af-modal">
+      <div class="af-modal-head">
+        <div class="af-modal-title">添加安全产品</div>
+        <button id="productClose" class="btn btn-ghost" type="button">关闭</button>
+      </div>
+      <div class="af-form">
+        <div class="af-row">
+          <label class="af-label" for="productName">产品名称</label>
+          <input id="productName" class="af-input" type="text" placeholder="例如：IAST" />
+          <div id="productNameErr" class="af-err"></div>
+        </div>
+        <div class="af-row">
+          <label class="af-label" for="productIsAlias">是否别称</label>
+          <select id="productIsAlias" class="af-input">
+            <option value="false" selected>否</option>
+            <option value="true">是</option>
+          </select>
+          <div id="productIsAliasErr" class="af-err"></div>
+        </div>
+        <div id="productSlugRow" class="af-row">
+          <label class="af-label" for="productSlug">Slug</label>
+          <input id="productSlug" class="af-input" type="text" placeholder="例如：iast" />
+          <div id="productSlugErr" class="af-err"></div>
+        </div>
+        <div id="productDomainsRow" class="af-row">
+          <label class="af-label" for="productDomains">关联领域（slug，英文逗号分隔）</label>
+          <input id="productDomains" class="af-input" type="text" placeholder="例如：appsec,cloudsecurity" />
+          <div id="productDomainsErr" class="af-err"></div>
+        </div>
+        <div id="productDescRow" class="af-row">
+          <label class="af-label" for="productDesc">介绍</label>
+          <textarea id="productDesc" class="af-textarea" rows="4" placeholder="可选"></textarea>
+        </div>
+        <div id="productAliasTargetRow" class="af-row" style="display:none">
+          <label class="af-label">别称指向</label>
+          <div class="af-inline">
+            <span id="productAliasTargetPicked" class="af-pill">(未选择)</span>
+            <button id="productAliasTargetClear" class="btn" type="button">清除</button>
+          </div>
+          <div class="af-row" style="margin-top:8px">
+            <input id="productAliasTargetSearch" class="af-input" type="text" placeholder="搜索目标产品（名称/slug），回车" />
+            <div id="productAliasTargetStatus" class="af-help"></div>
+            <div id="productAliasTargetErr" class="af-err"></div>
+            <div id="productAliasTargetList" class="af-list"></div>
+          </div>
+        </div>
+        <div class="af-actions">
+          <button id="productReset" class="btn" type="button">重置</button>
+          <button id="productSubmit" class="btn btn-primary" type="button">提交</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Product: Edit Search ===== -->
+  <div id="productEditSearchModal" class="af-modal-overlay" style="display:none" role="dialog" aria-modal="true">
+    <div class="af-modal">
+      <div class="af-modal-head">
+        <div class="af-modal-title">编辑安全产品：搜索</div>
+        <button id="productEditSearchClose" class="btn btn-ghost" type="button">关闭</button>
+      </div>
+      <div class="af-form">
+        <div class="af-row">
+          <label class="af-label" for="productEditSearchInput">搜索</label>
+          <input id="productEditSearchInput" class="af-input" type="text" placeholder="输入产品名称或 slug，回车搜索" />
+        </div>
+        <div id="productEditSearchStatus" class="af-help"></div>
+        <div id="productEditSearchErr" class="af-err"></div>
+        <div id="productEditSearchList" class="af-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Product: Edit Main ===== -->
+  <div id="productEditMainModal" class="af-modal-overlay" style="display:none" role="dialog" aria-modal="true">
+    <div class="af-modal">
+      <div class="af-modal-head">
+        <div class="af-modal-title">编辑安全产品</div>
+        <button id="productEditMainClose" class="btn btn-ghost" type="button">关闭</button>
+      </div>
+      <div class="af-form">
+        <div class="af-row">
+          <label class="af-label" for="productEditMainName">产品名称</label>
+          <input id="productEditMainName" class="af-input" type="text" />
+          <div id="productEditMainNameErr" class="af-err"></div>
+        </div>
+        <div class="af-row">
+          <label class="af-label" for="productEditMainSlug">Slug</label>
+          <input id="productEditMainSlug" class="af-input" type="text" />
+          <div id="productEditMainSlugErr" class="af-err"></div>
+        </div>
+        <div class="af-row">
+          <label class="af-label" for="productEditMainDesc">介绍</label>
+          <textarea id="productEditMainDesc" class="af-textarea" rows="4"></textarea>
+        </div>
+        <div class="af-row">
+          <label class="af-label" for="productEditMainDomains">关联领域</label>
+          <div id="productEditMainDomains" class="af-box"></div>
+          <div id="productEditMainDomainsErr" class="af-err"></div>
+        </div>
+        <div class="af-row">
+          <label class="af-label">别称</label>
+          <div id="productEditMainAliases" class="af-list"></div>
+          <button id="productEditMainAddAlias" class="btn" type="button">添加别称</button>
+        </div>
+        <div class="af-actions">
+          <button id="productEditMainReset" class="btn" type="button">重置</button>
+          <button id="productEditMainSubmit" class="btn btn-primary" type="button">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Product: Add Alias ===== -->
+  <div id="productEditAliasModal" class="af-modal-overlay" style="display:none" role="dialog" aria-modal="true">
+    <div class="af-modal">
+      <div class="af-modal-head">
+        <div class="af-modal-title">添加产品别称</div>
+        <button id="productEditAliasClose" class="btn btn-ghost" type="button">关闭</button>
+      </div>
+      <div class="af-form">
+        <div class="af-row">
+          <label class="af-label" for="productEditAliasName">别称</label>
+          <input id="productEditAliasName" class="af-input" type="text" placeholder="例如：交互式应用安全测试" />
+          <div id="productEditAliasNameErr" class="af-err"></div>
+        </div>
+        <div class="af-actions">
+          <button id="productEditAliasReset" class="btn" type="button">重置</button>
+          <button id="productEditAliasSubmit" class="btn btn-primary" type="button">提交</button>
+        </div>
       </div>
     </div>
   </div>
