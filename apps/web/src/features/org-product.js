@@ -139,14 +139,6 @@ export function mountOrgProductAdmin(ctx) {
     if (!orgPicker.validateRequired('请选择企业/机构。')) ok = false
     if (!productPicker.validateRequired('请选择安全产品/别名。')) ok = false
 
-    const now = new Date().getFullYear()
-
-    const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
-    if (!r.ok) { showErr(releaseYearErr, r.msg); ok = false }
-
-    const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
-    if (!e.ok) { showErr(endYearErr, e.msg); ok = false }
-
     // ID 强制要求是整数
     // organization search 的 id 通常就是 organization_id，但我们仍然优先读 raw.organization_id。
     const orgSel = orgPicker.getSelected()
