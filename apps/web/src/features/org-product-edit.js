@@ -38,10 +38,13 @@ export function mountOrgProductEditAdmin(ctx) {
   const endYearEl = $('orgProductEditItemEndYear')
   const endYearErr = $('orgProductEditItemEndYearErr')
 
+  const scoreEl = $('orgProductEditItemScore')
+  const scoreErr = $('orgProductEditItemScoreErr')
+
   const previewEl = $('orgProductEditItemPreview')
   const submitBtn = $('orgProductEditItemSubmit')
 
-  if (!btnOpen || !modal || !closeBtn || !orgErr || !listStatus || !listEl || !itemModal) {
+  if (!btnOpen || !modal || !closeBtn || !orgErr || !listStatus || !listEl || !itemModal || !scoreEl || !scoreErr) {
     console.warn('[orgProductEdit] mount skipped: missing required DOM nodes.')
     return
   }
@@ -156,7 +159,7 @@ export function mountOrgProductEditAdmin(ctx) {
       const y2 = (r.product_end_year ?? '') === '' || r.product_end_year === null ? '—' : r.product_end_year
 
       return `
-        <div class="es-item" data-opid="${esc(r.organization_product_id)}" data-spid="${esc(r.security_product_id)}"
+        <div class="es-item" data-opid="${esc(r.organization_product_id)}" data-spid="${esc(r.security_product_id)}" data-score="${esc(r.recommendation_score ?? '')}"
              data-name="${esc(name)}" data-slug="${esc(r.product?.security_product_slug || '')}"
              data-y1="${esc(r.product_release_year ?? '')}" data-y2="${esc(r.product_end_year ?? '')}">
           <div class="es-title">${esc(name)}</div>
@@ -200,6 +203,10 @@ export function mountOrgProductEditAdmin(ctx) {
     }
     showErr(releaseYearErr, '')
     showErr(endYearErr, '')
+    showErr(scoreErr, '')
+    if (releaseYearEl) releaseYearEl.value = ''
+    if (endYearEl) endYearEl.value = ''
+    if (scoreEl) scoreEl.value = ''
     if (submitBtn) submitBtn.textContent = '确定（预览修改）'
   }
 
@@ -216,6 +223,7 @@ export function mountOrgProductEditAdmin(ctx) {
     const prodName = el.dataset?.name || ''
     const y1 = el.dataset?.y1 ?? ''
     const y2 = el.dataset?.y2 ?? ''
+    const sc = el.dataset?.score ?? ''
 
     editingRow = {
       organization_product_id: opId,
@@ -223,6 +231,7 @@ export function mountOrgProductEditAdmin(ctx) {
       product_name: prodName,
       old_release_year: y1 === '' ? null : Number(y1),
       old_end_year: y2 === '' ? null : Number(y2),
+      old_score: sc === '' ? null : Number(sc),
     }
 
     if (itemOrgName) itemOrgName.textContent = orgLabel
@@ -230,6 +239,7 @@ export function mountOrgProductEditAdmin(ctx) {
 
     releaseYearEl.value = (y1 ?? '') === '' ? '' : String(y1)
     endYearEl.value = (y2 ?? '') === '' ? '' : String(y2)
+    scoreEl.value = (sc ?? '') === '' ? '' : String(sc)
 
     openModal(itemModal)
   }
@@ -237,6 +247,7 @@ export function mountOrgProductEditAdmin(ctx) {
   function validateEditYears() {
     showErr(releaseYearErr, '')
     showErr(endYearErr, '')
+    showErr(scoreErr, '')
 
     const now = new Date().getFullYear()
     const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
@@ -244,7 +255,14 @@ export function mountOrgProductEditAdmin(ctx) {
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
     if (!e.ok) { showErr(endYearErr, e.msg); return null }
 
-    return { product_release_year: r.value, product_end_year: e.value }
+    const scoreRaw = (scoreEl.value ?? '').toString().trim()
+    const score = scoreRaw === '' ? null : Number(scoreRaw)
+    if (scoreRaw !== '' && (!Number.isFinite(score) || score < 1 || score > 10)) {
+      showErr(scoreErr, '评分必须在 1~10 之间（或留空）。')
+      return null
+    }
+
+    return { product_release_year: r.value, product_end_year: e.value, recommendation_score: score }
   }
 
   async function submitEdit() {
@@ -258,9 +276,11 @@ export function mountOrgProductEditAdmin(ctx) {
     // 两步确认：第一次预览，第二次提交
     const newY1 = patch.product_release_year ?? null
     const newY2 = patch.product_end_year ?? null
+    const newSc = patch.recommendation_score ?? null
 
     const oldY1 = editingRow.old_release_year ?? null
     const oldY2 = editingRow.old_end_year ?? null
+    const oldSc = editingRow.old_score ?? null
 
     const previewText = [
       `企业：${editingRow.organization_name}`,
@@ -268,6 +288,7 @@ export function mountOrgProductEditAdmin(ctx) {
       '',
       `发布年份：${oldY1 ?? '—'}  ->  ${newY1 ?? '—'}`,
       `终止年份：${oldY2 ?? '—'}  ->  ${newY2 ?? '—'}`,
+      `评分：${oldSc ?? '—'}  ->  ${newSc ?? '—'}`,
       '',
       '请再次点击“再次确定提交”以真正写入数据库。'
     ].join('\n')
@@ -296,6 +317,7 @@ export function mountOrgProductEditAdmin(ctx) {
         `organization_product_id = ${row?.organization_product_id ?? editingRow.organization_product_id}`,
         `product_release_year = ${(row?.product_release_year ?? patch.product_release_year) ?? '—'}`,
         `product_end_year = ${(row?.product_end_year ?? patch.product_end_year) ?? '—'}`,
+        `recommendation_score = ${(row?.recommendation_score ?? patch.recommendation_score) ?? '—'}`,
       ].join('\n')
     }
 
