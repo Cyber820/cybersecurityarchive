@@ -17,6 +17,15 @@ function validateYearRange(val, { min = 1990, max = new Date().getFullYear() } =
   return { ok: true, value: n }
 }
 
+function validateScore(val) {
+  const s = String(val || '').trim()
+  if (!s) return { ok: true, value: null }
+  const n = Number(s)
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return { ok: false, msg: '必须为 1~10 的整数。' }
+  if (n < 1 || n > 10) return { ok: false, msg: '范围：1 ~ 10。' }
+  return { ok: true, value: n }
+}
+
 export function mountOrgProductAdmin(ctx) {
   const {
     $,
@@ -40,6 +49,9 @@ export function mountOrgProductAdmin(ctx) {
   const endYearEl = $('orgProductEndYear')
   const endYearErr = $('orgProductEndYearErr')
 
+  const scoreEl = $('orgProductScore')
+  const scoreErr = $('orgProductScoreErr')
+
   const resetBtn = $('orgProductReset')
   const submitBtn = $('orgProductSubmit')
 
@@ -60,6 +72,7 @@ export function mountOrgProductAdmin(ctx) {
     showErr(prodErr, '')
     showErr(releaseYearErr, '')
     showErr(endYearErr, '')
+    showErr(scoreErr, '')
   }
 
   closeBtn.addEventListener('click', () => closeModal(modal))
@@ -124,6 +137,7 @@ export function mountOrgProductAdmin(ctx) {
     productPicker.clear()
     releaseYearEl.value = ''
     endYearEl.value = ''
+    if (scoreEl) scoreEl.value = ''
     clearErrors()
   }
 
@@ -141,6 +155,9 @@ export function mountOrgProductAdmin(ctx) {
 
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
     if (!e.ok) { showErr(endYearErr, e.msg); ok = false }
+
+    const s = validateScore(scoreEl ? scoreEl.value : '')
+    if (!s.ok) { showErr(scoreErr, s.msg); ok = false }
 
     // ID 强制要求是整数
     // organization search 的 id 通常就是 organization_id，但我们仍然优先读 raw.organization_id。
@@ -181,12 +198,14 @@ export function mountOrgProductAdmin(ctx) {
 
     const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
+    const s = validateScore(scoreEl ? scoreEl.value : '')
 
     return {
       organization_id: orgId,
       security_product_id: prodId,
       product_release_year: r.value,
       product_end_year: e.value,
+      recommendation_score: s.value,
     }
   }
 
@@ -207,6 +226,7 @@ export function mountOrgProductAdmin(ctx) {
         `security_product_id = ${row?.security_product_id ?? payload.security_product_id}`,
         `product_release_year = ${(row?.product_release_year ?? payload.product_release_year) ?? '—'}`,
         `product_end_year = ${(row?.product_end_year ?? payload.product_end_year) ?? '—'}`,
+        `recommendation_score = ${(row?.recommendation_score ?? payload.recommendation_score) ?? '—'}`,
       ].join('\n')
 
       closeModal(modal)
