@@ -36,12 +36,10 @@ export function mountOrganizationAdmin(ctx) {
   const orgEstablishYear = req('orgEstablishYear')
   const orgSlug = req('orgSlug')
   const orgDescription = req('orgDescription')
-  const orgIfIpo = req('orgIfIpo')
 
   const orgShortNameErr = req('orgShortNameErr')
   const orgEstablishYearErr = req('orgEstablishYearErr')
   const orgSlugErr = req('orgSlugErr')
-  const orgIfIpoErr = req('orgIfIpoErr')
 
   const orgActionsCreate = req('orgActionsCreate')
   const orgActionsEdit = req('orgActionsEdit')
@@ -56,8 +54,8 @@ export function mountOrganizationAdmin(ctx) {
   // Critical nodes missing → skip mounting to avoid crashing the whole admin page.
   if (
     !orgModal || !orgModalTitle || !orgClose ||
-    !orgShortName || !orgFullName || !orgEstablishYear || !orgSlug || !orgIfIpo ||
-    !orgShortNameErr || !orgEstablishYearErr || !orgSlugErr || !orgIfIpoErr ||
+    !orgShortName || !orgFullName || !orgEstablishYear || !orgSlug ||
+    !orgShortNameErr || !orgEstablishYearErr || !orgSlugErr ||
     !orgActionsCreate || !orgActionsEdit ||
     !orgReset || !orgSubmit || !orgEditReset || !orgEditCancel || !orgEditSubmit
   ) {
@@ -74,12 +72,6 @@ export function mountOrganizationAdmin(ctx) {
       organization_full_name: () => norm(orgFullName.value) || '',
       establish_year: () => norm(orgEstablishYear.value) || '',
       organization_slug: () => norm(orgSlug.value),
-      if_ipo: () => {
-        const v = norm(orgIfIpo.value)
-        if (v === 'true') return true
-        if (v === 'false') return false
-        return null
-      },
       organization_description: () => norm(orgDescription?.value) || '',
     }
   }
@@ -89,11 +81,6 @@ export function mountOrganizationAdmin(ctx) {
       organization_full_name: (v) => { orgFullName.value = v ?? '' },
       establish_year: (v) => { orgEstablishYear.value = v ?? '' },
       organization_slug: (v) => { orgSlug.value = v ?? '' },
-      if_ipo: (v) => {
-        if (v === true) orgIfIpo.value = 'true'
-        else if (v === false) orgIfIpo.value = 'false'
-        else orgIfIpo.value = ''
-      },
       organization_description: (v) => { if (orgDescription) orgDescription.value = v ?? '' },
     }
   }
@@ -124,12 +111,6 @@ export function mountOrganizationAdmin(ctx) {
       ok = false
     }
 
-
-    const ipoVal = norm(orgIfIpo.value)
-    if (!ipoVal) {
-      setInvalid(orgIfIpo, orgIfIpoErr, '是否上市为必填。')
-      ok = false
-    }
     if (yearStr) {
       const y = Number(yearStr)
       const now = new Date().getFullYear()
@@ -151,14 +132,12 @@ export function mountOrganizationAdmin(ctx) {
     const slug = norm(orgSlug.value)
     const yearStr = norm(orgEstablishYear.value)
     const desc = norm(orgDescription?.value)
-    const ipoVal = norm(orgIfIpo.value)
 
     return {
       organization_short_name: shortName,
       organization_full_name: fullName || null,
       establish_year: yearStr ? Number(yearStr) : null,
       organization_slug: slug,
-      if_ipo: ipoVal === 'true',
       organization_description: desc ? desc : null,
     }
   }
@@ -167,7 +146,7 @@ export function mountOrganizationAdmin(ctx) {
     editingOrgId = null
     orgPrefillSnap = null
 
-    orgModalTitle.textContent = '添加企业'
+    orgModalTitle.textContent = '添加企业/机构'
     orgActionsCreate.style.display = ''
     orgActionsEdit.style.display = 'none'
   }
@@ -195,7 +174,6 @@ export function mountOrganizationAdmin(ctx) {
       organization_full_name: '',
       establish_year: '',
       organization_slug: '',
-      if_ipo: '',
       organization_description: '',
     })
   }
@@ -283,8 +261,8 @@ export function mountOrganizationAdmin(ctx) {
   // 若关键元素缺失，直接跳过挂载，避免整页报错导致所有按钮失效。
   const critical = [
     orgModal, orgModalTitle, orgClose,
-    orgShortName, orgEstablishYear, orgSlug, orgIfIpo,
-    orgShortNameErr, orgEstablishYearErr, orgSlugErr, orgIfIpoErr,
+    orgShortName, orgEstablishYear, orgSlug,
+    orgShortNameErr, orgEstablishYearErr, orgSlugErr,
     orgActionsCreate, orgActionsEdit,
     orgReset, orgSubmit, orgEditReset, orgEditCancel, orgEditSubmit,
     btnOpenOrg, btnOpenOrgEdit,
@@ -308,32 +286,21 @@ export function mountOrganizationAdmin(ctx) {
   }
 
   function renderOrgInfo(org) {
-    function kvLine(k, v) {
+    function kv(k, v) {
       const row = document.createElement('div')
-      row.className = 'kv-line'
-      const label = document.createElement('span')
-      label.className = 'kv-label'
-      label.textContent = `${k}：`
-      const value = document.createElement('span')
-      value.className = 'kv-value'
-      value.textContent = (v === null || v === undefined || v === '') ? '—' : String(v)
-      row.appendChild(label)
-      row.appendChild(value)
-      return row
-    }
+      row.className = 'kv'
 
-    function kvBlock(k, v) {
-      const wrap = document.createElement('div')
-      wrap.className = 'kv-block'
-      const title = document.createElement('div')
-      title.className = 'kv-label'
-      title.textContent = `${k}：`
-      const body = document.createElement('div')
-      body.className = 'kv-value kv-pre'
-      body.textContent = (v === null || v === undefined || v === '') ? '—' : String(v)
-      wrap.appendChild(title)
-      wrap.appendChild(body)
-      return wrap
+      const kk = document.createElement('div')
+      kk.className = 'kv-k'
+      kk.textContent = k
+
+      const vv = document.createElement('div')
+      vv.className = 'kv-v'
+      vv.textContent = (v === null || v === undefined || v === '') ? '—' : String(v)
+
+      row.appendChild(kk)
+      row.appendChild(vv)
+      return row
     }
 
     if (orgInfoTitleEl) {
@@ -341,13 +308,12 @@ export function mountOrganizationAdmin(ctx) {
     }
 
     orgInfoBody.innerHTML = ''
-    orgInfoBody.appendChild(kvLine('企业简称', org.organization_short_name))
-    orgInfoBody.appendChild(kvLine('企业全称', org.organization_full_name))
-    orgInfoBody.appendChild(kvLine('成立时间', org.establish_year))
-    orgInfoBody.appendChild(kvLine('Slug', org.organization_slug))
-    orgInfoBody.appendChild(kvLine('是否上市', org.if_ipo ? '是' : '否'))
-    orgInfoBody.appendChild(kvBlock('描述', org.organization_description))
-    orgInfoBody.appendChild(kvLine('ID', org.organization_id))
+    orgInfoBody.appendChild(kv('企业简称', org.organization_short_name))
+    orgInfoBody.appendChild(kv('企业全称', org.organization_full_name))
+    orgInfoBody.appendChild(kv('成立时间', org.establish_year))
+    orgInfoBody.appendChild(kv('Slug', org.organization_slug))
+    orgInfoBody.appendChild(kv('描述', org.organization_description))
+    orgInfoBody.appendChild(kv('ID', org.organization_id))
   }
 
   const orgSearch = createEntitySearch({
