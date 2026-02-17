@@ -120,7 +120,15 @@
       padding: 10px;
       background: rgba(0,0,0,0.02);
     }
-  </style>
+  
+  /* ===== Org Info (preview) ===== */
+  .kv-line{ display:flex; gap:8px; padding:6px 0; }
+  .kv-label{ font-weight:600; color:#333; white-space:nowrap; }
+  .kv-value{ color:#111; }
+  .kv-block{ padding:8px 0; }
+  .kv-pre{ white-space:pre-wrap; word-break:break-word; }
+
+</style>
 </head>
 
 <body>
@@ -128,14 +136,14 @@
     <h1>Industry Archive Admin</h1>
 
     <div class="toolbar">
-      <button id="btnOpenOrg" class="btn" type="button">添加企业/机构</button>
+      <button id="btnOpenOrg" class="btn" type="button">添加企业</button>
       <button id="btnOpenDomain" class="btn" type="button">添加安全领域</button>
       <button id="btnOpenProduct" class="btn" type="button">添加安全产品</button>
       <button id="btnOpenOrgProduct" class="btn" type="button">添加企业产品</button>
     </div>
 
     <div class="toolbar">
-      <button id="btnOpenOrgEdit" class="btn" type="button">编辑企业/机构</button>
+      <button id="btnOpenOrgEdit" class="btn" type="button">编辑企业</button>
       <button id="btnOpenDomainEdit" class="btn" type="button">编辑安全领域</button>
       <button id="btnOpenProductEdit" class="btn" type="button">编辑安全产品</button>
       <!-- ✅ 新增：编辑企业产品（在编辑安全产品右侧） -->
@@ -155,7 +163,7 @@
   <div id="orgModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="企业/机构">
       <div class="modal-head">
-        <div id="orgModalTitle" class="modal-title">添加企业/机构</div>
+        <div id="orgModalTitle" class="modal-title">添加企业</div>
         <button id="orgClose" class="btn" type="button">关闭</button>
       </div>
 
@@ -192,7 +200,20 @@
         </div>
       </div>
 
+      
       <div class="row">
+        <div class="label">是否上市 *</div>
+        <div>
+          <select id="orgIfIpo" class="input">
+            <option value="" selected disabled>请选择：是 / 否</option>
+            <option value="true">是</option>
+            <option value="false">否</option>
+          </select>
+          <div id="orgIfIpoErr" class="err"></div>
+        </div>
+      </div>
+
+<div class="row">
         <div class="label">企业/机构描述</div>
         <div>
           <textarea id="orgDescription" class="textarea" rows="6" placeholder="选填：organization_description"></textarea>
@@ -217,7 +238,7 @@
   <div id="orgSearchModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="搜索企业/机构">
       <div class="modal-head">
-        <div class="modal-title">编辑企业/机构（搜索）</div>
+        <div class="modal-title">编辑企业（搜索）</div>
         <button id="orgSearchClose" class="btn" type="button">关闭</button>
       </div>
 

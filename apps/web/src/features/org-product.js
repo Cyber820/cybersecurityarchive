@@ -40,14 +40,11 @@ export function mountOrgProductAdmin(ctx) {
   const endYearEl = $('orgProductEndYear')
   const endYearErr = $('orgProductEndYearErr')
 
-  const scoreEl = $('orgProductScore')
-  const scoreErr = $('orgProductScoreErr')
-
   const resetBtn = $('orgProductReset')
   const submitBtn = $('orgProductSubmit')
 
   // guard（避免 silent failure）
-  if (!btnOpen || !modal || !closeBtn || !resetBtn || !submitBtn || !releaseYearEl || !endYearEl || !scoreEl || !scoreErr) {
+  if (!btnOpen || !modal || !closeBtn || !resetBtn || !submitBtn || !releaseYearEl || !endYearEl) {
     console.warn('[orgProduct] mount skipped: missing required DOM nodes.')
     return
   }
@@ -63,7 +60,6 @@ export function mountOrgProductAdmin(ctx) {
     showErr(prodErr, '')
     showErr(releaseYearErr, '')
     showErr(endYearErr, '')
-    showErr(scoreErr, '')
   }
 
   closeBtn.addEventListener('click', () => closeModal(modal))
@@ -128,7 +124,6 @@ export function mountOrgProductAdmin(ctx) {
     productPicker.clear()
     releaseYearEl.value = ''
     endYearEl.value = ''
-    scoreEl.value = ''
     clearErrors()
   }
 
@@ -138,6 +133,14 @@ export function mountOrgProductAdmin(ctx) {
 
     if (!orgPicker.validateRequired('请选择企业/机构。')) ok = false
     if (!productPicker.validateRequired('请选择安全产品/别名。')) ok = false
+
+    const now = new Date().getFullYear()
+
+    const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
+    if (!r.ok) { showErr(releaseYearErr, r.msg); ok = false }
+
+    const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
+    if (!e.ok) { showErr(endYearErr, e.msg); ok = false }
 
     // ID 强制要求是整数
     // organization search 的 id 通常就是 organization_id，但我们仍然优先读 raw.organization_id。
@@ -156,23 +159,6 @@ export function mountOrgProductAdmin(ctx) {
       (typeof prodSel?.id === 'string' && prodSel.id.includes(':') ? prodSel.id.split(':')[1] : prodSel?.id)
     )
     if (prodId === null) { showErr(prodErr, '产品 ID 无效（必须为数字）。请重新选择。'); ok = false }
-
-    // years optional
-    const now = new Date().getFullYear()
-    const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
-    const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
-    if (!r.ok) { showErr(releaseYearErr, r.msg); ok = false }
-    if (!e.ok) { showErr(endYearErr, e.msg); ok = false }
-
-    // score optional (1~10)
-    const scoreRaw = (scoreEl.value ?? '').toString().trim()
-    if (scoreRaw !== '') {
-      const score = Number(scoreRaw)
-      if (!Number.isFinite(score) || score < 1 || score > 10) {
-        showErr(scoreErr, '评分必须在 1~10 之间（或留空）。')
-        ok = false
-      }
-    }
 
     return ok
   }
@@ -196,15 +182,11 @@ export function mountOrgProductAdmin(ctx) {
     const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
 
-    const scoreRaw = (scoreEl.value ?? '').toString().trim()
-    const recommendation_score = scoreRaw === '' ? null : Number(scoreRaw)
-
     return {
       organization_id: orgId,
       security_product_id: prodId,
       product_release_year: r.value,
       product_end_year: e.value,
-      recommendation_score,
     }
   }
 
@@ -225,7 +207,6 @@ export function mountOrgProductAdmin(ctx) {
         `security_product_id = ${row?.security_product_id ?? payload.security_product_id}`,
         `product_release_year = ${(row?.product_release_year ?? payload.product_release_year) ?? '—'}`,
         `product_end_year = ${(row?.product_end_year ?? payload.product_end_year) ?? '—'}`,
-        `recommendation_score = ${(row?.recommendation_score ?? payload.recommendation_score) ?? '—'}`,
       ].join('\n')
 
       closeModal(modal)
