@@ -16,20 +16,74 @@ function validateYearRange(val, { min = 1990, max = new Date().getFullYear() } =
   return { ok: true, value: n }
 }
 
-function validateScore(val) {
-  const s = String(val || '').trim()
-  if (!s) return { ok: true, value: null }
-  const n = Number(s)
-  if (!Number.isFinite(n) || !Number.isInteger(n)) return { ok: false, msg: '评分必须为整数。' }
-  if (n < 0 || n > 10) return { ok: false, msg: '评分范围：0 ~ 10。' }
-  return { ok: true, value: n }
-}
-
 export function mountOrgProductEditAdmin(ctx) {
   const { $, openModal, closeModal, apiFetch, getToken, showConfirmFlow } = ctx
 
   const btnOpen = $('btnOpenOrgProductEdit')
   const modal = $('orgProductEditModal')
+
+  // -------------------------
+  // Guard (fail loud, not silent)
+  // -------------------------
+  const requiredIds = [
+    // entry + list modal
+    'btnOpenOrgProductEdit',
+    'orgProductEditModal',
+    'orgProductEditClose',
+    'orgProductEditOrgErr',
+    'orgProductEditListStatus',
+    'orgProductEditList',
+
+    // org picker
+    'orgProductEditOrgPicked',
+    'orgProductEditOrgClear',
+    'orgProductEditOrgSearch',
+    'orgProductEditOrgStatus',
+    'orgProductEditOrgList',
+
+    // item modal
+    'orgProductEditItemModal',
+    'orgProductEditItemClose',
+    'orgProductEditItemCancel',
+    'orgProductEditItemOrgName',
+    'orgProductEditItemProdName',
+    'orgProductEditItemReleaseYear',
+    'orgProductEditItemReleaseYearErr',
+    'orgProductEditItemEndYear',
+    'orgProductEditItemEndYearErr',
+    'orgProductEditItemPreview',
+    'orgProductEditItemSubmit',
+  ]
+
+  const missing = requiredIds.filter((id) => !$(id))
+
+  if (btnOpen && modal) {
+    btnOpen.addEventListener(
+      'click',
+      () => {
+        if (missing.length) {
+          console.warn('[orgProductEdit] missing DOM ids:', missing)
+          alert(
+            [
+              '❌ “编辑企业产品”无法初始化：缺少必要的 DOM 节点。',
+              '',
+              '请检查 admin.html 是否包含以下 id：',
+              ...missing.map((s) => `- ${s}`),
+            ].join('\n')
+          )
+          return
+        }
+        openModal(modal)
+      },
+      { once: true }
+    )
+  }
+
+  if (missing.length) return
+
+  // -------------------------
+  // DOM
+  // -------------------------
   const closeBtn = $('orgProductEditClose')
 
   const orgErr = $('orgProductEditOrgErr')
@@ -47,16 +101,8 @@ export function mountOrgProductEditAdmin(ctx) {
   const endYearEl = $('orgProductEditItemEndYear')
   const endYearErr = $('orgProductEditItemEndYearErr')
 
-  const scoreEl = $('orgProductEditItemScore')
-  const scoreErr = $('orgProductEditItemScoreErr')
-
   const previewEl = $('orgProductEditItemPreview')
   const submitBtn = $('orgProductEditItemSubmit')
-
-  if (!btnOpen || !modal || !closeBtn || !orgErr || !listStatus || !listEl || !itemModal || !scoreEl) {
-    console.warn('[orgProductEdit] mount skipped: missing required DOM nodes.')
-    return
-  }
 
   function showErr(el, msg) {
     if (!el) return
@@ -74,14 +120,21 @@ export function mountOrgProductEditAdmin(ctx) {
 
   function esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, (c) => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;'
     }[c]))
   }
 
   closeBtn.addEventListener('click', () => closeModal(modal))
-  if (itemClose) itemClose.addEventListener('click', () => closeModal(itemModal))
-  if (itemCancel) itemCancel.addEventListener('click', () => closeModal(itemModal))
+  itemClose.addEventListener('click', () => closeModal(itemModal))
+  itemCancel.addEventListener('click', () => closeModal(itemModal))
 
+  // -------------------------
+  // Org picker
+  // -------------------------
   const orgPicker = createSingleSelectPicker({
     pickedEl: $('orgProductEditOrgPicked'),
     clearBtn: $('orgProductEditOrgClear'),
@@ -110,7 +163,7 @@ export function mountOrgProductEditAdmin(ctx) {
     onClear: async () => {
       clearList()
       setStatus('请选择企业后查看该企业已录入的产品。')
-    }
+    },
   })
 
   async function fetchOrgProducts(organizationId) {
@@ -120,8 +173,7 @@ export function mountOrgProductEditAdmin(ctx) {
 
   function getSelectedOrgId() {
     const sel = orgPicker.getSelected()
-    const orgId = toIntStrict(sel?.raw?.organization_id ?? sel?.id)
-    return orgId
+    return toIntStrict(sel?.raw?.organization_id ?? sel?.id)
   }
 
   function getSelectedOrgLabel() {
@@ -164,16 +216,14 @@ export function mountOrgProductEditAdmin(ctx) {
       const slug = r.product?.security_product_slug ? `slug：${r.product.security_product_slug}` : null
       const y1 = (r.product_release_year ?? '') === '' || r.product_release_year === null ? '—' : r.product_release_year
       const y2 = (r.product_end_year ?? '') === '' || r.product_end_year === null ? '—' : r.product_end_year
-      const sc = (r.recommendation_score ?? '') === '' || r.recommendation_score === null ? '—' : r.recommendation_score
 
       return `
         <div class="es-item" data-opid="${esc(r.organization_product_id)}" data-spid="${esc(r.security_product_id)}"
              data-name="${esc(name)}" data-slug="${esc(r.product?.security_product_slug || '')}"
-             data-y1="${esc(r.product_release_year ?? '')}" data-y2="${esc(r.product_end_year ?? '')}"
-             data-score="${esc(r.recommendation_score ?? '')}">
+             data-y1="${esc(r.product_release_year ?? '')}" data-y2="${esc(r.product_end_year ?? '')}">
           <div class="es-title">${esc(name)}</div>
           <div class="es-subtitle">
-            ${[slug, `发布：${esc(y1)}`, `终止：${esc(y2)}`, `评分：${esc(sc)}`, `op_id：${esc(r.organization_product_id)}`].filter(Boolean).join(' · ')}
+            ${[slug, `发布：${esc(y1)}`, `终止：${esc(y2)}`, `op_id：${esc(r.organization_product_id)}`].filter(Boolean).join(' · ')}
           </div>
           <div class="modal-actions" style="justify-content:flex-end; margin-top:10px;">
             <button class="btn" data-action="edit" type="button">编辑</button>
@@ -186,6 +236,7 @@ export function mountOrgProductEditAdmin(ctx) {
 
   async function doDelete(opId, productName) {
     const token = getToken()
+
     const action = async () => {
       await apiFetch(`/api/admin/org_product/${encodeURIComponent(opId)}`, { method: 'DELETE', token })
       return `✅ 已删除：${productName}（organization_product_id=${opId}）`
@@ -206,14 +257,11 @@ export function mountOrgProductEditAdmin(ctx) {
   function resetEditModalState() {
     editingRow = null
     previewArmed = false
-    if (previewEl) {
-      previewEl.textContent = ''
-      previewEl.style.display = 'none'
-    }
+    previewEl.textContent = ''
+    previewEl.style.display = 'none'
     showErr(releaseYearErr, '')
     showErr(endYearErr, '')
-    showErr(scoreErr, '')
-    if (submitBtn) submitBtn.textContent = '确定（预览修改）'
+    submitBtn.textContent = '确定（预览修改）'
   }
 
   function openEditModalFromRow(el) {
@@ -229,7 +277,6 @@ export function mountOrgProductEditAdmin(ctx) {
     const prodName = el.dataset?.name || ''
     const y1 = el.dataset?.y1 ?? ''
     const y2 = el.dataset?.y2 ?? ''
-    const sc = el.dataset?.score ?? ''
 
     editingRow = {
       organization_product_id: opId,
@@ -237,51 +284,44 @@ export function mountOrgProductEditAdmin(ctx) {
       product_name: prodName,
       old_release_year: y1 === '' ? null : Number(y1),
       old_end_year: y2 === '' ? null : Number(y2),
-      old_score: sc === '' ? null : Number(sc),
     }
 
-    if (itemOrgName) itemOrgName.textContent = orgLabel
-    if (itemProdName) itemProdName.textContent = prodName
+    itemOrgName.textContent = orgLabel
+    itemProdName.textContent = prodName
 
     releaseYearEl.value = (y1 ?? '') === '' ? '' : String(y1)
     endYearEl.value = (y2 ?? '') === '' ? '' : String(y2)
-    scoreEl.value = (sc ?? '') === '' ? '' : String(sc)
 
     openModal(itemModal)
   }
 
-  function validateEditPatch() {
+  function validateEditYears() {
     showErr(releaseYearErr, '')
     showErr(endYearErr, '')
-    showErr(scoreErr, '')
 
     const now = new Date().getFullYear()
     const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
     if (!r.ok) { showErr(releaseYearErr, r.msg); return null }
+
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
     if (!e.ok) { showErr(endYearErr, e.msg); return null }
 
-    const sc = validateScore(scoreEl.value)
-    if (!sc.ok) { showErr(scoreErr, sc.msg); return null }
-
-    return { product_release_year: r.value, product_end_year: e.value, recommendation_score: sc.value }
+    return { product_release_year: r.value, product_end_year: e.value }
   }
 
   async function submitEdit() {
     if (!editingRow) return
 
-    const patch = validateEditPatch()
+    const patch = validateEditYears()
     if (!patch) return
 
     const token = getToken()
 
     const newY1 = patch.product_release_year ?? null
     const newY2 = patch.product_end_year ?? null
-    const newSc = patch.recommendation_score ?? null
 
     const oldY1 = editingRow.old_release_year ?? null
     const oldY2 = editingRow.old_end_year ?? null
-    const oldSc = editingRow.old_score ?? null
 
     const previewText = [
       `企业：${editingRow.organization_name}`,
@@ -289,20 +329,15 @@ export function mountOrgProductEditAdmin(ctx) {
       '',
       `发布年份：${oldY1 ?? '—'}  ->  ${newY1 ?? '—'}`,
       `终止年份：${oldY2 ?? '—'}  ->  ${newY2 ?? '—'}`,
-      `产品评分：${oldSc ?? '—'}  ->  ${newSc ?? '—'}`,
       '',
       '请再次点击“再次确定提交”以真正写入数据库。'
     ].join('\n')
 
     if (!previewArmed) {
       previewArmed = true
-      if (previewEl) {
-        previewEl.textContent = previewText
-        previewEl.style.display = ''
-      } else {
-        alert(previewText)
-      }
-      if (submitBtn) submitBtn.textContent = '再次确定提交'
+      previewEl.textContent = previewText
+      previewEl.style.display = ''
+      submitBtn.textContent = '再次确定提交'
       return
     }
 
@@ -318,7 +353,6 @@ export function mountOrgProductEditAdmin(ctx) {
         `organization_product_id = ${row?.organization_product_id ?? editingRow.organization_product_id}`,
         `product_release_year = ${(row?.product_release_year ?? patch.product_release_year) ?? '—'}`,
         `product_end_year = ${(row?.product_end_year ?? patch.product_end_year) ?? '—'}`,
-        `recommendation_score = ${(row?.recommendation_score ?? patch.recommendation_score) ?? '—'}`,
       ].join('\n')
     }
 
@@ -332,9 +366,11 @@ export function mountOrgProductEditAdmin(ctx) {
     await refreshList()
   }
 
+  // list click (delegate)
   listEl.addEventListener('click', async (ev) => {
     const btn = ev.target?.closest?.('button[data-action]')
     if (!btn) return
+
     const action = btn.dataset.action
     const row = ev.target?.closest?.('.es-item')
     if (!row) return
@@ -359,20 +395,19 @@ export function mountOrgProductEditAdmin(ctx) {
     }
   })
 
-  if (submitBtn) {
-    submitBtn.addEventListener('click', async () => {
-      submitBtn.disabled = true
-      try {
-        await submitEdit()
-      } catch (e) {
-        console.error('[orgProductEdit] submit failed:', e)
-        alert(`❌ 失败：${e?.message || String(e)}`)
-      } finally {
-        submitBtn.disabled = false
-      }
-    })
-  }
+  submitBtn.addEventListener('click', async () => {
+    submitBtn.disabled = true
+    try {
+      await submitEdit()
+    } catch (e) {
+      console.error('[orgProductEdit] submit failed:', e)
+      alert(`❌ 失败：${e?.message || String(e)}`)
+    } finally {
+      submitBtn.disabled = false
+    }
+  })
 
+  // real entry handler
   btnOpen.addEventListener('click', async () => {
     showErr(orgErr, '')
     clearList()
