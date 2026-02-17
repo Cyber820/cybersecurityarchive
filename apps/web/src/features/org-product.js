@@ -17,6 +17,15 @@ function validateYearRange(val, { min = 1990, max = new Date().getFullYear() } =
   return { ok: true, value: n }
 }
 
+function validateScore(val) {
+  const s = String(val || '').trim()
+  if (!s) return { ok: true, value: null }
+  const n = Number(s)
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return { ok: false, msg: '评分必须为整数。' }
+  if (n < 0 || n > 10) return { ok: false, msg: '评分范围：0 ~ 10。' }
+  return { ok: true, value: n }
+}
+
 export function mountOrgProductAdmin(ctx) {
   const {
     $,
@@ -40,11 +49,14 @@ export function mountOrgProductAdmin(ctx) {
   const endYearEl = $('orgProductEndYear')
   const endYearErr = $('orgProductEndYearErr')
 
+  const scoreEl = $('orgProductScore')
+  const scoreErr = $('orgProductScoreErr')
+
   const resetBtn = $('orgProductReset')
   const submitBtn = $('orgProductSubmit')
 
   // guard（避免 silent failure）
-  if (!btnOpen || !modal || !closeBtn || !resetBtn || !submitBtn || !releaseYearEl || !endYearEl) {
+  if (!btnOpen || !modal || !closeBtn || !resetBtn || !submitBtn || !releaseYearEl || !endYearEl || !scoreEl) {
     console.warn('[orgProduct] mount skipped: missing required DOM nodes.')
     return
   }
@@ -60,6 +72,7 @@ export function mountOrgProductAdmin(ctx) {
     showErr(prodErr, '')
     showErr(releaseYearErr, '')
     showErr(endYearErr, '')
+    showErr(scoreErr, '')
   }
 
   closeBtn.addEventListener('click', () => closeModal(modal))
@@ -124,6 +137,7 @@ export function mountOrgProductAdmin(ctx) {
     productPicker.clear()
     releaseYearEl.value = ''
     endYearEl.value = ''
+    scoreEl.value = ''
     clearErrors()
   }
 
@@ -142,16 +156,14 @@ export function mountOrgProductAdmin(ctx) {
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
     if (!e.ok) { showErr(endYearErr, e.msg); ok = false }
 
+    const sc = validateScore(scoreEl.value)
+    if (!sc.ok) { showErr(scoreErr, sc.msg); ok = false }
+
     // ID 强制要求是整数
-    // organization search 的 id 通常就是 organization_id，但我们仍然优先读 raw.organization_id。
     const orgSel = orgPicker.getSelected()
     const orgId = toIntStrict(orgSel?.raw?.organization_id ?? orgSel?.id)
     if (orgId === null) { showErr(orgErr, '企业 ID 无效（必须为数字）。请重新选择。'); ok = false }
 
-    // product union 的返回里：
-    // - kind=product: product_id = cybersecurity_product.security_product_id
-    // - kind=alias:  product_id = alias 归一后的主产品 id（同样指向 cybersecurity_product）
-    // selected.id 可能是 'p:7' 这种前缀形式，因此必须优先读 raw.product_id。
     const prodSel = productPicker.getSelected()
     const prodId = toIntStrict(
       prodSel?.raw?.product_id ??
@@ -181,12 +193,14 @@ export function mountOrgProductAdmin(ctx) {
 
     const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
+    const sc = validateScore(scoreEl.value)
 
     return {
       organization_id: orgId,
       security_product_id: prodId,
       product_release_year: r.value,
       product_end_year: e.value,
+      recommendation_score: sc.value,
     }
   }
 
@@ -197,7 +211,6 @@ export function mountOrgProductAdmin(ctx) {
     const payload = collectPayload()
 
     const action = async () => {
-      // ✅ 正确路由：POST /api/admin/org_product
       const res = await apiFetch('/api/admin/org_product', { method: 'POST', token, body: payload })
       const row = res?.organization_product ?? res
 
@@ -207,6 +220,7 @@ export function mountOrgProductAdmin(ctx) {
         `security_product_id = ${row?.security_product_id ?? payload.security_product_id}`,
         `product_release_year = ${(row?.product_release_year ?? payload.product_release_year) ?? '—'}`,
         `product_end_year = ${(row?.product_end_year ?? payload.product_end_year) ?? '—'}`,
+        `recommendation_score = ${(row?.recommendation_score ?? payload.recommendation_score) ?? '—'}`,
       ].join('\n')
 
       closeModal(modal)
@@ -221,7 +235,6 @@ export function mountOrgProductAdmin(ctx) {
         action,
       })
     } else {
-      // 兜底：confirm 初始化失败也不会“没反应”
       const msg = await action()
       alert(msg)
     }
@@ -237,7 +250,6 @@ export function mountOrgProductAdmin(ctx) {
     } catch (e) {
       console.error('[orgProduct] submit failed:', e)
       const msg = e?.message || String(e)
-      // 优先显示在产品错误位（用户最容易看到）
       showErr(prodErr, `❌ 失败：${msg}`)
     } finally {
       submitBtn.disabled = false
