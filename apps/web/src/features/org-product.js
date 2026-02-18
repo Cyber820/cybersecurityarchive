@@ -17,52 +17,53 @@ function validateYearRange(val, { min = 1990, max = new Date().getFullYear() } =
   return { ok: true, value: n }
 }
 
+function validateScore(val) {
+  const s = String(val || '').trim()
+  if (!s) return { ok: true, value: null }
+  const n = Number(s)
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return { ok: false, msg: '评分必须为整数。' }
+  if (n < 0 || n > 10) return { ok: false, msg: '评分范围：0 ~ 10。' }
+  return { ok: true, value: n }
+}
+
 export function mountOrgProductAdmin(ctx) {
   const { $, openModal, closeModal, apiFetch, getToken, showConfirmFlow } = ctx
 
   const btnOpen = $('btnOpenOrgProduct')
   const modal = $('orgProductModal')
 
-  // -------------------------
-  // Guard (fail loud, not silent)
-  // -------------------------
-  // admin.html 常见问题：回溯/合并后 id 不一致，导致“按钮点了没反应”。
-  // 这里做两层保护：
-  // 1) 最小可用：按钮存在就至少提示缺失的 DOM id
-  // 2) 完整可用：所有 picker / input 都存在才继续初始化
-
   const requiredIds = [
-    // entry + modal
     'btnOpenOrgProduct',
     'orgProductModal',
     'orgProductClose',
     'orgProductReset',
     'orgProductSubmit',
-    // inputs
+
     'orgProductReleaseYear',
     'orgProductEndYear',
-    // org picker
+    'orgProductScore',
+
     'orgProductOrgPicked',
     'orgProductOrgClear',
     'orgProductOrgSearch',
     'orgProductOrgStatus',
     'orgProductOrgList',
     'orgProductOrgErr',
-    // product picker
+
     'orgProductProdPicked',
     'orgProductProdClear',
     'orgProductProdSearch',
     'orgProductProdStatus',
     'orgProductProdList',
     'orgProductProdErr',
-    // year errs
+
     'orgProductReleaseYearErr',
     'orgProductEndYearErr',
+    'orgProductScoreErr',
   ]
 
   const missing = requiredIds.filter((id) => !$(id))
 
-  // 最小挂载：按钮存在就至少给出反馈（一次性），避免“无声失败”。
   if (btnOpen && modal) {
     btnOpen.addEventListener(
       'click',
@@ -79,7 +80,6 @@ export function mountOrgProductAdmin(ctx) {
           )
           return
         }
-        // 完整初始化完成后会由下方真正的 handler 接管。
         openModal(modal)
       },
       { once: true }
@@ -88,9 +88,6 @@ export function mountOrgProductAdmin(ctx) {
 
   if (missing.length) return
 
-  // -------------------------
-  // DOM
-  // -------------------------
   const closeBtn = $('orgProductClose')
 
   const orgErr = $('orgProductOrgErr')
@@ -101,6 +98,9 @@ export function mountOrgProductAdmin(ctx) {
 
   const endYearEl = $('orgProductEndYear')
   const endYearErr = $('orgProductEndYearErr')
+
+  const scoreEl = $('orgProductScore')
+  const scoreErr = $('orgProductScoreErr')
 
   const resetBtn = $('orgProductReset')
   const submitBtn = $('orgProductSubmit')
@@ -116,13 +116,11 @@ export function mountOrgProductAdmin(ctx) {
     showErr(prodErr, '')
     showErr(releaseYearErr, '')
     showErr(endYearErr, '')
+    showErr(scoreErr, '')
   }
 
   closeBtn.addEventListener('click', () => closeModal(modal))
 
-  // -------------------------
-  // Pickers
-  // -------------------------
   const orgPicker = createSingleSelectPicker({
     pickedEl: $('orgProductOrgPicked'),
     clearBtn: $('orgProductOrgClear'),
@@ -157,8 +155,6 @@ export function mountOrgProductAdmin(ctx) {
     listEl: $('orgProductProdList'),
     errEl: prodErr,
     emptyText: '未选择（请在下方搜索并点击一个安全产品/别名）',
-    // union: cybersecurity_product + cybersecurity_product_alias
-    // NOTE: 后端返回的 product_id 是“归一后的主产品 id”（FK 指向 cybersecurity_product.security_product_id）。
     searchFn: makeProductUnionSearch({ apiFetch, getToken }),
     renderItem: (it) => ({
       title: it.name || it.security_product_name || it.security_product_alias_name || '（未命名产品）',
@@ -172,9 +168,6 @@ export function mountOrgProductAdmin(ctx) {
         .filter(Boolean)
         .join(' · '),
     }),
-    // IMPORTANT:
-    // - union 结果会带前缀 id（比如 p:7 / a:12），但 insert FK 需要主产品的数字 ID。
-    // - 因此优先使用 product_id（归一后的主产品 id）。
     getId: (it) =>
       it.product_id ??
       it.security_product_id ??
@@ -185,14 +178,12 @@ export function mountOrgProductAdmin(ctx) {
       rendered?.title ?? String(it.product_id ?? it.security_product_id ?? it.id ?? ''),
   })
 
-  // -------------------------
-  // Form
-  // -------------------------
   function resetForm() {
     orgPicker.clear()
     productPicker.clear()
     releaseYearEl.value = ''
     endYearEl.value = ''
+    scoreEl.value = ''
     clearErrors()
   }
 
@@ -206,26 +197,18 @@ export function mountOrgProductAdmin(ctx) {
     const now = new Date().getFullYear()
 
     const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
-    if (!r.ok) {
-      showErr(releaseYearErr, r.msg)
-      ok = false
-    }
+    if (!r.ok) { showErr(releaseYearErr, r.msg); ok = false }
 
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
-    if (!e.ok) {
-      showErr(endYearErr, e.msg)
-      ok = false
-    }
+    if (!e.ok) { showErr(endYearErr, e.msg); ok = false }
 
-    // ID 强制要求是整数
+    const sc = validateScore(scoreEl.value)
+    if (!sc.ok) { showErr(scoreErr, sc.msg); ok = false }
+
     const orgSel = orgPicker.getSelected()
     const orgId = toIntStrict(orgSel?.raw?.organization_id ?? orgSel?.id)
-    if (orgId === null) {
-      showErr(orgErr, '企业 ID 无效（必须为数字）。请重新选择。')
-      ok = false
-    }
+    if (orgId === null) { showErr(orgErr, '企业 ID 无效（必须为数字）。请重新选择。'); ok = false }
 
-    // product union：优先读 raw.product_id
     const prodSel = productPicker.getSelected()
     const prodId = toIntStrict(
       prodSel?.raw?.product_id ??
@@ -234,10 +217,7 @@ export function mountOrgProductAdmin(ctx) {
           ? prodSel.id.split(':')[1]
           : prodSel?.id)
     )
-    if (prodId === null) {
-      showErr(prodErr, '产品 ID 无效（必须为数字）。请重新选择。')
-      ok = false
-    }
+    if (prodId === null) { showErr(prodErr, '产品 ID 无效（必须为数字）。请重新选择。'); ok = false }
 
     return ok
   }
@@ -262,12 +242,14 @@ export function mountOrgProductAdmin(ctx) {
 
     const r = validateYearRange(releaseYearEl.value, { min: 1990, max: now })
     const e = validateYearRange(endYearEl.value, { min: 1990, max: now })
+    const sc = validateScore(scoreEl.value)
 
     return {
       organization_id: orgId,
       security_product_id: prodId,
       product_release_year: r.value,
       product_end_year: e.value,
+      recommendation_score: sc.value,
     }
   }
 
@@ -287,6 +269,7 @@ export function mountOrgProductAdmin(ctx) {
         `security_product_id = ${row?.security_product_id ?? payload.security_product_id}`,
         `product_release_year = ${(row?.product_release_year ?? payload.product_release_year) ?? '—'}`,
         `product_end_year = ${(row?.product_end_year ?? payload.product_end_year) ?? '—'}`,
+        `recommendation_score = ${(row?.recommendation_score ?? payload.recommendation_score) ?? '—'}`,
       ].join('\n')
 
       closeModal(modal)
@@ -323,7 +306,6 @@ export function mountOrgProductAdmin(ctx) {
     }
   })
 
-  // NOTE: 上面有 once:true 的兜底 handler；这里是真正业务逻辑。
   btnOpen.addEventListener('click', () => {
     resetForm()
     openModal(modal)
