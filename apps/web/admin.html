@@ -120,22 +120,21 @@
       padding: 10px;
       background: rgba(0,0,0,0.02);
     }
-  
+
   /* ===== Org Info (preview) ===== */
   .kv-line{ display:flex; gap:8px; padding:6px 0; }
   .kv-label{ font-weight:600; color:#333; white-space:nowrap; }
   .kv-value{ color:#111; }
   .kv-block{ padding:8px 0; }
   .kv-pre{ white-space:pre-wrap; word-break:break-word; }
-
-</style>
+  </style>
 </head>
 
 <body>
   <div class="wrap">
     <h1>Industry Archive Admin</h1>
 
-    <!-- 第一行：添加功能（按：企业 → 企业产品 → 安全领域 → 安全产品） -->
+    <!-- 第一行：添加功能（企业 → 企业产品 → 安全领域 → 安全产品） -->
     <div class="toolbar">
       <button id="btnOpenOrg" class="btn" type="button">添加企业</button>
       <button id="btnOpenOrgProduct" class="btn" type="button">添加企业产品</button>
@@ -143,7 +142,7 @@
       <button id="btnOpenProduct" class="btn" type="button">添加安全产品</button>
     </div>
 
-    <!-- 第二行：编辑功能（按：企业 → 企业产品 → 安全领域 → 安全产品） -->
+    <!-- 第二行：编辑功能（企业 → 企业产品 → 安全领域 → 安全产品） -->
     <div class="toolbar">
       <button id="btnOpenOrgEdit" class="btn" type="button">编辑企业</button>
       <button id="btnOpenOrgProductEdit" class="btn" type="button">编辑企业产品</button>
@@ -158,7 +157,7 @@
     </div>
   </div>
 
-  <!-- ======（以下：你现有的所有 modal —— 原样保留；为节省篇幅我不再逐段注释）====== -->
+  <!-- ======（以下：你现有的所有 modal —— 原样保留）====== -->
 
   <!-- Organization: Create/Edit Modal -->
   <div id="orgModal" class="modal-overlay" aria-hidden="true">
@@ -201,7 +200,6 @@
         </div>
       </div>
 
-      
       <div class="row">
         <div class="label">是否上市 *</div>
         <div>
@@ -214,7 +212,7 @@
         </div>
       </div>
 
-<div class="row">
+      <div class="row">
         <div class="label">企业/机构描述</div>
         <div>
           <textarea id="orgDescription" class="textarea" rows="6" placeholder="选填：organization_description"></textarea>
@@ -275,10 +273,10 @@
     </div>
   </div>
 
-  <!-- Domain/Product/OrgProduct（添加）/编辑安全领域/编辑安全产品：你现有内容保持不变 -->
-  <!-- ……（中间大段保持不变：你本地直接用你现有 admin.html 替换成我给的整文件即可）…… -->
+  <!-- Domain/Product/编辑安全领域/编辑安全产品：你现有内容保持不变 -->
+  <!-- ……（中间内容保持不变）…… -->
 
-  <!-- OrgProduct: Create Modal（你已有） -->
+  <!-- OrgProduct: Create Modal -->
   <div id="orgProductModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="企业产品">
       <div class="modal-head">
@@ -342,6 +340,15 @@
         </div>
       </div>
 
+      <!-- ✅ 新增：产品评分 -->
+      <div class="row">
+        <div class="label">产品评分</div>
+        <div>
+          <input id="orgProductScore" class="input" type="text" inputmode="numeric" placeholder="选填：0 ~ 10（整数）" />
+          <div id="orgProductScoreErr" class="err"></div>
+        </div>
+      </div>
+
       <div class="modal-actions">
         <button id="orgProductReset" class="btn" type="button">清空</button>
         <button id="orgProductSubmit" class="btn btn-primary" type="button">添加</button>
@@ -349,9 +356,7 @@
     </div>
   </div>
 
-  <!-- =========================
-       ✅ 新增：OrgProduct Edit Modal（选企业 + 列表）
-       ========================= -->
+  <!-- OrgProduct Edit Modal（选企业 + 列表） -->
   <div id="orgProductEditModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="编辑企业产品">
       <div class="modal-head">
@@ -388,9 +393,7 @@
     </div>
   </div>
 
-  <!-- =========================
-       ✅ 新增：OrgProduct Edit Item Modal（编辑年份，两步确认）
-       ========================= -->
+  <!-- OrgProduct Edit Item Modal（编辑：年份+评分，两步确认） -->
   <div id="orgProductEditItemModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="编辑企业产品（年份）">
       <div class="modal-head">
@@ -418,6 +421,15 @@
         <div>
           <input id="orgProductEditItemEndYear" class="input" type="text" inputmode="numeric" placeholder="选填：1990 ~ 当前年份" />
           <div id="orgProductEditItemEndYearErr" class="err"></div>
+        </div>
+      </div>
+
+      <!-- ✅ 新增：产品评分 -->
+      <div class="row">
+        <div class="label">产品评分</div>
+        <div>
+          <input id="orgProductEditItemScore" class="input" type="text" inputmode="numeric" placeholder="选填：0 ~ 10（整数）" />
+          <div id="orgProductEditItemScoreErr" class="err"></div>
         </div>
       </div>
 
