@@ -455,10 +455,216 @@
     </div>
   </div>
 
-  <!-- Domain/Product/编辑安全领域/编辑安全产品：你现有内容保持不变 -->
-  <!-- ……（中间内容保持不变）…… -->
+  <!-- =========================
+       Product: Create Modal
+       （对齐 apps/web/src/features/product.js 的 required DOM）
+       ========================= -->
+  <div id="productModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="安全产品">
+      <div class="modal-head">
+        <div class="modal-title">添加安全产品</div>
+        <button id="productClose" class="btn" type="button">关闭</button>
+      </div>
 
-  <!-- OrgProduct: Create Modal -->
+      <div class="row">
+        <div class="label">安全产品名称 *</div>
+        <div>
+          <input id="productName" class="input" type="text" placeholder="必填：security_product_name / security_product_alias_name" />
+          <div id="productNameErr" class="err"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">是否为别名 *</div>
+        <div>
+          <select id="productIsAlias" class="input">
+            <option value="no" selected>否（主产品）</option>
+            <option value="yes">是（别名）</option>
+          </select>
+          <div id="productIsAliasErr" class="err"></div>
+          <div class="hint">选择“别名”时：slug/描述/安全领域隐藏，并需要选择“归属安全产品”。</div>
+        </div>
+      </div>
+
+      <div class="row" id="productSlugRow">
+        <div class="label">slug *</div>
+        <div>
+          <input id="productSlug" class="input" type="text" placeholder="必填：security_product_slug（英文/数字/连字符）" />
+          <div id="productSlugErr" class="err"></div>
+          <div class="hint">规则：仅允许 a-z / 0-9 / 连字符 -（建议小写）。</div>
+        </div>
+      </div>
+
+      <div class="row" id="productDomainsRow">
+        <div class="label">对应安全领域 *</div>
+        <div>
+          <div class="card" style="margin-top:0;">
+            <div class="label">选择安全领域（多选）</div>
+            <div class="hint" style="margin-top:6px;">点击 ▾ 展开搜索并勾选，点“确认”生效。</div>
+            <div id="productDomains" style="margin-top:10px;"></div>
+            <div id="productDomainsErr" class="err"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row" id="productDescRow">
+        <div class="label">安全产品描述</div>
+        <div>
+          <textarea id="productDesc" class="textarea" rows="6" placeholder="选填：security_product_description"></textarea>
+          <div class="hint">可为空。</div>
+        </div>
+      </div>
+
+      <div class="row" id="productAliasTargetRow">
+        <div class="label">归属安全产品 *</div>
+        <div>
+          <div class="card" style="margin-top:0;">
+            <div class="label">选择归属安全产品（单选）</div>
+            <div class="hint" id="productAliasTargetPicked" style="margin-top:6px;">未选择（请在下方搜索并点击一个安全产品）</div>
+            <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
+              <button id="productAliasTargetClear" class="btn" type="button" style="display:none;">清除已选择</button>
+            </div>
+            <div style="margin-top:10px;">
+              <input id="productAliasTargetSearch" class="input" type="text" placeholder="搜索产品名 / 别名 / slug ..." />
+              <div id="productAliasTargetStatus" class="hint" style="margin-top:6px;">输入关键字开始搜索。</div>
+              <div id="productAliasTargetList" style="margin-top:10px;"></div>
+              <div id="productAliasTargetErr" class="err"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="productReset" class="btn" type="button">清空</button>
+        <button id="productSubmit" class="btn btn-primary" type="button">添加</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================
+       Product: Edit - Search Modal
+       ========================= -->
+  <div id="productEditSearchModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="编辑安全产品（搜索）">
+      <div class="modal-head">
+        <div class="modal-title">编辑安全产品（搜索）</div>
+        <button id="productEditSearchClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div class="row" style="grid-template-columns: 1fr;">
+        <div>
+          <input id="productEditSearchInput" class="input" type="text" placeholder="搜索 产品名 / 别名 / slug ..." />
+          <div class="hint">点击“编辑/删除”进行操作。</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px;">
+        <div class="label">搜索结果</div>
+        <div id="productEditSearchStatus" class="hint" style="margin-top:6px;">请输入关键字开始搜索。</div>
+        <div id="productEditSearchList" style="margin-top:10px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================
+       Product: Edit - Main Modal
+       ========================= -->
+  <div id="productEditMainModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="编辑安全产品（主产品）">
+      <div class="modal-head">
+        <div class="modal-title">编辑安全产品（主产品）</div>
+        <button id="productEditMainClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div class="row">
+        <div class="label">产品名称 *</div>
+        <div>
+          <input id="productEditMainName" class="input" type="text" placeholder="必填：security_product_name" />
+          <div id="productEditMainNameErr" class="err"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">slug *</div>
+        <div>
+          <input id="productEditMainSlug" class="input" type="text" placeholder="必填：security_product_slug（英文/数字/连字符）" />
+          <div id="productEditMainSlugErr" class="err"></div>
+          <div class="hint">规则：仅允许 a-z / 0-9 / 连字符 -（建议小写）。</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">产品描述</div>
+        <div>
+          <textarea id="productEditMainDesc" class="textarea" rows="6" placeholder="选填：security_product_description"></textarea>
+          <div class="hint">可为空。</div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">对应安全领域 *</div>
+        <div>
+          <div class="card" style="margin-top:0;">
+            <div class="label">选择安全领域（多选）</div>
+            <div class="hint" style="margin-top:6px;">点击 ▾ 展开搜索并勾选，点“确认”生效。</div>
+            <div id="productEditMainDomains" style="margin-top:10px;"></div>
+            <div id="productEditMainDomainsErr" class="err"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="productEditMainCancel" class="btn" type="button">取消</button>
+        <button id="productEditMainSubmit" class="btn btn-primary" type="button">确定更新</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================
+       Product: Edit - Alias Modal
+       ========================= -->
+  <div id="productEditAliasModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-label="编辑安全产品（别名）">
+      <div class="modal-head">
+        <div class="modal-title">编辑安全产品（别名）</div>
+        <button id="productEditAliasClose" class="btn" type="button">关闭</button>
+      </div>
+
+      <div class="row">
+        <div class="label">别名名称 *</div>
+        <div>
+          <input id="productEditAliasName" class="input" type="text" placeholder="必填：security_product_alias_name" />
+          <div id="productEditAliasNameErr" class="err"></div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="label">归属安全产品 *</div>
+        <div>
+          <div class="card" style="margin-top:0;">
+            <div class="label">选择归属安全产品（单选）</div>
+            <div class="hint" id="productEditAliasTargetPicked" style="margin-top:6px;">未选择（请在下方搜索并点击一个安全产品）</div>
+            <div class="modal-actions" style="justify-content:flex-start; margin-top:10px;">
+              <button id="productEditAliasTargetClear" class="btn" type="button" style="display:none;">清除已选择</button>
+            </div>
+            <div style="margin-top:10px;">
+              <input id="productEditAliasTargetSearch" class="input" type="text" placeholder="搜索产品名 / 别名 / slug ..." />
+              <div id="productEditAliasTargetStatus" class="hint" style="margin-top:6px;">输入关键字开始搜索。</div>
+              <div id="productEditAliasTargetList" style="margin-top:10px;"></div>
+              <div id="productEditAliasTargetErr" class="err"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="productEditAliasCancel" class="btn" type="button">取消</button>
+        <button id="productEditAliasSubmit" class="btn btn-primary" type="button">确定更新</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OrgProduct: Create Modal（你已有，保持原样） -->
   <div id="orgProductModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="企业产品">
       <div class="modal-head">
@@ -537,7 +743,7 @@
     </div>
   </div>
 
-  <!-- OrgProduct Edit Modal（选企业 + 列表） -->
+  <!-- OrgProduct Edit Modal（你已有，保持原样） -->
   <div id="orgProductEditModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="编辑企业产品">
       <div class="modal-head">
@@ -574,7 +780,7 @@
     </div>
   </div>
 
-  <!-- OrgProduct Edit Item Modal（编辑：年份+评分，两步确认） -->
+  <!-- OrgProduct Edit Item Modal（你已有，保持原样） -->
   <div id="orgProductEditItemModal" class="modal-overlay" aria-hidden="true">
     <div class="modal" role="dialog" aria-modal="true" aria-label="编辑企业产品（年份）">
       <div class="modal-head">
