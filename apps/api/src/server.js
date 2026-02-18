@@ -16,8 +16,6 @@ const app = Fastify({ logger: true });
 await app.register(fastifyCors, { origin: true });
 
 // ===== Static hosting (Vite build output) =====
-// server.js is at: apps/api/src/server.js
-// so __dirname = .../apps/api/src
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -36,6 +34,10 @@ if (hasStatic) {
   // root
   app.get('/', (req, reply) => reply.sendFile('index.html'));
 
+  // ✅ /search 落地到 search.html
+  app.get('/search', (req, reply) => reply.sendFile('search.html'));
+  app.get('/search/*', (req, reply) => reply.sendFile('search.html'));
+
   // ✅ /securitydomain/* 落地到 securitydomain.html
   app.get('/securitydomain', (req, reply) => reply.sendFile('securitydomain.html'));
   app.get('/securitydomain/*', (req, reply) => reply.sendFile('securitydomain.html'));
@@ -48,11 +50,10 @@ if (hasStatic) {
   app.get('/company', (req, reply) => reply.sendFile('company.html'));
   app.get('/company/*', (req, reply) => reply.sendFile('company.html'));
 
-  // ✅ admin 访问落地（建议加，避免用户必须记 /admin.html）
+  // ✅ admin
   app.get('/admin', (req, reply) => reply.sendFile('admin.html'));
   app.get('/admin/*', (req, reply) => reply.sendFile('admin.html'));
 } else {
-  // Static missing: still expose / for diagnosis
   app.get('/', async () => ({
     ok: true,
     hint: 'Static dist missing. Ensure build outputs to apps/web/dist.',
@@ -84,7 +85,7 @@ app.setNotFoundHandler((req, reply) => {
   }
 
   if (hasStatic) {
-    // SPA-like fallback for deep links
+    if (url.startsWith('/search')) return reply.sendFile('search.html');
     if (url.startsWith('/securitydomain')) return reply.sendFile('securitydomain.html');
     if (url.startsWith('/securityproduct')) return reply.sendFile('securityproduct.html');
     if (url.startsWith('/company')) return reply.sendFile('company.html');
