@@ -3,7 +3,6 @@
 export function mountGlobalSearch(mountEl, opts = {}) {
   if (!mountEl) return;
 
-  const renderMode = opts.renderMode || 'groups'; // 'groups' | 'list'
   const title = opts.title || '全站搜索';
   const placeholder = opts.placeholder || '全站搜索：企业 / 产品 / 领域（输入关键词后回车）';
 
@@ -41,21 +40,6 @@ export function mountGlobalSearch(mountEl, opts = {}) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
 
-      const items = Array.isArray(data.items) ? data.items : null;
-
-      if (renderMode === 'list') {
-        // ✅ search.html 主要用：统一列表（包含 alias）
-        if (!items || !items.length) {
-          $hint.textContent = '没有找到结果。';
-          return;
-        }
-        $hint.textContent = `搜索结果：${items.length}`;
-        $results.style.display = '';
-        $results.appendChild(renderUnifiedList(items));
-        return;
-      }
-
-      // ✅ 兼容旧页面：分组 chips（不要求 alias）
       const companies = Array.isArray(data.companies) ? data.companies : [];
       const products = Array.isArray(data.products) ? data.products : [];
       const domains = Array.isArray(data.domains) ? data.domains : [];
@@ -89,44 +73,6 @@ export function mountGlobalSearch(mountEl, opts = {}) {
   $input.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter') run();
   });
-
-  if (opts.autoFocus) {
-    setTimeout(() => $input?.focus(), 0);
-  }
-}
-
-function renderUnifiedList(items) {
-  const wrap = document.createElement('div');
-  wrap.className = 'gs-list';
-
-  for (const it of items) {
-    const a = document.createElement('a');
-    a.className = 'gs-rowitem';
-    a.href = it.href || '#';
-
-    const main = document.createElement('div');
-    main.className = 'gs-rowitem-main';
-    main.textContent = it.title || '（未命名）';
-
-    const meta = document.createElement('div');
-    meta.className = 'gs-rowitem-meta';
-    meta.textContent = it.type_label || '（未知类型）';
-
-    a.appendChild(main);
-    a.appendChild(meta);
-
-    // 别名：第三行显示 “又称：XXX”
-    if (it.is_alias && it.aka) {
-      const aka = document.createElement('div');
-      aka.className = 'gs-rowitem-aka';
-      aka.textContent = it.aka;
-      a.appendChild(aka);
-    }
-
-    wrap.appendChild(a);
-  }
-
-  return wrap;
 }
 
 function renderGroup(title, items) {
@@ -171,30 +117,12 @@ function injectSearchStyles() {
     .gs-btn:hover{background:#f8fafc;}
     .gs-hint{margin-top:10px;color:var(--muted,#6b7280);}
     .gs-results{margin-top:10px;border-top:1px dashed var(--border,#e6e8ef);padding-top:10px;}
-
-    /* groups (legacy) */
     .gs-group{margin-top:10px;}
     .gs-group-title{font-size:13px;color:var(--muted,#6b7280);margin:0 0 8px;}
     .gs-chip-row{display:flex;flex-wrap:wrap;gap:8px;}
     .gs-chip{display:inline-flex;align-items:center;padding:7px 10px;border-radius:999px;text-decoration:none;background:#eef2ff;border:1px solid rgba(99,102,241,0.22);color:#1f2937;}
     .gs-chip:hover{background:#e0e7ff;}
     .gs-empty{color:var(--muted,#6b7280);}
-
-    /* unified list (search page) */
-    .gs-list{display:flex;flex-direction:column;gap:10px;}
-    .gs-rowitem{
-      display:block;
-      text-decoration:none;
-      border:1px solid rgba(0,0,0,0.12);
-      border-radius:12px;
-      padding:10px 12px;
-      background:#fff;
-      color:#111;
-    }
-    .gs-rowitem:hover{border-color: rgba(0,0,0,0.25);}
-    .gs-rowitem-main{font-weight:800;font-size:14px;line-height:1.35;}
-    .gs-rowitem-meta{margin-top:4px;font-size:12px;color:rgba(0,0,0,0.65);}
-    .gs-rowitem-aka{margin-top:6px;font-size:12px;color:rgba(0,0,0,0.75);}
   `;
   document.head.appendChild(style);
 }
