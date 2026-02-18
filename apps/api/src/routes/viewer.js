@@ -1,11 +1,8 @@
 // apps/api/src/routes/viewer.js
-// Public (viewer) API: domain / product / company pages + global search
+// Public (viewer) API: domain / product / company pages + global search + solution search
 
 import { supabase } from '../supabase.js';
 
-/**
- * Helper: try slug first, then name (exact match).
- */
 async function findOneBySlugOrName({ table, slugCol, nameCol, q }) {
   const bySlug = await supabase.from(table).select('*').eq(slugCol, q).maybeSingle();
   if (bySlug.error) return { data: null, error: bySlug.error };
@@ -18,6 +15,15 @@ async function findOneBySlugOrName({ table, slugCol, nameCol, q }) {
   }
 
   return { data: null, error: null };
+}
+
+function scoreTier(score) {
+  // ✅ 不向前端暴露 score；仅返回 tier（样式分桶）
+  const s = (score === null || score === undefined) ? null : Number(score);
+  if (!Number.isFinite(s)) return 'normal';
+  if (s >= 8) return 'high';
+  if (s >= 6) return 'mid';
+  return 'normal'; // 0-5
 }
 
 export async function viewerRoutes(app) {
@@ -204,13 +210,12 @@ export async function viewerRoutes(app) {
     return reply.send({ company, products });
   });
 
-  // ===== Global search =====
+  // ===== Global search (keep existing) =====
   app.get('/search', async (req, reply) => {
     const q = String(req.query?.q || '').trim();
-    if (!q) return reply.send({ q, items: [], companies: [], products: [], domains: [] });
+    if (!q) return reply.send({ q, companies: [], products: [], domains: [] });
 
-    // 1) 主表搜索（保持原逻辑，兼容旧 global-search 小组件）
-    const [companiesRes, productsRes, domainsRes] = await Promise.all([
+    const [companies, products, domains] = await Promise.all([
       supabase
         .from('organization')
         .select('organization_id, organization_short_name, organization_full_name, organization_slug')
@@ -230,151 +235,206 @@ export async function viewerRoutes(app) {
         .limit(30),
     ]);
 
-    const err0 = companiesRes.error || productsRes.error || domainsRes.error;
-    if (err0) return reply.code(500).send({ error: err0.message });
+    const err = companies.error || products.error || domains.error;
+    if (err) return reply.code(500).send({ error: err.message });
 
-    const companies = companiesRes.data || [];
-    const products = productsRes.data || [];
-    const domains = domainsRes.data || [];
+    return reply.send({
+      q,
+      companies: companies.data || [],
+      products: products.data || [],
+      domains: domains.data || [],
+    });
+  });
 
-    // 2) 别名搜索（新增）
-    const [productAliasesRes, domainAliasesRes] = await Promise.all([
+  // =========================================================
+  // ✅ Solution Search: product suggestions
+  // GET /api/solution/products?q=
+  // - 返回主产品 + 别名（别名会映射到主产品 id）
+  // =========================================================
+  app.get('/solution/products', async (req, reply) => {
+    const q = String(req.query?.q || '').trim();
+    if (!q) return reply.send({ q, items: [] });
+
+    const [mainRes, aliasRes] = await Promise.all([
+      supabase
+        .from('cybersecurity_product')
+        .select('security_product_id, security_product_name, security_product_slug')
+        .or(`security_product_name.ilike.%${q}%,security_product_slug.ilike.%${q}%`)
+        .limit(20),
       supabase
         .from('cybersecurity_product_alias')
         .select('security_product_alias_id, security_product_alias_name, security_product_id')
         .ilike('security_product_alias_name', `%${q}%`)
-        .limit(30),
-      supabase
-        .from('cybersecurity_domain_alias')
-        .select('security_domain_alias_id, security_domain_alias_name, security_domain_id')
-        .ilike('security_domain_alias_name', `%${q}%`)
-        .limit(30),
+        .limit(20),
     ]);
 
-    const err1 = productAliasesRes.error || domainAliasesRes.error;
-    if (err1) return reply.code(500).send({ error: err1.message });
+    const err = mainRes.error || aliasRes.error;
+    if (err) return reply.code(500).send({ error: err.message });
 
-    const productAliases = productAliasesRes.data || [];
-    const domainAliases = domainAliasesRes.data || [];
+    const mains = mainRes.data || [];
+    const aliases = aliasRes.data || [];
 
-    // 3) 为别名补主名 + slug（批量查）
-    const mainProductIds = Array.from(new Set(productAliases.map((x) => x.security_product_id).filter((v) => v != null)));
-    const mainDomainIds = Array.from(new Set(domainAliases.map((x) => x.security_domain_id).filter((v) => v != null)));
+    const mainIds = Array.from(new Set(aliases.map(a => a.security_product_id).filter(v => v != null)));
+    let mainById = new Map();
 
-    let mainProductsById = new Map();
-    let mainDomainsById = new Map();
-
-    if (mainProductIds.length) {
+    if (mainIds.length) {
       const mp = await supabase
         .from('cybersecurity_product')
         .select('security_product_id, security_product_name, security_product_slug')
-        .in('security_product_id', mainProductIds);
+        .in('security_product_id', mainIds);
       if (mp.error) return reply.code(500).send({ error: mp.error.message });
-      for (const p of mp.data || []) mainProductsById.set(p.security_product_id, p);
+      for (const p of mp.data || []) mainById.set(p.security_product_id, p);
     }
 
-    if (mainDomainIds.length) {
-      const md = await supabase
-        .from('cybersecurity_domain')
-        .select('security_domain_id, security_domain_name, cybersecurity_domain_slug')
-        .in('security_domain_id', mainDomainIds);
-      if (md.error) return reply.code(500).send({ error: md.error.message });
-      for (const d of md.data || []) mainDomainsById.set(d.security_domain_id, d);
-    }
-
-    // 4) 统一 items（供 search.html 使用）
     const items = [];
 
-    // 企业：title = 全称(若 null 则简称)，小字类型“企业”，href 指向 company 页面
-    for (const c of companies) {
-      const title = c.organization_full_name || c.organization_short_name || c.organization_slug || '（未命名）';
-      const slug = c.organization_slug || c.organization_short_name || '';
+    for (const p of mains) {
       items.push({
-        kind: 'organization',
+        id: p.security_product_id,
+        name: p.security_product_name || p.security_product_slug || '（未命名产品）',
+        slug: p.security_product_slug || '',
         is_alias: false,
-        title,
-        type_label: '企业',
-        aka: null,
-        href: `/company/${encodeURIComponent(slug)}`,
+        main_name: null,
       });
     }
 
-    // 主产品
-    for (const p of products) {
-      const title = p.security_product_name || p.security_product_slug || '（未命名）';
-      const slug = p.security_product_slug || '';
+    for (const a of aliases) {
+      const main = mainById.get(a.security_product_id);
       items.push({
-        kind: 'product',
-        is_alias: false,
-        title,
-        type_label: '安全产品',
-        aka: null,
-        href: `/securityproduct/${encodeURIComponent(slug)}`,
-      });
-    }
-
-    // 主领域
-    for (const d of domains) {
-      const title = d.security_domain_name || d.cybersecurity_domain_slug || '（未命名）';
-      const slug = d.cybersecurity_domain_slug || '';
-      items.push({
-        kind: 'domain',
-        is_alias: false,
-        title,
-        type_label: '安全领域',
-        aka: null,
-        href: `/securitydomain/${encodeURIComponent(slug)}`,
-      });
-    }
-
-    // 产品别名：显示 alias 名；又称：主产品名；href 跳主产品
-    for (const a of productAliases) {
-      const main = mainProductsById.get(a.security_product_id) || null;
-      const mainName = main?.security_product_name || main?.security_product_slug || null;
-      const mainSlug = main?.security_product_slug || '';
-      items.push({
-        kind: 'product',
+        // ✅ 关键：别名也返回主产品 id（前端选中后只保存主 id）
+        id: a.security_product_id,
+        name: a.security_product_alias_name || '（未命名别称）',
+        slug: main?.security_product_slug || '',
         is_alias: true,
-        title: a.security_product_alias_name || '（未命名别称）',
-        type_label: '安全产品',
-        aka: mainName ? `又称：${mainName}` : null,
-        href: `/securityproduct/${encodeURIComponent(mainSlug)}`,
+        main_name: main?.security_product_name || main?.security_product_slug || null,
       });
     }
 
-    // 领域别名：显示 alias 名；又称：主领域名；href 跳主领域
-    for (const a of domainAliases) {
-      const main = mainDomainsById.get(a.security_domain_id) || null;
-      const mainName = main?.security_domain_name || main?.cybersecurity_domain_slug || null;
-      const mainSlug = main?.cybersecurity_domain_slug || '';
+    // 去重：同一个主产品 id 可能重复出现（主/别名同时命中）
+    // 这里不强行去重，让用户能看到“别称·又称”这一类提示；但限制总条数
+    return reply.send({ q, items: items.slice(0, 30) });
+  });
+
+  // =========================================================
+  // ✅ Solution Search: find organizations that have ALL selected products
+  // POST /api/solution/search { product_ids: number[] }
+  // - 服务端用 recommendation_score 做排序（总分降序）
+  // - 绝不返回 score，只返回 tier 供前端样式
+  // =========================================================
+  app.post('/solution/search', async (req, reply) => {
+    const idsRaw = req.body?.product_ids;
+    const productIds = Array.isArray(idsRaw) ? idsRaw.map(Number).filter(Number.isFinite) : [];
+    const uniq = Array.from(new Set(productIds)).filter((x) => Number.isInteger(x));
+
+    if (!uniq.length) return reply.send({ product_ids: [], items: [] });
+    if (uniq.length > 20) return reply.code(400).send({ error: 'Too many products (max 20).' });
+
+    // 1) 取 organization_product 中匹配这些产品的所有行
+    const opRes = await supabase
+      .from('organization_product')
+      .select('organization_id, security_product_id, recommendation_score')
+      .in('security_product_id', uniq)
+      .limit(5000);
+
+    if (opRes.error) return reply.code(500).send({ error: opRes.error.message });
+
+    // 2) 按 organization_id 聚合：必须覆盖全部 productIds
+    //    totalScore 仅用于排序（不返回给前端）
+    const needN = uniq.length;
+    const byOrg = new Map(); // orgId -> { seen:Set, rows:Map(productId->score), totalScore:number }
+    for (const r of opRes.data || []) {
+      const orgId = r.organization_id;
+      const pid = r.security_product_id;
+      if (orgId == null || pid == null) continue;
+
+      let g = byOrg.get(orgId);
+      if (!g) {
+        g = { seen: new Set(), rows: new Map(), totalScore: 0 };
+        byOrg.set(orgId, g);
+      }
+
+      // 去重同产品（保险）
+      if (!g.seen.has(pid)) {
+        g.seen.add(pid);
+        g.rows.set(pid, r.recommendation_score ?? null);
+
+        const s = Number(r.recommendation_score);
+        if (Number.isFinite(s)) g.totalScore += s;
+      }
+    }
+
+    const matchedOrgIds = [];
+    for (const [orgId, g] of byOrg.entries()) {
+      if (g.seen.size === needN) matchedOrgIds.push(orgId);
+    }
+
+    if (!matchedOrgIds.length) return reply.send({ product_ids: uniq, items: [] });
+
+    // 3) 获取企业信息
+    const orgRes = await supabase
+      .from('organization')
+      .select('organization_id, organization_short_name, organization_full_name, organization_slug')
+      .in('organization_id', matchedOrgIds);
+
+    if (orgRes.error) return reply.code(500).send({ error: orgRes.error.message });
+
+    const orgById = new Map();
+    for (const o of orgRes.data || []) orgById.set(o.organization_id, o);
+
+    // 4) 获取产品主名（按选择的 productIds）
+    const prodRes = await supabase
+      .from('cybersecurity_product')
+      .select('security_product_id, security_product_name, security_product_slug')
+      .in('security_product_id', uniq);
+
+    if (prodRes.error) return reply.code(500).send({ error: prodRes.error.message });
+
+    const prodById = new Map();
+    for (const p of prodRes.data || []) prodById.set(p.security_product_id, p);
+
+    // 5) 构造 items：按 totalScore 降序（仅服务器内部）
+    const items = [];
+    for (const orgId of matchedOrgIds) {
+      const o = orgById.get(orgId);
+      const g = byOrg.get(orgId);
+      if (!o || !g) continue;
+
+      const products = uniq.map((pid) => {
+        const p = prodById.get(pid);
+        const score = g.rows.get(pid); // 仅用于 tier
+        return {
+          id: pid,
+          name: p?.security_product_name || p?.security_product_slug || `产品 ${pid}`,
+          slug: p?.security_product_slug || '',
+          tier: scoreTier(score),
+        };
+      });
+
       items.push({
-        kind: 'domain',
-        is_alias: true,
-        title: a.security_domain_alias_name || '（未命名别称）',
-        type_label: '安全领域',
-        aka: mainName ? `又称：${mainName}` : null,
-        href: `/securitydomain/${encodeURIComponent(mainSlug)}`,
+        organization: o,
+        products,
+        _sort_total: g.totalScore, // 内部字段，稍后删除
       });
     }
 
-    // 简单去重（kind+title+href）
-    const seen = new Set();
-    const deduped = [];
-    for (const it of items) {
-      const key = `${it.kind}::${it.title}::${it.href}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      deduped.push(it);
-    }
+    items.sort((a, b) => {
+      const da = Number(a._sort_total) || 0;
+      const db = Number(b._sort_total) || 0;
+      if (db !== da) return db - da;
 
-    return reply.send({
-      q,
-      // ✅ 新：统一结果列表（search.html 主要用它）
-      items: deduped,
-      // ✅ 旧：保持兼容（其他页面 global-search 小组件仍可用）
-      companies,
-      products,
-      domains,
+      const an = (a.organization?.organization_short_name || '').toLowerCase();
+      const bn = (b.organization?.organization_short_name || '').toLowerCase();
+      if (an < bn) return -1;
+      if (an > bn) return 1;
+      return 0;
     });
+
+    // 删除内部字段，确保前端拿不到分数信息
+    const out = items.slice(0, 60).map((x) => {
+      const { _sort_total, ...rest } = x;
+      return rest;
+    });
+
+    return reply.send({ product_ids: uniq, items: out });
   });
 }
