@@ -188,6 +188,30 @@ export function mountDomainAdmin(ctx) {
     }
   }
 
+  function pickCreatedId(res, mode) {
+    // 兼容不同返回风格（本项目后端：{domain} / {alias}）
+    if (!res) return null
+
+    if (mode === 'main') {
+      return (
+        res?.domain?.security_domain_id ??
+        res?.domain?.id ??
+        res?.security_domain_id ??
+        res?.id ??
+        null
+      )
+    }
+
+    // alias
+    return (
+      res?.alias?.security_domain_alias_id ??
+      res?.alias?.id ??
+      res?.security_domain_alias_id ??
+      res?.id ??
+      null
+    )
+  }
+
   resetBtn.addEventListener('click', () => resetForm())
 
   submitBtn.addEventListener('click', async () => {
@@ -207,7 +231,9 @@ export function mountDomainAdmin(ctx) {
         const res = await apiFetch(url, { method: 'POST', token, body: payload })
         closeModal(modal)
         resetForm()
-        return `✅ 添加成功：${res?.id ?? res?.security_domain_id ?? res?.security_domain_alias_id ?? '（未返回）'}`
+
+        const createdId = pickCreatedId(res, mode)
+        return `✅ 添加成功：${createdId ?? '（未返回）'}`
       }
     })
 
