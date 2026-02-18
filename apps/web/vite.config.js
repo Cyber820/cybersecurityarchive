@@ -11,6 +11,7 @@ export default defineConfig({
         index: resolve(__dirname, 'index.html'),
         viewer: resolve(__dirname, 'viewer.html'),
         admin: resolve(__dirname, 'admin.html'),
+        search: resolve(__dirname, 'search.html'),
         securitydomain: resolve(__dirname, 'securitydomain.html'),
         securityproduct: resolve(__dirname, 'securityproduct.html'),
         company: resolve(__dirname, 'company.html'),
