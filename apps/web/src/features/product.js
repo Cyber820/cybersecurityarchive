@@ -1,7 +1,245 @@
 // apps/web/src/features/product.js
 import { createAliasSwitch } from '../ui/alias-switch.js'
 import { createSingleSelectPicker } from '../ui/single-select-picker.js'
-import { createMultiSelectPicker } from '../ui/multi-select-picker.js'
+import { makeDomainUnionSearch } from '../core/dropdowns.js'
+
+/**
+ * 一个“尽量不依赖你旧实现”的 domains 多选面板：
+ * - 使用 productDomains 容器（#productDomains）
+ * - 内部自己渲染：展开/清空/确认、搜索框、结果 checkbox 列表
+ * - 搜索接口用 /api/admin/dropdowns/domain_union?q=
+ *
+ * ✅ 注意：这里做了“软失败”：
+ * - rootEl 不存在时不会 throw，返回一个 no-op 对象，避免整页 JS 崩溃
+ */
+function mountDomainMultiSelect({
+  rootEl,
+  fetchItems,            // async (q)=>{items:[]}
+  getId = (it) => it.security_domain_id ?? it.domain_id ?? it.id,
+  getLabel = (it) => it.security_domain_name ?? it.domain_name ?? it.name ?? `ID ${getId(it)}`,
+  onChangeSummary = null // (confirmedIds, confirmedItems)=>void
+} = {}) {
+  if (!rootEl) {
+    console.warn('[product] mountDomainMultiSelect skipped: missing rootEl')
+    return {
+      getConfirmedIds: () => [],
+      clear: () => {},
+      focus: () => {},
+    }
+  }
+
+  let confirmed = new Map() // id -> item
+  let pending = new Map()   // id -> item
+  let open = false
+
+  rootEl.innerHTML = ''
+
+  const head = document.createElement('div')
+  head.className = 'ia-ms-head'
+
+  const title = document.createElement('div')
+  title.className = 'ia-ms-title'
+  title.textContent = '已选择安全领域（多选）'
+
+  const actions = document.createElement('div')
+  actions.className = 'ia-ms-actions'
+
+  const btnToggle = document.createElement('button')
+  btnToggle.type = 'button'
+  btnToggle.className = 'ia-ms-iconbtn'
+  btnToggle.textContent = '▾'
+
+  const btnClear = document.createElement('button')
+  btnClear.type = 'button'
+  btnClear.className = 'ia-ms-iconbtn'
+  btnClear.textContent = '×'
+
+  actions.appendChild(btnToggle)
+  actions.appendChild(btnClear)
+
+  head.appendChild(title)
+  head.appendChild(actions)
+
+  const summary = document.createElement('div')
+  summary.className = 'ia-ms-summary'
+  summary.textContent = '未选择（点击 ▾ 展开后搜索并勾选，点“确认”生效）'
+
+  const panel = document.createElement('div')
+  panel.className = 'ia-ms-panel'
+
+  const searchBox = document.createElement('input')
+  searchBox.className = 'input'
+  searchBox.type = 'text'
+  searchBox.placeholder = '搜索安全领域 name / alias / slug ...'
+
+  const status = document.createElement('div')
+  status.className = 'hint'
+  status.style.marginTop = '6px'
+  status.textContent = '输入关键字开始搜索。'
+
+  const list = document.createElement('div')
+  list.style.marginTop = '10px'
+
+  const panelActions = document.createElement('div')
+  panelActions.className = 'modal-actions'
+  panelActions.style.justifyContent = 'flex-start'
+  panelActions.style.marginTop = '10px'
+
+  const btnConfirm = document.createElement('button')
+  btnConfirm.type = 'button'
+  btnConfirm.className = 'btn btn-primary'
+  btnConfirm.textContent = '确认'
+
+  panelActions.appendChild(btnConfirm)
+
+  panel.appendChild(searchBox)
+  panel.appendChild(status)
+  panel.appendChild(list)
+  panel.appendChild(panelActions)
+
+  rootEl.appendChild(head)
+  rootEl.appendChild(summary)
+  rootEl.appendChild(panel)
+
+  function refreshSummary() {
+    const items = Array.from(confirmed.values())
+    if (!items.length) {
+      summary.textContent = '未选择（点击 ▾ 展开后搜索并勾选，点“确认”生效）'
+    } else {
+      summary.textContent = items.map(it => `• ${getLabel(it)}`).join('\n')
+    }
+    if (typeof onChangeSummary === 'function') {
+      onChangeSummary(Array.from(confirmed.keys()), items)
+    }
+  }
+
+  function setOpen(v) {
+    open = !!v
+    // ✅ 关键修复：如果 CSS 里 ia-ms-panel 默认 display:none
+    // 这里必须显式写 block，否则写 '' 仍会被 CSS 覆盖隐藏
+    panel.style.display = open ? 'block' : 'none'
+    btnToggle.textContent = open ? '▴' : '▾'
+    if (open) searchBox.focus()
+  }
+
+  function renderList(items) {
+    list.innerHTML = ''
+    if (!items.length) {
+      const empty = document.createElement('div')
+      empty.className = 'hint'
+      empty.textContent = '无结果。'
+      list.appendChild(empty)
+      return
+    }
+
+    for (const it of items) {
+      const id = getId(it)
+      if (id === null || id === undefined) continue
+
+      const row = document.createElement('div')
+      row.className = 'es-item'
+      row.style.display = 'flex'
+      row.style.alignItems = 'flex-start'
+      row.style.gap = '10px'
+
+      const cb = document.createElement('input')
+      cb.type = 'checkbox'
+      cb.style.marginTop = '3px'
+
+      // pending 初始复制 confirmed
+      cb.checked = pending.has(id)
+
+      cb.addEventListener('change', () => {
+        if (cb.checked) pending.set(id, it)
+        else pending.delete(id)
+      })
+
+      const info = document.createElement('div')
+      info.style.flex = '1 1 auto'
+
+      const t = document.createElement('div')
+      t.className = 'es-title'
+      t.textContent = getLabel(it)
+
+      const sub = document.createElement('div')
+      sub.className = 'es-subtitle'
+      sub.textContent = [
+        it.cybersecurity_domain_slug ? `slug：${it.cybersecurity_domain_slug}` : null,
+        it.security_domain_id ? `ID：${it.security_domain_id}` : null,
+      ].filter(Boolean).join(' · ')
+
+      info.appendChild(t)
+      if (sub.textContent) info.appendChild(sub)
+
+      row.appendChild(cb)
+      row.appendChild(info)
+      list.appendChild(row)
+    }
+  }
+
+  async function doSearch() {
+    const q = String(searchBox.value || '').trim()
+    if (!q) {
+      status.textContent = '输入关键字开始搜索。'
+      list.innerHTML = ''
+      return
+    }
+    try {
+      status.textContent = '搜索中…'
+      const res = await fetchItems(q)
+      const items = res?.items || res?.data || []
+      status.textContent = `结果：${items.length}`
+      renderList(items)
+    } catch (e) {
+      status.textContent = `搜索失败：${e?.message || String(e)}`
+      list.innerHTML = ''
+    }
+  }
+
+  let t = null
+  searchBox.addEventListener('input', () => {
+    clearTimeout(t)
+    t = setTimeout(doSearch, 250)
+  })
+
+  btnToggle.addEventListener('click', () => {
+    // open 时 pending 复制 confirmed
+    if (!open) {
+      pending = new Map(confirmed)
+      setOpen(true)
+    } else {
+      setOpen(false)
+    }
+  })
+
+  btnClear.addEventListener('click', () => {
+    confirmed = new Map()
+    pending = new Map()
+    refreshSummary()
+    renderList([])
+    status.textContent = '输入关键字开始搜索。'
+  })
+
+  btnConfirm.addEventListener('click', () => {
+    confirmed = new Map(pending)
+    refreshSummary()
+    setOpen(false)
+  })
+
+  // init
+  setOpen(false)
+  refreshSummary()
+
+  return {
+    getConfirmedIds: () => Array.from(confirmed.keys()),
+    clear: () => {
+      confirmed = new Map()
+      pending = new Map()
+      refreshSummary()
+    },
+    focus: () => searchBox.focus(),
+  }
+}
 
 export function mountProductAdmin(ctx) {
   const {
@@ -32,7 +270,7 @@ export function mountProductAdmin(ctx) {
   const slugErr = $('productSlugErr')
 
   const domainsRow = $('productDomainsRow')
-  const domainsHost = $('productDomains')
+  const domainsEl = $('productDomains')
   const domainsErr = $('productDomainsErr')
 
   const descRow = $('productDescRow')
@@ -62,7 +300,7 @@ export function mountProductAdmin(ctx) {
     ['productSlug', slugEl],
     ['productSlugErr', slugErr],
     ['productDomainsRow', domainsRow],
-    ['productDomains', domainsHost],
+    ['productDomains', domainsEl],
     ['productDomainsErr', domainsErr],
     ['productReset', resetBtn],
     ['productSubmit', submitBtn],
@@ -90,24 +328,21 @@ export function mountProductAdmin(ctx) {
     showErr(targetErr, '')
   }
 
+  function showDomainsErr(msg) {
+    showErr(domainsErr, msg)
+  }
+
+  // ✅ Domains Union Search（由 core/dropdowns.js 提供）
+  const domainUnionSearch = makeDomainUnionSearch({ apiFetch, getToken })
+
   // 多选：对应安全领域
-  const domainMulti = createMultiSelectPicker({
-    hostEl: domainsHost,
-    errEl: domainsErr,
-    emptyText: '未选择（请点击展开并搜索勾选）',
-    searchFn: async (q) => {
-      const token = getToken()
-      return await apiFetch(`/api/admin/dropdowns/domains?q=${encodeURIComponent(q)}`, { token })
+  const domainMulti = mountDomainMultiSelect({
+    rootEl: domainsEl,
+    fetchItems: async (q) => {
+      return await domainUnionSearch(q)
     },
-    renderItem: (it) => ({
-      title: it.security_domain_name || it.domain_name || it.name || '（未命名领域）',
-      subtitle: [
-        it.cybersecurity_domain_slug ? `slug：${it.cybersecurity_domain_slug}` : null,
-        it.security_domain_id ? `ID：${it.security_domain_id}` : null,
-      ].filter(Boolean).join(' · ')
-    }),
-    getId: (it) => it.security_domain_id ?? it.id,
-    getLabel: (it, rendered) => rendered?.title ?? String(it.security_domain_id ?? it.id ?? ''),
+    getId: (it) => it.security_domain_id ?? it.domain_id ?? it.id,
+    getLabel: (it) => it.security_domain_name ?? it.domain_name ?? it.name ?? `ID ${it.security_domain_id ?? it.domain_id ?? it.id}`,
   })
 
   // 单选：归属安全产品（别名模式）
@@ -186,8 +421,8 @@ export function mountProductAdmin(ctx) {
       }
 
       const domainIds = domainMulti.getConfirmedIds()
-      if (!domainIds || !domainIds.length) {
-        showErr(domainsErr, '请至少选择 1 个安全领域。')
+      if (!domainIds.length) {
+        showDomainsErr('请至少选择 1 个对应安全领域。')
         ok = false
       }
     } else {
@@ -226,30 +461,6 @@ export function mountProductAdmin(ctx) {
     }
   }
 
-  function pickCreatedId(res, mode) {
-    // 兼容不同返回风格（本项目后端：main => {product, domains_bound}; alias => {alias}）
-    if (!res) return null
-
-    if (mode === 'main') {
-      return (
-        res?.product?.security_product_id ??
-        res?.product?.id ??
-        res?.security_product_id ??
-        res?.id ??
-        null
-      )
-    }
-
-    // alias
-    return (
-      res?.alias?.security_product_alias_id ??
-      res?.alias?.id ??
-      res?.security_product_alias_id ??
-      res?.id ??
-      null
-    )
-  }
-
   resetBtn.addEventListener('click', () => resetForm())
 
   submitBtn.addEventListener('click', async () => {
@@ -270,7 +481,11 @@ export function mountProductAdmin(ctx) {
         closeModal(modal)
         resetForm()
 
-        const createdId = pickCreatedId(res, mode)
+        // ✅ 兼容后端返回：main => { product: {...} }；alias => { alias: {...} }
+        const createdId = (mode === 'main')
+          ? (res?.product?.security_product_id ?? res?.product?.id ?? res?.security_product_id ?? res?.id ?? null)
+          : (res?.alias?.security_product_alias_id ?? res?.alias?.id ?? res?.security_product_alias_id ?? res?.id ?? null)
+
         return `✅ 添加成功：${createdId ?? '（未返回）'}`
       }
     })
