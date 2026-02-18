@@ -1,36 +1,11 @@
 // apps/api/src/routes/admin/org-product.js
 import { supabase } from '../../supabase.js'
 import { requireAdmin } from './auth.js'
-console.log('[orgProduct] version = 2026-02-13-orgProductEdit-A')
 
-/**
- * organization_product
- * Columns (per your ERD / current implementation):
- * - organization_product_id (int8)
- * - organization_id (int8)
- * - security_product_id (int8)  FK -> cybersecurity_product.security_product_id
- * - product_release_year (int4, nullable)
- * - product_end_year (int4, nullable)
- * - recommendation_score (int2, nullable)  0-10
- *
- * Routes:
- * - POST   /api/admin/org_product                         create
- * - GET    /api/admin/org_product?organization_id=123      list by org
- * - PATCH  /api/admin/org_product/:id                     update years only
- * - DELETE /api/admin/org_product/:id                     delete row
- */
+// 便于你在日志里确认版本
+console.log('[orgProduct] version = 2026-02-18-score-enabled')
+
 export function registerOrgProductAdmin(app) {
-  /**
-   * POST /api/admin/org_product
-   *
-   * Body:
-   * {
-   *   organization_id: number,
-   *   security_product_id: number,
-   *   product_release_year?: number|null,
-   *   product_end_year?: number|null
-   * }
-   */
   app.post('/org_product', async (req, reply) => {
     if (!requireAdmin(req, reply)) return
 
@@ -68,7 +43,7 @@ export function registerOrgProductAdmin(app) {
       security_product_id,
       product_release_year: product_release_year === undefined ? null : product_release_year,
       product_end_year: product_end_year === undefined ? null : product_end_year,
-      recommendation_score: recommendation_score === undefined ? null : recommendation_score
+      recommendation_score: recommendation_score === undefined ? null : recommendation_score,
     }
 
     const { data, error } = await supabase
@@ -78,27 +53,9 @@ export function registerOrgProductAdmin(app) {
       .single()
 
     if (error) return reply.code(400).send({ error: error.message })
-
     return reply.send({ organization_product: data })
   })
 
-  /**
-   * GET /api/admin/org_product?organization_id=123
-   *
-   * Return:
-   * {
-   *   items: [
-   *     {
-   *       organization_product_id,
-   *       organization_id,
-   *       security_product_id,
-   *       product_release_year,
-   *       product_end_year,
-   *       product: { security_product_name, security_product_slug }
-   *     }, ...
-   *   ]
-   * }
-   */
   app.get('/org_product', async (req, reply) => {
     if (!requireAdmin(req, reply)) return
 
@@ -107,7 +64,6 @@ export function registerOrgProductAdmin(app) {
       return reply.code(400).send({ error: 'organization_id must be a number' })
     }
 
-    // 尽量带出产品名（用于前端列表显示）
     const { data, error } = await supabase
       .from('organization_product')
       .select(`
@@ -146,14 +102,6 @@ export function registerOrgProductAdmin(app) {
     return reply.send({ items })
   })
 
-  /**
-   * PATCH /api/admin/org_product/:id
-   * Body:
-   * {
-   *   product_release_year?: number|null,
-   *   product_end_year?: number|null
-   * }
-   */
   app.patch('/org_product/:id', async (req, reply) => {
     if (!requireAdmin(req, reply)) return
 
@@ -162,8 +110,6 @@ export function registerOrgProductAdmin(app) {
 
     const body = req.body || {}
     const nowYear = new Date().getFullYear()
-
-    // 只允许更新年份字段
     const patch = {}
 
     if ('product_release_year' in body) {
@@ -205,9 +151,6 @@ export function registerOrgProductAdmin(app) {
     return reply.send({ organization_product: data })
   })
 
-  /**
-   * DELETE /api/admin/org_product/:id
-   */
   app.delete('/org_product/:id', async (req, reply) => {
     if (!requireAdmin(req, reply)) return
 
