@@ -1,63 +1,62 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>检索页面</title>
-    <style>
-      :root{
-        --bg:#f7f7f9;
-        --card:#fff;
-        --txt:#111;
-        --muted:rgba(0,0,0,0.62);
-        --bd:rgba(0,0,0,0.14);
-        --bd2:rgba(0,0,0,0.22);
-      }
-      body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background:var(--bg); color:var(--txt); }
-      .page{ max-width: 980px; margin: 22px auto; padding: 0 14px; }
-      h1{ font-size: 20px; margin: 0 0 14px; }
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>检索页面</title>
+  <style>
+    :root{
+      --bg:#f7f7f9;
+      --card:#fff;
+      --txt:#111;
+      --muted:rgba(0,0,0,0.62);
+      --bd:rgba(0,0,0,0.14);
+      --bd2:rgba(0,0,0,0.22);
+    }
+    body{ margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; background:var(--bg); color:var(--txt); }
+    .page{ max-width: 980px; margin: 22px auto; padding: 0 14px; }
+    h1{ font-size: 20px; margin: 0 0 14px; }
 
-      .card{ background:var(--card); border:1px solid var(--bd); border-radius:14px; padding: 14px; margin-top: 14px; }
+    .tabs{ display:flex; gap:10px; margin-top: 10px; flex-wrap: wrap; }
+    .tab{
+      appearance:none;
+      border: 1px solid var(--bd2);
+      background:#fff;
+      color:var(--txt);
+      border-radius: 999px;
+      padding: 10px 14px;
+      font-size: 13px;
+      cursor:pointer;
+    }
+    .tab[aria-selected="true"]{
+      border-color: rgba(0,0,0,0.45);
+      font-weight: 800;
+    }
 
-      .tabs{ display:flex; gap:10px; margin-top: 10px; }
-      .tab{
-        appearance:none;
-        border: 1px solid var(--bd2);
-        background:#fff;
-        color:var(--txt);
-        border-radius: 999px;
-        padding: 10px 14px;
-        font-size: 13px;
-        cursor:pointer;
-      }
-      .tab[aria-selected="true"]{
-        border-color: rgba(0,0,0,0.45);
-        font-weight: 800;
-      }
+    .card{ background:var(--card); border:1px solid var(--bd); border-radius:14px; padding: 14px; margin-top: 14px; }
+    .panel{ display:none; }
+    .panel[data-active="true"]{ display:block; }
+  </style>
+</head>
 
-      .muted{ color: var(--muted); font-size: 13px; }
-      .panel{ display:none; }
-      .panel[data-active="true"]{ display:block; }
-    </style>
-  </head>
-  <body>
-    <main class="page">
-      <h1>检索页面</h1>
+<body>
+  <main class="page">
+    <h1>检索页面</h1>
 
-      <div class="tabs" role="tablist" aria-label="检索模式">
-        <button id="tabSearch" class="tab" role="tab" aria-selected="true" aria-controls="panelSearch" type="button">搜索</button>
-        <button id="tabSolution" class="tab" role="tab" aria-selected="false" aria-controls="panelSolution" type="button">解决方案搜索</button>
-      </div>
+    <div class="tabs" role="tablist" aria-label="检索模式">
+      <button id="tabSearch" class="tab" role="tab" aria-selected="true" aria-controls="panelSearch" type="button">搜索</button>
+      <button id="tabSolution" class="tab" role="tab" aria-selected="false" aria-controls="panelSolution" type="button">解决方案搜索</button>
+    </div>
 
-      <section id="panelSearch" class="card panel" data-active="true" role="tabpanel" aria-labelledby="tabSearch">
-        <div id="globalSearch"></div>
-      </section>
+    <section id="panelSearch" class="card panel" data-active="true" role="tabpanel" aria-labelledby="tabSearch">
+      <div id="globalSearch"></div>
+    </section>
 
-      <section id="panelSolution" class="card panel" data-active="false" role="tabpanel" aria-labelledby="tabSolution">
-        <div class="muted">（占位）这里将用于“解决方案搜索”。你给出数据结构/目标字段后，我们再接入。</div>
-      </section>
-    </main>
+    <section id="panelSolution" class="card panel" data-active="false" role="tabpanel" aria-labelledby="tabSolution">
+      <div id="solutionSearch"></div>
+    </section>
+  </main>
 
-    <script type="module" src="/src/search.js"></script>
-  </body>
+  <script type="module" src="/src/search.js"></script>
+</body>
 </html>
