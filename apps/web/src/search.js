@@ -1,5 +1,6 @@
 // apps/web/src/search.js
 import { mountGlobalSearch } from './ui/global-search.js';
+import { mountSolutionSearch } from './ui/solution-search.js';
 
 function $(id) {
   return document.getElementById(id);
@@ -30,14 +31,14 @@ function main() {
   // 默认：搜索
   setTab('search');
 
-  // 挂载全局搜索：统一列表渲染
-  const mountEl = $('globalSearch');
-  mountGlobalSearch(mountEl, {
-    renderMode: 'list',
-    title: '全局搜索',
-    placeholder: '搜索企业（简称/全称）、安全产品/领域（名称/别称）…',
-    autoFocus: true,
+  // Tab 1：全站搜索（保留现有 UI 逻辑）
+  mountGlobalSearch(document.getElementById('globalSearch'), {
+    title: '全站搜索',
+    placeholder: '全站搜索：企业 / 产品 / 领域（输入关键词后回车）',
   });
+
+  // Tab 2：解决方案搜索（新）
+  mountSolutionSearch(document.getElementById('solutionSearch'));
 }
 
 main();
